@@ -235,4 +235,36 @@ public abstract class Operation
     {
         return String.format("'%s'", Hex.bytesToHex(term));
     }
+
+    /**
+     * Constructs a CQL query string by replacing instances of the character
+     * '?', with the corresponding parameter.
+     *
+     * @param query base query string to format
+     * @param parms sequence of string query parameters
+     * @return formatted CQL query string
+     */
+    protected static String formatCqlQuery(String query, List<String> parms)
+    {
+        int marker = 0, position = 0;
+        StringBuilder result = new StringBuilder();
+
+        if (-1 == (marker = query.indexOf('?')) || parms.size() == 0)
+            return query;
+
+        for (String parm : parms)
+        {
+            result.append(query.substring(position, marker));
+            result.append(parm);
+
+            position = marker + 1;
+            if (-1 == (marker = query.indexOf('?', position + 1)))
+                break;
+        }
+
+        if (position < query.length())
+            result.append(query.substring(position));
+
+        return result.toString();
+    }
 }

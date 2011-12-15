@@ -23,6 +23,7 @@ package org.apache.cassandra.stress.operations;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Collections;
 
 import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.stress.Session;
@@ -34,6 +35,7 @@ import org.apache.cassandra.thrift.CqlResultType;
 
 public class CqlCounterGetter extends Operation
 {
+    private static String cqlQuery = null;
 
     public CqlCounterGetter(Session client, int idx)
     {
@@ -45,11 +47,16 @@ public class CqlCounterGetter extends Operation
         if (session.getColumnFamilyType() == ColumnFamilyType.Super)
             throw new RuntimeException("Super columns are not implemented for CQL");
 
+        if (cqlQuery == null)
+        {
+            StringBuilder query = new StringBuilder("SELECT FIRST ").append(session.getColumnsPerKey())
+                    .append(" ''..'' FROM Counter1 USING CONSISTENCY ").append(session.getConsistencyLevel().toString())
+                    .append(" WHERE KEY=?");
+            cqlQuery = query.toString();
+        }
+
         byte[] key = generateKey();
-        String hexKey = getQuotedCqlBlob(key);
-        StringBuilder query = new StringBuilder("SELECT FIRST ").append(session.getColumnsPerKey())
-                .append(" ''..'' FROM Counter1 USING CONSISTENCY ").append(session.getConsistencyLevel().toString())
-                .append(" WHERE KEY=").append(hexKey);
+        String formattedQuery = formatCqlQuery(cqlQuery, Collections.singletonList(getQuotedCqlBlob(key)));
 
         long start = System.currentTimeMillis();
 
@@ -63,7 +70,7 @@ public class CqlCounterGetter extends Operation
 
             try
             {
-                CqlResult result = client.execute_cql_query(ByteBuffer.wrap(query.toString().getBytes()),
+                CqlResult result = client.execute_cql_query(ByteBuffer.wrap(formattedQuery.getBytes()),
                                                             Compression.NONE);
                 assert result.type.equals(CqlResultType.ROWS) : "expected ROWS result type";
                 assert result.rows.size() == 0 : "expected exactly one row";

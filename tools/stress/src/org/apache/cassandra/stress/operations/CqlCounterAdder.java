@@ -23,6 +23,7 @@ package org.apache.cassandra.stress.operations;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.util.Collections;
 
 import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.stress.Session;
@@ -30,10 +31,10 @@ import org.apache.cassandra.stress.util.Operation;
 import org.apache.cassandra.thrift.Cassandra;
 import org.apache.cassandra.thrift.Compression;
 
-import static com.google.common.base.Charsets.UTF_8;
-
 public class CqlCounterAdder extends Operation
 {
+    private static String cqlQuery = null;
+
     public CqlCounterAdder(Session client, int idx)
     {
         super(client, idx);
@@ -44,18 +45,23 @@ public class CqlCounterAdder extends Operation
         if (session.getColumnFamilyType() == ColumnFamilyType.Super)
             throw new RuntimeException("Super columns are not implemented for CQL");
 
-        StringBuilder query = new StringBuilder(
-                "UPDATE Counter1 USING CONSISTENCY " + session.getConsistencyLevel().toString() + " SET ");
-
-        for (int i = 0; i < session.getColumnsPerKey(); i++)
+        if (cqlQuery == null)
         {
-            if (i > 0)
-                query.append(",");
-            query.append('C').append(i).append("=C").append(i).append("+1");
+            StringBuilder query = new StringBuilder(
+                    "UPDATE Counter1 USING CONSISTENCY " + session.getConsistencyLevel().toString() + " SET ");
+
+            for (int i = 0; i < session.getColumnsPerKey(); i++)
+            {
+                if (i > 0) query.append(",");
+                query.append('C').append(i).append("=C").append(i).append("+1");
+
+            }
+            query.append(" WHERE KEY=?");
+            cqlQuery = query.toString();
         }
 
         String key = String.format("%0" + session.getTotalKeysLength() + "d", index);
-        query.append( " WHERE KEY=").append(getQuotedCqlBlob(key.getBytes(UTF_8)));
+        String formattedQuery = formatCqlQuery(cqlQuery, Collections.singletonList(getQuotedCqlBlob(key)));
 
         long start = System.currentTimeMillis();
 
@@ -69,7 +75,7 @@ public class CqlCounterAdder extends Operation
 
             try
             {
-                client.execute_cql_query(ByteBuffer.wrap(query.toString().getBytes()), Compression.NONE);
+                client.execute_cql_query(ByteBuffer.wrap(formattedQuery.getBytes()), Compression.NONE);
                 success = true;
             }
             catch (Exception e)
