@@ -31,11 +31,15 @@ import org.apache.cassandra.db.marshal.TimeUUIDType;
 import org.apache.cassandra.stress.Session;
 import org.apache.cassandra.stress.Stress;
 import org.apache.cassandra.thrift.Cassandra;
+import org.apache.cassandra.thrift.Compression;
+import org.apache.cassandra.thrift.CqlPreparedResult;
+import org.apache.cassandra.thrift.CqlResult;
 import org.apache.cassandra.thrift.InvalidRequestException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.Hex;
+import org.apache.thrift.TException;
 
 public abstract class Operation
 {
@@ -226,14 +230,14 @@ public abstract class Operation
             System.err.println(message);
     }
 
-    protected String getQuotedCqlBlob(String term)
+    protected String getUnQuotedCqlBlob(String term)
     {
-        return getQuotedCqlBlob(term.getBytes());
+        return getUnQuotedCqlBlob(term.getBytes());
     }
 
-    protected String getQuotedCqlBlob(byte[] term)
+    protected String getUnQuotedCqlBlob(byte[] term)
     {
-        return String.format("'%s'", Hex.bytesToHex(term));
+        return Hex.bytesToHex(term);
     }
 
     /**
@@ -255,7 +259,7 @@ public abstract class Operation
         for (String parm : parms)
         {
             result.append(query.substring(position, marker));
-            result.append(parm);
+            result.append('\'').append(parm).append('\'');
 
             position = marker + 1;
             if (-1 == (marker = query.indexOf('?', position + 1)))
@@ -266,5 +270,18 @@ public abstract class Operation
             result.append(query.substring(position));
 
         return result.toString();
+    }
+
+    protected static Integer getPreparedStatement(CassandraClient client, String cqlQuery) throws Exception
+    {
+        Integer statementId = client.preparedStatements.get(cqlQuery.hashCode());
+        if (statementId == null)
+        {
+            CqlPreparedResult response = client.prepare_cql_query(ByteBufferUtil.bytes(cqlQuery), Compression.NONE);
+            statementId = response.itemId;
+            client.preparedStatements.put(cqlQuery.hashCode(), statementId);
+        }
+
+        return statementId;
     }
 }

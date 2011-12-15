@@ -71,12 +71,12 @@ public class CqlReader extends Operation
         List<String> queryParams = new ArrayList<String>();
         if (session.columnNames != null)
             for (int i = 0; i < session.columnNames.size(); i++)
-                queryParams.add(getQuotedCqlBlob(session.columnNames.get(i).array()));
+                queryParams.add(getUnQuotedCqlBlob(session.columnNames.get(i).array()));
 
         byte[] key = generateKey();
-        queryParams.add(getQuotedCqlBlob(key));
+        queryParams.add(getUnQuotedCqlBlob(key));
 
-        String formattedQuery = formatCqlQuery(cqlQuery, queryParams);
+        String formattedQuery = null;
 
         long start = System.currentTimeMillis();
 
@@ -90,8 +90,21 @@ public class CqlReader extends Operation
 
             try
             {
-                CqlResult result = client.execute_cql_query(ByteBuffer.wrap(formattedQuery.getBytes()),
-                                                            Compression.NONE);
+                CqlResult result = null;
+
+                if (session.usePreparedStatements())
+                {
+                    Integer stmntId = getPreparedStatement(client, cqlQuery);
+                    result = client.execute_prepared_cql_query(stmntId, queryParams);
+                }
+                else
+                {
+                    if (formattedQuery == null)
+                        formattedQuery = formatCqlQuery(cqlQuery, queryParams);
+                    result = client.execute_cql_query(ByteBuffer.wrap(formattedQuery.getBytes()),
+                                                      Compression.NONE);
+                }
+
                 success = (result.rows.get(0).columns.size() != 0);
             }
             catch (Exception e)

@@ -56,7 +56,7 @@ public class CqlCounterGetter extends Operation
         }
 
         byte[] key = generateKey();
-        String formattedQuery = formatCqlQuery(cqlQuery, Collections.singletonList(getQuotedCqlBlob(key)));
+        String formattedQuery = null;
 
         long start = System.currentTimeMillis();
 
@@ -70,8 +70,22 @@ public class CqlCounterGetter extends Operation
 
             try
             {
-                CqlResult result = client.execute_cql_query(ByteBuffer.wrap(formattedQuery.getBytes()),
-                                                            Compression.NONE);
+                CqlResult result = null;
+
+                if (session.usePreparedStatements())
+                {
+                    Integer stmntId = getPreparedStatement(client, cqlQuery);
+                    result = client.execute_prepared_cql_query(stmntId,
+                                                               Collections.singletonList(getUnQuotedCqlBlob(key)));
+                }
+                else
+                {
+                    if (formattedQuery == null)
+                        formattedQuery = formatCqlQuery(cqlQuery, Collections.singletonList(getUnQuotedCqlBlob(key)));
+                    result = client.execute_cql_query(ByteBuffer.wrap(formattedQuery.getBytes()),
+                                                      Compression.NONE);
+                }
+
                 assert result.type.equals(CqlResultType.ROWS) : "expected ROWS result type";
                 assert result.rows.size() == 0 : "expected exactly one row";
                 success = (result.rows.get(0).columns.size() != 0);

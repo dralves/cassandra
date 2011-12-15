@@ -55,7 +55,7 @@ public class CqlRangeSlicer extends Operation
         }
 
         String key = String.format("%0" +  session.getTotalKeysLength() + "d", index);
-        String formattedQuery = formatCqlQuery(cqlQuery, Collections.singletonList(getQuotedCqlBlob(key)));
+        String formattedQuery = null;
 
         long startTime = System.currentTimeMillis();
 
@@ -70,8 +70,21 @@ public class CqlRangeSlicer extends Operation
 
             try
             {
-                CqlResult result = client.execute_cql_query(ByteBuffer.wrap(formattedQuery.getBytes()),
-                                                            Compression.NONE);
+                CqlResult result = null;
+
+                if (session.usePreparedStatements())
+                {
+                    Integer stmntId = getPreparedStatement(client, cqlQuery);
+                    result = client.execute_prepared_cql_query(stmntId,
+                                                               Collections.singletonList(getUnQuotedCqlBlob(key)));
+                }
+                else
+                {
+                    if (formattedQuery == null)
+                        formattedQuery = formatCqlQuery(cqlQuery, Collections.singletonList(getUnQuotedCqlBlob(key)));
+                    result = client.execute_cql_query(ByteBuffer.wrap(formattedQuery.getBytes()), Compression.NONE);
+                }
+
                 rowCount = result.rows.size();
                 success = (rowCount != 0);
             }

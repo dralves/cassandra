@@ -61,7 +61,7 @@ public class CqlCounterAdder extends Operation
         }
 
         String key = String.format("%0" + session.getTotalKeysLength() + "d", index);
-        String formattedQuery = formatCqlQuery(cqlQuery, Collections.singletonList(getQuotedCqlBlob(key)));
+        String formattedQuery = null;
 
         long start = System.currentTimeMillis();
 
@@ -75,7 +75,18 @@ public class CqlCounterAdder extends Operation
 
             try
             {
-                client.execute_cql_query(ByteBuffer.wrap(formattedQuery.getBytes()), Compression.NONE);
+                if (session.usePreparedStatements())
+                {
+                    Integer stmntId = getPreparedStatement(client, cqlQuery);
+                    client.execute_prepared_cql_query(stmntId, Collections.singletonList(getUnQuotedCqlBlob(key)));
+                }
+                else
+                {
+                    if (formattedQuery == null)
+                        formattedQuery = formatCqlQuery(cqlQuery, Collections.singletonList(getUnQuotedCqlBlob(key)));
+                    client.execute_cql_query(ByteBuffer.wrap(formattedQuery.getBytes()), Compression.NONE);
+                }
+
                 success = true;
             }
             catch (Exception e)

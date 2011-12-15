@@ -57,8 +57,8 @@ public class CqlIndexedRangeSlicer extends Operation
         {
             StringBuilder query = new StringBuilder("SELECT FIRST ").append(session.getColumnsPerKey())
                  .append(" ''..'' FROM Standard1 USING CONSISTENCY ").append(session.getConsistencyLevel())
-                 .append(" WHERE C1=").append(getQuotedCqlBlob(values.get(1).array()))
-                 .append(" AND KEY > ? LIMIT");
+                 .append(" WHERE C1=").append(getUnQuotedCqlBlob(values.get(1).array()))
+                 .append(" AND KEY > ? LIMIT ").append(session.getKeysPerCall());
 
             cqlQuery = query.toString();
         }
@@ -75,6 +75,8 @@ public class CqlIndexedRangeSlicer extends Operation
             boolean success = false;
             String exceptionMessage = null;
             CqlResult results = null;
+            String formattedQuery = null;
+            List<String> queryParms = Collections.singletonList(getUnQuotedCqlBlob(startOffset));
 
             for (int t = 0; t < session.getRetryTimes(); t++)
             {
@@ -83,8 +85,18 @@ public class CqlIndexedRangeSlicer extends Operation
 
                 try
                 {
-                    ByteBuffer queryBytes = ByteBuffer.wrap(makeQuery(cqlQuery, startOffset).getBytes());
-                    results = client.execute_cql_query(queryBytes, Compression.NONE);
+                    if (session.usePreparedStatements())
+                    {
+                        Integer stmntId = getPreparedStatement(client, cqlQuery);
+                        results = client.execute_prepared_cql_query(stmntId, queryParms);
+                    }
+                    else
+                    {
+                        if (formattedQuery ==  null)
+                            formattedQuery = formatCqlQuery(cqlQuery, queryParms);
+                        results = client.execute_cql_query(ByteBuffer.wrap(formattedQuery.getBytes()), Compression.NONE);
+                    }
+
                     success = (results.rows.size() != 0);
                 }
                 catch (Exception e)
@@ -112,12 +124,6 @@ public class CqlIndexedRangeSlicer extends Operation
             session.keys.getAndAdd(results.rows.size());
             session.latency.getAndAdd(System.currentTimeMillis() - start);
         }
-    }
-
-    private String makeQuery(String base, String startOffset)
-    {
-        String formatted = formatCqlQuery(base, Collections.singletonList(getQuotedCqlBlob(startOffset.getBytes())));
-        return String.format("%s %d", formatted, session.getKeysPerCall());
     }
 
     /**

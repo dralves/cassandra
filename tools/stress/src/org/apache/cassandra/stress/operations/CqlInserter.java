@@ -31,6 +31,7 @@ import org.apache.cassandra.stress.Session;
 import org.apache.cassandra.stress.util.CassandraClient;
 import org.apache.cassandra.stress.util.Operation;
 import org.apache.cassandra.thrift.Compression;
+import org.apache.cassandra.utils.Hex;
 import org.apache.cassandra.utils.UUIDGen;
 
 public class CqlInserter extends Operation
@@ -77,13 +78,13 @@ public class CqlInserter extends Operation
                 queryParms.add("C" + i);
 
             // Column value
-            queryParms.add(getQuotedCqlBlob(values.get(i % values.size()).array()));
+            queryParms.add(getUnQuotedCqlBlob(values.get(i % values.size()).array()));
         }
 
         String key = String.format("%0" + session.getTotalKeysLength() + "d", index);
-        queryParms.add(getQuotedCqlBlob(key));
+        queryParms.add(getUnQuotedCqlBlob(key));
 
-        String formattedQuery = formatCqlQuery(cqlQuery, queryParms);
+        String formattedQuery = null;
 
         long start = System.currentTimeMillis();
 
@@ -97,7 +98,18 @@ public class CqlInserter extends Operation
 
             try
             {
-                client.execute_cql_query(ByteBuffer.wrap(formattedQuery.getBytes()), Compression.NONE);
+                if (session.usePreparedStatements())
+                {
+                    Integer stmntId = getPreparedStatement(client, cqlQuery);
+                    client.execute_prepared_cql_query(stmntId, queryParms);
+                }
+                else
+                {
+                    if (formattedQuery == null)
+                        formattedQuery = formatCqlQuery(cqlQuery, queryParms);
+                    client.execute_cql_query(ByteBuffer.wrap(formattedQuery.getBytes()), Compression.NONE);
+                }
+
                 success = true;
             }
             catch (Exception e)

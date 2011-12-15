@@ -81,6 +81,7 @@ public class Session implements Serializable
         availableOptions.addOption("g",  "keys-per-call",        true,   "Number of keys to get_range_slices or multiget per call, default:1000");
         availableOptions.addOption("l",  "replication-factor",   true,   "Replication Factor to use when creating needed column families, default:1");
         availableOptions.addOption("L",  "enable-cql",           false,  "Perform queries using CQL (Cassandra Query Language).");
+        availableOptions.addOption("P",  "use-prepared-statements", false, "Perform queries using prepared statements (only applicable to CQL).");
         availableOptions.addOption("e",  "consistency-level",    true,   "Consistency Level to use (ONE, QUORUM, LOCAL_QUORUM, EACH_QUORUM, ALL, ANY), default:ONE");
         availableOptions.addOption("x",  "create-index",         true,   "Type of index to create on needed column families (KEYS)");
         availableOptions.addOption("R",  "replication-strategy", true,   "Replication strategy to use (only on insert if keyspace does not exist), default:org.apache.cassandra.locator.SimpleStrategy");
@@ -115,6 +116,7 @@ public class Session implements Serializable
     private boolean replicateOnWrite = true;
     private boolean ignoreErrors  = false;
     private boolean enable_cql    = false;
+    private boolean use_prepared  = false;
 
     private final String outFileName;
 
@@ -265,6 +267,16 @@ public class Session implements Serializable
 
             if (cmd.hasOption("L"))
                 enable_cql = true;
+
+            if (cmd.hasOption("P"))
+            {
+                if (!enable_cql)
+                {
+                    System.err.println("-P/--use-prepared-statements is only applicable with CQL (-L/--enable-cql)");
+                    System.exit(-1);
+                }
+                use_prepared = true;
+            }
 
             if (cmd.hasOption("O"))
             {
@@ -499,6 +511,11 @@ public class Session implements Serializable
     public boolean isCQL()
     {
         return enable_cql;
+    }
+
+    public boolean usePreparedStatements()
+    {
+        return use_prepared;
     }
 
     /**
