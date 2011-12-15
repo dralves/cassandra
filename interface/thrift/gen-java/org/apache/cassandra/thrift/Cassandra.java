@@ -324,7 +324,7 @@ public class Cassandra {
      * @param itemId
      * @param values
      */
-    public CqlResult execute_prepared_cql_query(int itemId, List<String> values) throws InvalidRequestException, UnavailableException, TimedOutException, SchemaDisagreementException, org.apache.thrift.TException;
+    public CqlResult execute_prepared_cql_query(int itemId, List<ByteBuffer> values) throws InvalidRequestException, UnavailableException, TimedOutException, SchemaDisagreementException, org.apache.thrift.TException;
 
   }
 
@@ -394,7 +394,7 @@ public class Cassandra {
 
     public void prepare_cql_query(ByteBuffer query, Compression compression, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.prepare_cql_query_call> resultHandler) throws org.apache.thrift.TException;
 
-    public void execute_prepared_cql_query(int itemId, List<String> values, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.execute_prepared_cql_query_call> resultHandler) throws org.apache.thrift.TException;
+    public void execute_prepared_cql_query(int itemId, List<ByteBuffer> values, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.execute_prepared_cql_query_call> resultHandler) throws org.apache.thrift.TException;
 
   }
 
@@ -1792,13 +1792,13 @@ public class Cassandra {
       throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "prepare_cql_query failed: unknown result");
     }
 
-    public CqlResult execute_prepared_cql_query(int itemId, List<String> values) throws InvalidRequestException, UnavailableException, TimedOutException, SchemaDisagreementException, org.apache.thrift.TException
+    public CqlResult execute_prepared_cql_query(int itemId, List<ByteBuffer> values) throws InvalidRequestException, UnavailableException, TimedOutException, SchemaDisagreementException, org.apache.thrift.TException
     {
       send_execute_prepared_cql_query(itemId, values);
       return recv_execute_prepared_cql_query();
     }
 
-    public void send_execute_prepared_cql_query(int itemId, List<String> values) throws org.apache.thrift.TException
+    public void send_execute_prepared_cql_query(int itemId, List<ByteBuffer> values) throws org.apache.thrift.TException
     {
       oprot_.writeMessageBegin(new org.apache.thrift.protocol.TMessage("execute_prepared_cql_query", org.apache.thrift.protocol.TMessageType.CALL, ++seqid_));
       execute_prepared_cql_query_args args = new execute_prepared_cql_query_args();
@@ -2976,7 +2976,7 @@ public class Cassandra {
       }
     }
 
-    public void execute_prepared_cql_query(int itemId, List<String> values, org.apache.thrift.async.AsyncMethodCallback<execute_prepared_cql_query_call> resultHandler) throws org.apache.thrift.TException {
+    public void execute_prepared_cql_query(int itemId, List<ByteBuffer> values, org.apache.thrift.async.AsyncMethodCallback<execute_prepared_cql_query_call> resultHandler) throws org.apache.thrift.TException {
       checkReady();
       execute_prepared_cql_query_call method_call = new execute_prepared_cql_query_call(itemId, values, resultHandler, this, protocolFactory, transport);
       this.currentMethod = method_call;
@@ -2985,8 +2985,8 @@ public class Cassandra {
 
     public static class execute_prepared_cql_query_call extends org.apache.thrift.async.TAsyncMethodCall {
       private int itemId;
-      private List<String> values;
-      public execute_prepared_cql_query_call(int itemId, List<String> values, org.apache.thrift.async.AsyncMethodCallback<execute_prepared_cql_query_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
+      private List<ByteBuffer> values;
+      public execute_prepared_cql_query_call(int itemId, List<ByteBuffer> values, org.apache.thrift.async.AsyncMethodCallback<execute_prepared_cql_query_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
         super(client, protocolFactory, transport, resultHandler, false);
         this.itemId = itemId;
         this.values = values;
@@ -33301,7 +33301,7 @@ public class Cassandra {
     private static final org.apache.thrift.protocol.TField VALUES_FIELD_DESC = new org.apache.thrift.protocol.TField("values", org.apache.thrift.protocol.TType.LIST, (short)2);
 
     public int itemId;
-    public List<String> values;
+    public List<ByteBuffer> values;
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements org.apache.thrift.TFieldIdEnum {
@@ -33375,7 +33375,7 @@ public class Cassandra {
           new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I32)));
       tmpMap.put(_Fields.VALUES, new org.apache.thrift.meta_data.FieldMetaData("values", org.apache.thrift.TFieldRequirementType.REQUIRED, 
           new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST, 
-              new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING))));
+              new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING              , true))));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
       org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(execute_prepared_cql_query_args.class, metaDataMap);
     }
@@ -33385,7 +33385,7 @@ public class Cassandra {
 
     public execute_prepared_cql_query_args(
       int itemId,
-      List<String> values)
+      List<ByteBuffer> values)
     {
       this();
       this.itemId = itemId;
@@ -33401,9 +33401,11 @@ public class Cassandra {
       __isset_bit_vector.or(other.__isset_bit_vector);
       this.itemId = other.itemId;
       if (other.isSetValues()) {
-        List<String> __this__values = new ArrayList<String>();
-        for (String other_element : other.values) {
-          __this__values.add(other_element);
+        List<ByteBuffer> __this__values = new ArrayList<ByteBuffer>();
+        for (ByteBuffer other_element : other.values) {
+          ByteBuffer temp_binary_element = org.apache.thrift.TBaseHelper.copyBinary(other_element);
+;
+          __this__values.add(temp_binary_element);
         }
         this.values = __this__values;
       }
@@ -33447,22 +33449,22 @@ public class Cassandra {
       return (this.values == null) ? 0 : this.values.size();
     }
 
-    public java.util.Iterator<String> getValuesIterator() {
+    public java.util.Iterator<ByteBuffer> getValuesIterator() {
       return (this.values == null) ? null : this.values.iterator();
     }
 
-    public void addToValues(String elem) {
+    public void addToValues(ByteBuffer elem) {
       if (this.values == null) {
-        this.values = new ArrayList<String>();
+        this.values = new ArrayList<ByteBuffer>();
       }
       this.values.add(elem);
     }
 
-    public List<String> getValues() {
+    public List<ByteBuffer> getValues() {
       return this.values;
     }
 
-    public execute_prepared_cql_query_args setValues(List<String> values) {
+    public execute_prepared_cql_query_args setValues(List<ByteBuffer> values) {
       this.values = values;
       return this;
     }
@@ -33496,7 +33498,7 @@ public class Cassandra {
         if (value == null) {
           unsetValues();
         } else {
-          setValues((List<String>)value);
+          setValues((List<ByteBuffer>)value);
         }
         break;
 
@@ -33638,11 +33640,11 @@ public class Cassandra {
             if (field.type == org.apache.thrift.protocol.TType.LIST) {
               {
                 org.apache.thrift.protocol.TList _list152 = iprot.readListBegin();
-                this.values = new ArrayList<String>(_list152.size);
+                this.values = new ArrayList<ByteBuffer>(_list152.size);
                 for (int _i153 = 0; _i153 < _list152.size; ++_i153)
                 {
-                  String _elem154;
-                  _elem154 = iprot.readString();
+                  ByteBuffer _elem154;
+                  _elem154 = iprot.readBinary();
                   this.values.add(_elem154);
                 }
                 iprot.readListEnd();
@@ -33676,9 +33678,9 @@ public class Cassandra {
         oprot.writeFieldBegin(VALUES_FIELD_DESC);
         {
           oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, this.values.size()));
-          for (String _iter155 : this.values)
+          for (ByteBuffer _iter155 : this.values)
           {
-            oprot.writeString(_iter155);
+            oprot.writeBinary(_iter155);
           }
           oprot.writeListEnd();
         }
