@@ -31,6 +31,7 @@ import org.apache.cassandra.db.marshal.*;
 import org.apache.commons.cli.*;
 
 import org.apache.cassandra.db.ColumnFamilyType;
+import org.apache.cassandra.stress.util.CassandraClient;
 import org.apache.cassandra.thrift.*;
 import org.apache.commons.lang.StringUtils;
 
@@ -556,7 +557,7 @@ public class Session implements Serializable
 
         keyspace.setCf_defs(new ArrayList<CfDef>(Arrays.asList(standardCfDef, superCfDef, counterCfDef, counterSuperCfDef)));
 
-        Cassandra.Client client = getClient(false);
+        CassandraClient client = getClient(false);
 
         try
         {
@@ -578,7 +579,7 @@ public class Session implements Serializable
      * Thrift client connection with Keyspace1 set.
      * @return cassandra client connection
      */
-    public Cassandra.Client getClient()
+    public CassandraClient getClient()
     {
         return getClient(true);
     }
@@ -587,14 +588,14 @@ public class Session implements Serializable
      * @param setKeyspace - should we set keyspace for client or not
      * @return cassandra client connection
      */
-    public Cassandra.Client getClient(boolean setKeyspace)
+    public CassandraClient getClient(boolean setKeyspace)
     {
         // random node selection for fake load balancing
         String currentNode = nodes[Stress.randomizer.nextInt(nodes.length)];
 
         TSocket socket = new TSocket(currentNode, port);
         TTransport transport = (isUnframed()) ? socket : new TFramedTransport(socket);
-        Cassandra.Client client = new Cassandra.Client(new TBinaryProtocol(transport));
+        CassandraClient client = new CassandraClient(new TBinaryProtocol(transport));
 
         try
         {

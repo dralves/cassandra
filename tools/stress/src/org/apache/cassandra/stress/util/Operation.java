@@ -61,7 +61,7 @@ public abstract class Operation
      * @param client Cassandra Thrift client connection
      * @throws IOException on any I/O error.
      */
-    public abstract void run(Cassandra.Client client) throws IOException;
+    public abstract void run(CassandraClient client) throws IOException;
 
     // Utility methods
 
