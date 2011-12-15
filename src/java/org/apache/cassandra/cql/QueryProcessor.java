@@ -73,7 +73,7 @@ public class QueryProcessor
 
     public static final String DEFAULT_KEY_NAME = bufferToString(CFMetaData.DEFAULT_KEY_NAME);
 
-    private static List<org.apache.cassandra.db.Row> getSlice(CFMetaData metadata, SelectStatement select, List<String> variables)
+    private static List<org.apache.cassandra.db.Row> getSlice(CFMetaData metadata, SelectStatement select, List<ByteBuffer> variables)
     throws InvalidRequestException, TimedOutException, UnavailableException
     {
         QueryPath queryPath = new QueryPath(select.getColumnFamily());
@@ -130,7 +130,7 @@ public class QueryProcessor
         }
     }
 
-    private static List<ByteBuffer> getColumnNames(SelectStatement select, CFMetaData metadata, List<String> variables)
+    private static List<ByteBuffer> getColumnNames(SelectStatement select, CFMetaData metadata, List<ByteBuffer> variables)
     throws InvalidRequestException
     {
         String keyString = getKeyString(metadata);
@@ -144,7 +144,7 @@ public class QueryProcessor
         return columnNames;
     }
 
-    private static List<org.apache.cassandra.db.Row> multiRangeSlice(CFMetaData metadata, SelectStatement select, List<String> variables)
+    private static List<org.apache.cassandra.db.Row> multiRangeSlice(CFMetaData metadata, SelectStatement select, List<ByteBuffer> variables)
     throws TimedOutException, UnavailableException, InvalidRequestException
     {
         List<org.apache.cassandra.db.Row> rows;
@@ -219,7 +219,7 @@ public class QueryProcessor
         return rows.subList(0, select.getNumRecords() < rows.size() ? select.getNumRecords() : rows.size());
     }
     
-    private static List<org.apache.cassandra.db.Row> getIndexedSlices(CFMetaData metadata, SelectStatement select, List<String> variables)
+    private static List<org.apache.cassandra.db.Row> getIndexedSlices(CFMetaData metadata, SelectStatement select, List<ByteBuffer> variables)
     throws TimedOutException, UnavailableException, InvalidRequestException
     {
         // XXX: Our use of Thrift structs internally (still) makes me Sad. :~(
@@ -263,7 +263,7 @@ public class QueryProcessor
         return rows;
     }
     
-    private static void batchUpdate(ClientState clientState, List<UpdateStatement> updateStatements, ConsistencyLevel consistency, List<String> variables )
+    private static void batchUpdate(ClientState clientState, List<UpdateStatement> updateStatements, ConsistencyLevel consistency, List<ByteBuffer> variables )
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
         String globalKeyspace = clientState.getKeyspace();
@@ -298,7 +298,7 @@ public class QueryProcessor
         }
     }
     
-    private static SlicePredicate slicePredicateFromSelect(SelectStatement select, CFMetaData metadata, List<String> variables)
+    private static SlicePredicate slicePredicateFromSelect(SelectStatement select, CFMetaData metadata, List<ByteBuffer> variables)
     throws InvalidRequestException
     {
         SlicePredicate thriftSlicePredicate = new SlicePredicate();
@@ -321,7 +321,7 @@ public class QueryProcessor
     }
     
     /* Test for SELECT-specific taboos */
-    private static void validateSelect(String keyspace, SelectStatement select, List<String> variables) throws InvalidRequestException
+    private static void validateSelect(String keyspace, SelectStatement select, List<ByteBuffer> variables) throws InvalidRequestException
     {
         ThriftValidation.validateConsistencyLevel(keyspace, select.getConsistencyLevel(), RequestType.READ);
 
@@ -664,7 +664,7 @@ public class QueryProcessor
             case UPDATE:
                 UpdateStatement update = (UpdateStatement)statement.statement;
                 ThriftValidation.validateConsistencyLevel(keyspace, update.getConsistencyLevel(), RequestType.WRITE);
-                batchUpdate(clientState, Collections.singletonList(update), update.getConsistencyLevel(),variables);
+                batchUpdate(clientState, Collections.singletonList(update), update.getConsistencyLevel(), variables);
                 result.type = CqlResultType.VOID;
                 return result;
                 
@@ -784,7 +784,7 @@ public class QueryProcessor
                 CreateColumnFamilyStatement createCf = (CreateColumnFamilyStatement)statement.statement;
                 clientState.hasColumnFamilySchemaAccess(Permission.WRITE);
                 validateSchemaAgreement();
-                CFMetaData cfmd = createCf.getCFMetaData(keyspace,variables);
+                CFMetaData cfmd = createCf.getCFMetaData(keyspace, variables);
                 ThriftValidation.validateCfDef(cfmd.toThrift(), null);
 
                 try
@@ -977,7 +977,7 @@ public class QueryProcessor
     throws RecognitionException, UnavailableException, InvalidRequestException, TimedOutException, SchemaDisagreementException
     {
         logger.trace("CQL QUERY: {}", queryString);
-        return processStatement(getStatement(queryString), clientState, new ArrayList<String>());
+        return processStatement(getStatement(queryString), clientState, new ArrayList<ByteBuffer>());
     }
 
     public static CqlPreparedResult prepare(String queryString, ClientState clientState)
@@ -997,7 +997,7 @@ public class QueryProcessor
         return new CqlPreparedResult(statementId, statement.boundTerms);
     }
    
-    public static CqlResult processPrepared(CQLStatement statement, ClientState clientState, List<String> variables)
+    public static CqlResult processPrepared(CQLStatement statement, ClientState clientState, List<ByteBuffer> variables)
     throws UnavailableException, InvalidRequestException, TimedOutException, SchemaDisagreementException
     {
         // Check to see if there are any bound variables to verify 

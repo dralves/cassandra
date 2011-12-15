@@ -119,7 +119,7 @@ public class CreateColumnFamilyStatement
     }
     
     /** Perform validation of parsed params */
-    private void validate(List<String> variables) throws InvalidRequestException
+    private void validate(List<ByteBuffer> variables) throws InvalidRequestException
     {
         // we need to remove parent:key = value pairs from the main properties
         Set<String> propsToRemove = new HashSet<String>();
@@ -303,7 +303,7 @@ public class CreateColumnFamilyStatement
      * @return a CFMetaData instance corresponding to the values parsed from this statement
      * @throws InvalidRequestException on failure to validate parsed parameters
      */
-    public CFMetaData getCFMetaData(String keyspace, List<String> variables) throws InvalidRequestException
+    public CFMetaData getCFMetaData(String keyspace, List<ByteBuffer> variables) throws InvalidRequestException
     {
         validate(variables);
 
