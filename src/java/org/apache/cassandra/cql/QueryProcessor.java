@@ -494,7 +494,7 @@ public class QueryProcessor
                                Predicates.not(Predicates.equalTo(StorageProxy.UNREACHABLE)));
     }
 
-    public static CqlResult processStatement(CQLStatement statement,ClientState clientState, List<String> variables )
+    public static CqlResult processStatement(CQLStatement statement,ClientState clientState, List<ByteBuffer> variables )
     throws  UnavailableException, InvalidRequestException, TimedOutException, SchemaDisagreementException
     {
         String keyspace = null;
