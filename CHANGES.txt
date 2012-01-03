@@ -1,4 +1,5 @@
 1.1-dev
+ * avoid returning internal Cassandra classes over JMX (CASSANDRA-2805)
  * add row-level isolation via SnapTree (CASSANDRA-2893)
  * Optimize key count estimation when opening sstable on startup
    (CASSANDRA-2988)
@@ -8,7 +9,7 @@
  * removed in-tree redhat spec (CASSANDRA-3567)
  * "defragment" rows for name-based queries under STCS, again (CASSANDRA-2503)
  * Recycle commitlog segments for improved performance 
-   (CASSANDRA-3411, 3543, 3557)
+   (CASSANDRA-3411, 3543, 3557, 3615)
  * update size-tiered compaction to prioritize small tiers (CASSANDRA-2407)
  * add message expiration logic to OutboundTcpConnection (CASSANDRA-3005)
  * off-heap cache to use sun.misc.Unsafe instead of JNA (CASSANDRA-3271)
@@ -35,6 +36,9 @@
  * optimize memtable iteration during range scan (CASSANDRA-3638)
  * introduce 'crc_check_chance' in CompressionParameters to support
    a checksum percentage checking chance similarly to read-repair (CASSANDRA-3611)
+ * a way to deactivate global key/row cache on per-CF basis (CASSANDRA-3667)
+ * fix LeveledCompactionStrategy broken because of generation pre-allocation
+   in LeveledManifest (CASSANDRA-3691)
 
 
 1.0.7

@@ -23,6 +23,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
 import org.apache.commons.lang.builder.ToStringBuilder;
@@ -86,6 +87,23 @@ public final class CFMetaData
         }
     }
 
+    public enum Caching
+    {
+        ALL, KEYS_ONLY, ROWS_ONLY, NONE;
+
+        public static Caching fromString(String cache) throws ConfigurationException
+        {
+            try
+            {
+                return valueOf(cache.toUpperCase());
+            }
+            catch (IllegalArgumentException e)
+            {
+                throw new ConfigurationException(String.format("%s not found, available types: %s.", cache, StringUtils.join(values(), ", ")));
+            }
+        }
+    }
+
     //REQUIRED
     public final Integer cfId;                        // internal id, never exposed to user
     public final String ksName;                       // name of keyspace
@@ -107,7 +125,8 @@ public final class CFMetaData
     // thrift compatibility
     private double mergeShardsChance;                 // default 0.1, chance [0.0, 1.0] of merging old shards during replication
     private ByteBuffer keyAlias;                      // default NULL
-    private Double bloomFilterFpChance;                           // default NULL
+    private Double bloomFilterFpChance;               // default NULL
+    private Caching caching;                          // default KEYS_ONLY (possible: all, key_only, row_only, none)
 
     private Map<ByteBuffer, ColumnDefinition> column_metadata;
     public Class<? extends AbstractCompactionStrategy> compactionStrategyClass;
@@ -129,8 +148,8 @@ public final class CFMetaData
     public CFMetaData compactionStrategyClass(Class<? extends AbstractCompactionStrategy> prop) {compactionStrategyClass = prop; return this;}
     public CFMetaData compactionStrategyOptions(Map<String, String> prop) {compactionStrategyOptions = prop; return this;}
     public CFMetaData compressionParameters(CompressionParameters prop) {compressionParameters = prop; return this;}
-    public CFMetaData bloomFilterFpChance(Double prop) {
-        bloomFilterFpChance = prop; return this;}
+    public CFMetaData bloomFilterFpChance(Double prop) {bloomFilterFpChance = prop; return this;}
+    public CFMetaData caching(Caching prop) {caching = prop; return this;}
 
     public CFMetaData(String keyspace, String name, ColumnFamilyType type, AbstractType comp, AbstractType subcc)
     {
@@ -149,6 +168,7 @@ public final class CFMetaData
         // System cfs have specific ids, and copies of old CFMDs need
         //  to copy over the old id.
         cfId = id;
+        caching = Caching.KEYS_ONLY;
 
         this.init();
     }
@@ -239,7 +259,8 @@ public final class CFMetaData
                       .compactionStrategyClass(oldCFMD.compactionStrategyClass)
                       .compactionStrategyOptions(oldCFMD.compactionStrategyOptions)
                       .compressionParameters(oldCFMD.compressionParameters)
-                      .bloomFilterFpChance(oldCFMD.bloomFilterFpChance);
+                      .bloomFilterFpChance(oldCFMD.bloomFilterFpChance)
+                      .caching(oldCFMD.caching);
     }
     
     /**
@@ -293,6 +314,7 @@ public final class CFMetaData
         }
         cf.compression_options = compressionParameters.asAvroOptions();
         cf.bloom_filter_fp_chance = bloomFilterFpChance;
+        cf.caching = new Utf8(caching.toString());
         return cf;
     }
 
@@ -366,6 +388,17 @@ public final class CFMetaData
             throw new RuntimeException(e);
         }
 
+        Caching caching;
+
+        try
+        {
+            caching = Caching.fromString(cf.caching.toString());
+        }
+        catch (ConfigurationException e)
+        {
+            throw new RuntimeException(e);
+        }
+
         return newCFMD.comment(cf.comment.toString())
                       .readRepairChance(cf.read_repair_chance)
                       .replicateOnWrite(cf.replicate_on_write)
@@ -374,7 +407,8 @@ public final class CFMetaData
                       .keyValidator(keyValidator)
                       .columnMetadata(column_metadata)
                       .compressionParameters(cp)
-                      .bloomFilterFpChance(cf.bloom_filter_fp_chance);
+                      .bloomFilterFpChance(cf.bloom_filter_fp_chance)
+                      .caching(caching);
     }
     
     public String getComment()
@@ -447,6 +481,11 @@ public final class CFMetaData
         return bloomFilterFpChance;
     }
 
+    public Caching getCaching()
+    {
+        return caching;
+    }
+
     public boolean equals(Object obj)
     {
         if (obj == this)
@@ -481,6 +520,7 @@ public final class CFMetaData
             .append(compactionStrategyOptions, rhs.compactionStrategyOptions)
             .append(compressionParameters, rhs.compressionParameters)
             .append(bloomFilterFpChance, rhs.bloomFilterFpChance)
+            .append(caching, rhs.caching)
             .isEquals();
     }
 
@@ -508,6 +548,7 @@ public final class CFMetaData
             .append(compactionStrategyOptions)
             .append(compressionParameters)
             .append(bloomFilterFpChance)
+            .append(caching)
             .toHashCode();
     }
 
@@ -571,6 +612,8 @@ public final class CFMetaData
             newCFMD.compactionStrategyOptions(new HashMap<String, String>(cf_def.compaction_strategy_options));
         if (cf_def.isSetBloom_filter_fp_chance())
             newCFMD.bloomFilterFpChance(cf_def.bloom_filter_fp_chance);
+        if (cf_def.isSetCaching())
+            newCFMD.caching(Caching.fromString(cf_def.caching));
 
         CompressionParameters cp = CompressionParameters.create(cf_def.compression_options);
 
@@ -626,6 +669,7 @@ public final class CFMetaData
         keyAlias = cf_def.key_alias;
         if (cf_def.bloom_filter_fp_chance != null)
             bloomFilterFpChance = cf_def.bloom_filter_fp_chance;
+        caching = Caching.fromString(cf_def.caching.toString());
 
         // adjust column definitions. figure out who is coming and going.
         Set<ByteBuffer> toRemove = new HashSet<ByteBuffer>();
@@ -767,6 +811,7 @@ public final class CFMetaData
         def.setCompression_options(compressionParameters.asThriftOptions());
         if (bloomFilterFpChance != null)
             def.setBloom_filter_fp_chance(bloomFilterFpChance);
+        def.setCaching(caching.toString());
         return def;
     }
 
@@ -904,6 +949,7 @@ public final class CFMetaData
             .append("compactionStrategyOptions", compactionStrategyOptions)
             .append("compressionOptions", compressionParameters.asThriftOptions())
             .append("bloomFilterFpChance", bloomFilterFpChance)
+            .append("caching", caching)
             .toString();
     }
 }

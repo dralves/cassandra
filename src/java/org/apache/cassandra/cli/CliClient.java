@@ -35,7 +35,6 @@ import org.antlr.runtime.tree.Tree;
 import org.apache.cassandra.auth.IAuthenticator;
 import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.db.ColumnFamilyStoreMBean;
-import org.apache.cassandra.db.compaction.CompactionInfo;
 import org.apache.cassandra.db.compaction.CompactionManagerMBean;
 import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.db.marshal.*;
@@ -139,7 +138,8 @@ public class CliClient
         COMPACTION_STRATEGY,
         COMPACTION_STRATEGY_OPTIONS,
         COMPRESSION_OPTIONS,
-        BLOOM_FILTER_FP_CHANCE
+        BLOOM_FILTER_FP_CHANCE,
+        CACHING
     }
 
     private static final String DEFAULT_PLACEMENT_STRATEGY = "org.apache.cassandra.locator.NetworkTopologyStrategy";
@@ -1248,6 +1248,9 @@ public class CliClient
             case BLOOM_FILTER_FP_CHANCE:
                 cfDef.setBloom_filter_fp_chance(Double.parseDouble(mValue));
                 break;
+            case CACHING:
+                cfDef.setCaching(mValue);
+                break;
             default:
                 //must match one of the above or we'd throw an exception at the valueOf statement above.
                 assert(false);
@@ -1635,6 +1638,7 @@ public class CliClient
         writeAttr(sb, false, "max_compaction_threshold", cfDef.max_compaction_threshold);
         writeAttr(sb, false, "replicate_on_write", cfDef.replicate_on_write);
         writeAttr(sb, false, "compaction_strategy", cfDef.compaction_strategy);
+        writeAttr(sb, false, "caching", cfDef.caching);
 
         if (!cfDef.compaction_strategy_options.isEmpty())
         {
@@ -1914,15 +1918,15 @@ public class CliClient
             // compaction manager information
             if (compactionManagerMBean != null)
             {
-                for (CompactionInfo info : compactionManagerMBean.getCompactions())
+                for (Map<String, String> info : compactionManagerMBean.getCompactions())
                 {
                     // if ongoing compaction type is index build
-                    if (info.getTaskType() != OperationType.INDEX_BUILD)
+                    if (info.get("taskType").equals(OperationType.INDEX_BUILD.toString()))
                         continue;
                     sessionState.out.printf("%nCurrently building index %s, completed %d of %d bytes.%n",
-                                            info.getColumnFamily(),
-                                            info.getBytesComplete(),
-                                            info.getTotalBytes());
+                                            info.get("columnfamily"),
+                                            info.get("bytesComplete"),
+                                            info.get("totalBytes"));
                 }
             }
 
@@ -1966,6 +1970,7 @@ public class CliClient
         sessionState.out.printf("      Compaction min/max thresholds: %s/%s%n", cf_def.min_compaction_threshold, cf_def.max_compaction_threshold);
         sessionState.out.printf("      Read repair chance: %s%n", cf_def.read_repair_chance);
         sessionState.out.printf("      Replicate on write: %s%n", cf_def.replicate_on_write);
+        sessionState.out.printf("      Caching: %s%n", cf_def.caching);
 
         // if we have connection to the cfMBean established
         if (cfMBean != null)
