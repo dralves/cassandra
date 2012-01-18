@@ -274,7 +274,7 @@ public final class CFMetaData
     public String indexColumnFamilyName(ColumnDefinition info)
     {
         // TODO simplify this when info.index_name is guaranteed to be set
-        return cfName + "." + (info.getIndexName() == null ? ByteBufferUtil.bytesToHex(info.name) : info.getIndexName());
+        return cfName + Directories.SECONDARY_INDEX_NAME_SEPARATOR + (info.getIndexName() == null ? ByteBufferUtil.bytesToHex(info.name) : info.getIndexName());
     }
 
     // converts CFM to avro CfDef
@@ -392,7 +392,7 @@ public final class CFMetaData
 
         try
         {
-            caching = Caching.fromString(cf.caching.toString());
+            caching = cf.caching == null ? Caching.KEYS_ONLY : Caching.fromString(cf.caching.toString());
         }
         catch (ConfigurationException e)
         {

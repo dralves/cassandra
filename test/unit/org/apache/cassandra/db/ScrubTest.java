@@ -58,20 +58,16 @@ public class ScrubTest extends CleanupHelper
         File rootDir = new File(root);
         assert rootDir.isDirectory();
         
-        String[] destDirs = DatabaseDescriptor.getAllDataFileLocationsForTable(TABLE);
-        assert destDirs != null;
-        assert destDirs.length > 0;
+        File destDir = Directories.create(TABLE, CF2).getDirectoryForNewSSTables(1);
        
-        FileUtils.createDirectory(destDirs[0]);
+        FileUtils.createDirectory(destDir);
         for (File srcFile : rootDir.listFiles())
         {
             if (srcFile.getName().equals(".svn"))
                 continue;
-            File destFile = new File(destDirs[0]+File.separator+srcFile.getName());
-            CLibrary.createHardLinkWithExec(srcFile, destFile);
-                        
-            destFile = new File(destDirs[0]+File.separator+srcFile.getName());
-                        
+            File destFile = new File(destDir, srcFile.getName());
+            CLibrary.createHardLink(srcFile, destFile);
+
             assert destFile.exists() : destFile.getAbsoluteFile();
             
             if(destFile.getName().endsWith("Data.db"))

@@ -36,6 +36,14 @@ Upgrading
       used instead of per-ColumnFamily options.
     - JMX methods no longer return custom Cassandra objects.  Any such methods
       will now return standard Maps, Lists, etc.
+    - Hadoop input and output details are now separated.  If you were
+      previously using methods such as getRpcPort you now need to use
+      getInputRpcPort or getOutputRpcPort depending on the circumstance.
+    - CQL changes:
+      + Prior to 1.1, you could use KEY as the primary key name in some
+        select statements, even if the PK was actually given a different
+        name.  In 1.1+ you must use the defined PK name.
+        
 
 Features
 --------
@@ -43,6 +51,35 @@ Features
       a single row have always been *atomic* (either all will be applied,
       or none) thanks to the CommitLog, but until 1.1 they were not *isolated*
       -- a reader may see mixed old and new values while the update happens.
+    - Finer-grained control over data directories, allowing a ColumnFamily to
+      be pinned to specfic media.
+    - Hadoop: a new BulkOutputFormat is included which will directly write
+      SSTables locally and then stream them into the cluster.
+    - The bulk loader is not longer a fat client; it can be run from an
+      existing machine in a cluster.
+    - A new write survey mode has been added, similar to bootstrap (enabled via
+      -Dcassandra.write_survey=true), but the node will not automatically join
+      the cluster.  This is useful for cases such as testing different
+      compaction strategies with live traffic without affecting the cluster.
+    - Key and row caches are now global, similar to the global memtable
+      threshold.
+    - Off-heap caches no longer require JNA.
+    - Streaming is now multithreaded.
+
+
+1.0.7
+=====
+
+Upgrading
+---------
+    - Nothing specific to 1.0.7, please report to instruction for 1.0.6
+
+Other
+-----
+    - Adds new setstreamthroughput to nodetool to configure streaming
+      throttling
+    - Adds JMX property to get/set rpc_timeout_in_ms at runtime
+    - Allow configuring (per-CF) bloom_filter_fp_chance
 
 
 1.0.6

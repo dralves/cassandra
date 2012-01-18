@@ -327,7 +327,6 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         daemon.startRPCServer();
     }
 
-    // should only be called via JMX
     public void stopRPCServer()
     {
         if (daemon == null)
@@ -351,7 +350,7 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         Gossiper.instance.unregister(migrationManager);
         Gossiper.instance.unregister(this);
         Gossiper.instance.stop();
-        MessagingService.instance().waitForCallbacks();
+        MessagingService.instance().shutdown();
         // give it a second so that task accepted before the MessagingService shutdown gets submitted to the stage (to avoid RejectedExecutionException)
         try { Thread.sleep(1000L); } catch (InterruptedException e) {}
         StageManager.shutdownNow();
@@ -454,7 +453,7 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
 
                 // In-progress writes originating here could generate hints to be written, so shut down MessagingService
                 // before mutation stage, so we can get all the hints saved before shutting down
-                MessagingService.instance().waitForCallbacks();
+                MessagingService.instance().shutdown();
                 mutationStage.shutdown();
                 mutationStage.awaitTermination(3600, TimeUnit.SECONDS);
                 StorageProxy.instance.verifyNoHintsInProgress();
@@ -508,7 +507,8 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         Gossiper.instance.start(SystemTable.incrementAndGetGeneration()); // needed for node-ring gathering.
         // add rpc listening info
         Gossiper.instance.addLocalApplicationState(ApplicationState.RPC_ADDRESS, valueFactory.rpcaddress(DatabaseDescriptor.getRpcAddress()));
-        Gossiper.instance.addLocalApplicationState(ApplicationState.STATUS, valueFactory.hibernate(null != DatabaseDescriptor.getReplaceToken()));
+        if (null != DatabaseDescriptor.getReplaceToken())
+            Gossiper.instance.addLocalApplicationState(ApplicationState.STATUS, valueFactory.hibernate(true));
 
         MessagingService.instance().listen(FBUtilities.getLocalAddress());
         LoadBroadcaster.instance.startBroadcasting();
@@ -1622,14 +1622,6 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         return locations;
     }
 
-    public String[] getAllDataFileLocationsForTable(String table)
-    {
-        String[] locations = DatabaseDescriptor.getAllDataFileLocationsForTable(table);
-        for (int i = 0; i < locations.length; i++)
-            locations[i] = getCanonicalPath(locations[i]);
-        return locations;
-    }
-
     public String getCommitLogLocation()
     {
         return getCanonicalPath(DatabaseDescriptor.getCommitLogLocation());
@@ -2126,7 +2118,7 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
             public void run()
             {
                 Gossiper.instance.stop();
-                MessagingService.instance().waitForCallbacks();
+                MessagingService.instance().shutdown();
                 StageManager.shutdownNow();
                 setMode(Mode.DECOMMISSIONED, true);
                 // let op be responsible for killing the process
@@ -2528,7 +2520,7 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         Gossiper.instance.stop();
 
         setMode(Mode.DRAINING, "shutting down MessageService", false);
-        MessagingService.instance().waitForCallbacks();
+        MessagingService.instance().shutdown();
         setMode(Mode.DRAINING, "waiting for streaming", false);
         MessagingService.instance().waitForStreaming();
 
