@@ -23,31 +23,47 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.ColumnFamily;
+import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.IColumn;
+import org.apache.cassandra.db.IColumnContainer;
+import org.apache.cassandra.db.Memtable;
+import org.apache.cassandra.db.RowIndexEntry;
+import org.apache.cassandra.db.SuperColumn;
 import org.apache.cassandra.db.columniterator.IColumnIterator;
 import org.apache.cassandra.db.columniterator.SSTableSliceIterator;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.util.FileDataInput;
+import org.apache.cassandra.thrift.SliceRange;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
 
 public class SliceQueryFilter implements IFilter
 {
     private static final Logger logger = LoggerFactory.getLogger(SliceQueryFilter.class);
 
-    public volatile ByteBuffer start;
-    public volatile ByteBuffer finish;
+    private final List<SliceRange> ranges;
     public final boolean reversed;
     public volatile int count;
 
+
     public SliceQueryFilter(ByteBuffer start, ByteBuffer finish, boolean reversed, int count)
     {
-        this.start = start;
-        this.finish = finish;
+        this(ImmutableList.of(new SliceRange(start, finish, reversed, count)), reversed, count);
+    }
+
+    /**
+     * Constructor that accepts multiple ranges. All ranges are assumed to be in the same direction (forward or
+     * reversed).
+     */
+    public SliceQueryFilter(List<SliceRange> ranges, boolean reversed, int count)
+    {
+        this.ranges = ranges;
         this.reversed = reversed;
         this.count = count;
     }
@@ -59,12 +75,12 @@ public class SliceQueryFilter implements IFilter
 
     public IColumnIterator getSSTableColumnIterator(SSTableReader sstable, DecoratedKey key)
     {
-        return new SSTableSliceIterator(sstable, key, start, finish, reversed);
+        return new SSTableSliceIterator(sstable, key, ranges, reversed);
     }
 
     public IColumnIterator getSSTableColumnIterator(SSTableReader sstable, FileDataInput file, DecoratedKey key, RowIndexEntry indexEntry)
     {
-        return new SSTableSliceIterator(sstable, file, key, start, finish, reversed, indexEntry);
+        return new SSTableSliceIterator(sstable, file, key, ranges, reversed, indexEntry);
     }
 
     public SuperColumn filterSuperColumn(SuperColumn superColumn, int gcBefore)
@@ -88,7 +104,7 @@ public class SliceQueryFilter implements IFilter
         while (subcolumns.hasNext())
         {
             IColumn column = subcolumns.next();
-            if (comparator.compare(column.name(), start) >= 0)
+            if (comparator.compare(column.name(), ranges.get(0).start) >= 0)
             {
                 subcolumns = Iterators.concat(Iterators.singletonIterator(column), subcolumns);
                 break;
@@ -119,9 +135,9 @@ public class SliceQueryFilter implements IFilter
                 logger.debug(String.format("collecting %s of %s: %s",
                                            liveColumns, count, column.getString(comparator)));
 
-            if (finish.remaining() > 0
-                && ((!reversed && comparator.compare(column.name(), finish) > 0))
-                    || (reversed && comparator.compare(column.name(), finish) < 0))
+            if (ranges.get(ranges.size()-1).finish.remaining() > 0
+                && ((!reversed && comparator.compare(column.name(), ranges.get(ranges.size()-1).finish) > 0))
+                    || (reversed && comparator.compare(column.name(), ranges.get(ranges.size()-1).finish) < 0))
                 break;
 
             // only count live columns towards the `count` criteria
@@ -138,13 +154,22 @@ public class SliceQueryFilter implements IFilter
         }
     }
 
+    public ByteBuffer start() {
+        return this.ranges.get(0).start;
+    }
+    
+    public ByteBuffer finish() {
+        return this.ranges.get(0).finish;
+    }
+    
+    public void setStart(ByteBuffer start) {
+        this.ranges.get(0).start = start;
+    }
+
     @Override
-    public String toString() {
-        return getClass().getSimpleName() + "(" +
-               "start=" + start +
-               ", finish=" + finish +
-               ", reversed=" + reversed +
-               ", count=" + count + "]";
+    public String toString()
+    {
+        return "SliceQueryFilter [reversed=" + reversed + ", ranges=" + ranges + ", count=" + count + "]";
     }
 
     public boolean isReversed()

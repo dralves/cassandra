@@ -17,21 +17,17 @@
  */
 package org.apache.cassandra.db.columniterator;
 
-import java.io.IOError;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.List;
+import java.util.SortedSet;
 
-import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.IColumn;
 import org.apache.cassandra.db.RowIndexEntry;
-import org.apache.cassandra.io.sstable.IndexHelper;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.util.FileDataInput;
-import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.Pair;
+import org.apache.cassandra.thrift.SliceRange;
 
 /**
  *  A Column Iterator over SSTable
@@ -41,11 +37,11 @@ public class SSTableSliceIterator implements IColumnIterator
     private final IColumnIterator reader;
     private final DecoratedKey key;
 
-    public SSTableSliceIterator(SSTableReader sstable, DecoratedKey key, ByteBuffer startColumn, ByteBuffer finishColumn, boolean reversed)
+    public SSTableSliceIterator(SSTableReader sstable, DecoratedKey key, List<SliceRange> ranges, boolean reversed)
     {
         this.key = key;
         RowIndexEntry indexEntry = sstable.getPosition(key, SSTableReader.Operator.EQ);
-        this.reader = indexEntry == null ? null : createReader(sstable, indexEntry, null, startColumn, finishColumn, reversed);
+        this.reader = indexEntry == null ? null : createReader(sstable, indexEntry, null, ranges, reversed);
     }
 
     /**
@@ -60,17 +56,17 @@ public class SSTableSliceIterator implements IColumnIterator
      * @param finishColumn The end of the slice
      * @param reversed Results are returned in reverse order iff reversed is true.
      */
-    public SSTableSliceIterator(SSTableReader sstable, FileDataInput file, DecoratedKey key, ByteBuffer startColumn, ByteBuffer finishColumn, boolean reversed, RowIndexEntry indexEntry)
+    public SSTableSliceIterator(SSTableReader sstable, FileDataInput file, DecoratedKey key, List<SliceRange> ranges, boolean reversed, RowIndexEntry indexEntry)
     {
         this.key = key;
-        reader = createReader(sstable, indexEntry, file, startColumn, finishColumn, reversed);
+        reader = createReader(sstable, indexEntry, file, ranges, reversed);
     }
 
-    private static IColumnIterator createReader(SSTableReader sstable, RowIndexEntry indexEntry, FileDataInput file, ByteBuffer startColumn, ByteBuffer finishColumn, boolean reversed)
+    private static IColumnIterator createReader(SSTableReader sstable, RowIndexEntry indexEntry, FileDataInput file, List<SliceRange> ranges, boolean reversed)
     {
-        return startColumn.remaining() == 0 && !reversed
-                 ? new SimpleSliceReader(sstable, indexEntry, file, finishColumn)
-                 : new IndexedSliceReader(sstable, indexEntry, file, startColumn, finishColumn, reversed);
+        return ranges.size() == 1 && ranges.get(0).start.remaining() == 0 && !reversed
+                 ? new SimpleSliceReader(sstable, indexEntry, file, ranges.get(ranges.size()-1).finish)
+                 : new IndexedSliceReader(sstable, indexEntry, file, ranges, reversed);
     }
 
     public DecoratedKey getKey()

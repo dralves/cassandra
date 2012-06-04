@@ -624,7 +624,7 @@ public class SliceRange implements org.apache.thrift.TBase<SliceRange, SliceRang
     if (this.start == null) {
       sb.append("null");
     } else {
-      org.apache.thrift.TBaseHelper.toString(this.start, sb);
+      sb.append(new String(this.start.array()));
     }
     first = false;
     if (!first) sb.append(", ");
@@ -632,7 +632,7 @@ public class SliceRange implements org.apache.thrift.TBase<SliceRange, SliceRang
     if (this.finish == null) {
       sb.append("null");
     } else {
-      org.apache.thrift.TBaseHelper.toString(this.finish, sb);
+        sb.append(new String(this.finish.array()));
     }
     first = false;
     if (!first) sb.append(", ");

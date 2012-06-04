@@ -371,8 +371,8 @@ public class Memtable
     {
         assert cf != null;
         final Iterator<IColumn> filteredIter = filter.reversed
-                                             ? (filter.start.remaining() == 0 ? cf.reverseIterator() : cf.reverseIterator(filter.start))
-                                             : cf.iterator(filter.start);
+                                             ? (filter.start().remaining() == 0 ? cf.reverseIterator() : cf.reverseIterator(filter.start()))
+                                             : cf.iterator(filter.start());
 
         return new AbstractColumnIterator()
         {
