@@ -390,6 +390,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
             // since we have to deserialize in order and will read all ranges might as well reverse the ranges and
             // behave as if it was not reversed
             super(reversed);
+            System.err.println("---");
 
             OnDiskAtom.Serializer atomSerializer = emptyColumnFamily.getOnDiskSerializer();
             int columns = file.readInt();
@@ -397,6 +398,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
             for (int i = 0; i < columns; i++)
             {
                 OnDiskAtom column = atomSerializer.deserializeFromSSTable(file, sstable.descriptor.version);
+                System.err.println("READ COLUMN: " + new String(column.name().array()));
 
                 // col is before slice
                 if (start.remaining() != 0 && comparator.compare(column.name(), start) < 0)

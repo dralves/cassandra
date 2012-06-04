@@ -1184,23 +1184,38 @@ public class ColumnFamilyStoreTest extends SchemaLoader
                 1);
 
         findRowGetSlicesAndAssertColsFound(cfs, startOnlyFilter, "a", "cola");
+        System.err.println("***");
         findRowGetSlicesAndAssertColsFound(cfs, startOnlyFilterReversed, "a", "cola");
+        System.err.println("***");
         findRowGetSlicesAndAssertColsFound(cfs, startOnlyFilterWithCounting, "a", "cola");
+        System.err.println("***");
         findRowGetSlicesAndAssertColsFound(cfs, startOnlyFilterReversedWithCounting, "a", "cola");
+        System.err.println("***");
 
         findRowGetSlicesAndAssertColsFound(cfs, middleOnlyFilter, "a", new String[] {});
+        System.err.println("***");
         findRowGetSlicesAndAssertColsFound(cfs, middleOnlyFilterReversed, "a", new String[] {});
+        System.err.println("***");
         findRowGetSlicesAndAssertColsFound(cfs, middleOnlyFilterWithCounting, "a", new String[] {});
+        System.err.println("***");
         findRowGetSlicesAndAssertColsFound(cfs, middleOnlyFilterReversedWithCounting, "a", new String[] {});
+        System.err.println("***");
 
         findRowGetSlicesAndAssertColsFound(cfs, endOnlyFilter, "a", new String[] {});
+        System.err.println("***");
         findRowGetSlicesAndAssertColsFound(cfs, endOnlyReversed, "a", new String[] {});
+        System.err.println("***");
         findRowGetSlicesAndAssertColsFound(cfs, endOnlyWithCounting, "a", new String[] {});
+        System.err.println("***");
         findRowGetSlicesAndAssertColsFound(cfs, endOnlyWithReversedCounting, "a", new String[] {});
+        System.err.println("***");
 
         findRowGetSlicesAndAssertColsFound(cfs, startMiddleAndEndFilter, "a", "cola");
+        System.err.println("***");
         findRowGetSlicesAndAssertColsFound(cfs, startMiddleAndEndFilterReversed, "a", "cola");
+        System.err.println("***");
         findRowGetSlicesAndAssertColsFound(cfs, startMiddleAndEndFilterWithCounting, "a", "cola");
+        System.err.println("***");
         findRowGetSlicesAndAssertColsFound(cfs, startMiddleAndEndFilterReversedWithCounting, "a", "cola");
 
         findRowGetSlicesAndAssertColsFound(cfs, startOnlyFilter, "c", "cola", "colb", "colc");
