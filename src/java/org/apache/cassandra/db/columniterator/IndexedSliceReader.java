@@ -27,7 +27,8 @@ import java.util.List;
 
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.DecoratedKey;
-import org.apache.cassandra.db.IColumn;
+import org.apache.cassandra.db.DeletionInfo;
+import org.apache.cassandra.db.OnDiskAtom;
 import org.apache.cassandra.db.RowIndexEntry;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.io.IColumnSerializer;
@@ -58,7 +59,7 @@ class IndexedSliceReader extends AbstractIterator<IColumn> implements IColumnIte
     private final SliceRange[] ranges;
 
     private final BlockFetcher fetcher;
-    private final Deque<IColumn> blockColumns = new ArrayDeque<IColumn>();
+    private final Deque<OnDiskAtom> blockColumns = new ArrayDeque<OnDiskAtom>();
     private final AbstractType<?> comparator;
 
     private boolean isDone;
@@ -86,15 +87,15 @@ class IndexedSliceReader extends AbstractIterator<IColumn> implements IColumnIte
                 if (indexes.isEmpty())
                 {
                     setToRowStart(sstable, indexEntry, input);
-                    this.emptyColumnFamily = ColumnFamily.serializer().deserializeFromSSTableNoColumns(
-                            ColumnFamily.create(sstable.metadata), file);
+                    this.emptyColumnFamily = ColumnFamily.create(sstable.metadata);
+                    emptyColumnFamily.delete(DeletionInfo.serializer().deserializeFromSSTable(file, sstable.descriptor.version));
                     fetcher = new SimpleBlockFetcher();
                 }
                 else
                 {
                     this.emptyColumnFamily = ColumnFamily.create(sstable.metadata);
                     emptyColumnFamily.delete(indexEntry.deletionInfo());
-                    fetcher = new IndexedBlockFetcher(indexEntry.position);
+                    fetcher = new IndexedBlockFetcher(indexEntry);
                 }
             }
             else
@@ -102,8 +103,8 @@ class IndexedSliceReader extends AbstractIterator<IColumn> implements IColumnIte
                 setToRowStart(sstable, indexEntry, input);
                 IndexHelper.skipBloomFilter(file);
                 this.indexes = IndexHelper.deserializeIndex(file);
-                this.emptyColumnFamily = ColumnFamily.serializer().deserializeFromSSTableNoColumns(
-                        ColumnFamily.create(sstable.metadata), file);
+                this.emptyColumnFamily = ColumnFamily.create(sstable.metadata);
+                emptyColumnFamily.delete(DeletionInfo.serializer().deserializeFromSSTable(file, sstable.descriptor.version));
                 fetcher = indexes.isEmpty() ? new SimpleBlockFetcher() : new IndexedBlockFetcher();
             }
         }
@@ -142,12 +143,12 @@ class IndexedSliceReader extends AbstractIterator<IColumn> implements IColumnIte
         throw new UnsupportedOperationException();
     }
 
-    protected IColumn computeNext()
+    protected OnDiskAtom computeNext()
     {
         while (true)
         {
             // previously fetched blocks
-            IColumn column = blockColumns.poll();
+           OnDiskAtom column = blockColumns.poll();
 
             if (column != null)
                 return column;
@@ -230,7 +231,7 @@ class IndexedSliceReader extends AbstractIterator<IColumn> implements IColumnIte
     {
 
         /** holds read cols that might be needed later. for reverse reads only */
-        private final List<IColumn> cache = new ArrayList<IColumn>();
+        private final List<OnDiskAtom> cache = new ArrayList<OnDiskAtom>();
         /** the index segment that is cached **/
         private int cachedIndex;
 
@@ -259,7 +260,7 @@ class IndexedSliceReader extends AbstractIterator<IColumn> implements IColumnIte
             // if we're running reversed we might have previously deserialized this range
             if (reversed && cachedIndex == curRangeIndex && !cache.isEmpty())
             {
-                for (IColumn cached : cache)
+                for (OnDiskAtom cached : cache)
                 {
                     // col is before slice
                     if (start.remaining() != 0 && comparator.compare(cached.name(), start) < 0)
@@ -282,14 +283,14 @@ class IndexedSliceReader extends AbstractIterator<IColumn> implements IColumnIte
 
                 int prevRangeIndex = curRangeIndex;
 
-                IColumnSerializer columnSerializer = emptyColumnFamily.getColumnSerializer();
+                OnDiskAtom.Serializer atomSerializer = emptyColumnFamily.getOnDiskSerializer();
                 file.seek(positionToSeek);
                 FileMark mark = file.mark();
 
                 // scan from index start
                 while (file.bytesPastMark(mark) < curColPosition.width)
                 {
-                    IColumn column = columnSerializer.deserialize(file);
+                   OnDiskAtom column = atomSerializer.deserializeFromSSTable(file, sstable.descriptor.version);
                     // col is before slice
                     if (start.remaining() != 0 && comparator.compare(column.name(), start) < 0)
                     {
@@ -394,7 +395,7 @@ class IndexedSliceReader extends AbstractIterator<IColumn> implements IColumnIte
 
             for (int i = 0; i < columns; i++)
             {
-                IColumn column = columnSerializer.deserialize(file);
+               OnDiskAtom column = atomSerializer.deserializeFromSSTable(file, sstable.descriptor.version);
 
                 // col is before slice
                 if (start.remaining() != 0 && comparator.compare(column.name(), start) < 0)
