@@ -26,6 +26,7 @@ import java.util.Deque;
 import java.util.List;
 
 import org.apache.cassandra.db.ColumnFamily;
+import org.apache.cassandra.db.ColumnSlice;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionInfo;
 import org.apache.cassandra.db.OnDiskAtom;
@@ -36,9 +37,7 @@ import org.apache.cassandra.io.sstable.IndexHelper.IndexInfo;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.io.util.FileMark;
-import org.apache.cassandra.thrift.SliceRange;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.commons.lang.ArrayUtils;
 
 import com.google.common.collect.AbstractIterator;
 
@@ -55,7 +54,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
     private final FileDataInput originalInput;
     private FileDataInput file;
     private final boolean reversed;
-    private final SliceRange[] ranges;
+    private final ColumnSlice[] ranges;
 
     private final BlockFetcher fetcher;
     private final Deque<OnDiskAtom> blockColumns = new ArrayDeque<OnDiskAtom>();
@@ -70,8 +69,9 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
      * assumes that validation has been performed in terms of intervals (no overlapping intervals).
      */
     public IndexedSliceReader(SSTableReader sstable, RowIndexEntry indexEntry, FileDataInput input,
-            SliceRange[] ranges, boolean reversed)
+            ColumnSlice[] ranges, boolean reversed)
     {
+
         this.sstable = sstable;
         this.originalInput = input;
         this.reversed = reversed;
@@ -178,8 +178,8 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
 
     private abstract class BlockFetcher
     {
-        protected int sliceIndex = 0;
-        protected SliceRange current;
+        protected int sliceIndex;
+        protected ColumnSlice current;
         protected ByteBuffer start;
         protected ByteBuffer finish;
 
@@ -190,8 +190,12 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
 
         public BlockFetcher(boolean reverseRanges)
         {
+
+            sliceIndex = 0;
             if (reverseRanges)
-                ArrayUtils.reverse(ranges);
+            {
+                sliceIndex = ranges.length - 1;
+            }
 
             nextSlice();
         }
@@ -204,7 +208,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
         protected boolean nextSlice()
         {
             // no more slices we're done
-            if (sliceIndex >= ranges.length)
+            if (sliceIndex >= ranges.length || sliceIndex < 0)
             {
                 isDone = true;
                 return false;
@@ -214,13 +218,12 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
             current = ranges[sliceIndex];
             start = !reversed ? current.start : current.finish;
             finish = !reversed ? current.finish : current.start;
-            sliceIndex++;
+
             return true;
         }
 
         protected void addCol(OnDiskAtom col)
         {
-            System.err.println("ADDED COL [REV: " + reversed + "] " + new String(col.name().array()));
             if (reversed)
                 blockColumns.addFirst(col);
             else
@@ -293,6 +296,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
                 while (file.bytesPastMark(mark) < curColPosition.width)
                 {
                     OnDiskAtom column = atomSerializer.deserializeFromSSTable(file, sstable.descriptor.version);
+
                     // col is before slice
                     if (start.remaining() != 0 && comparator.compare(column.name(), start) < 0)
                     {
@@ -364,6 +368,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
                 // read more that we need)
                 curRangeIndex = IndexHelper.indexFor(reversed ? finish : start, indexes, comparator, reversed);
                 // slice range falls out of the indexes
+                sliceIndex++;
                 return updateIndexPosition();
             }
             return false;
@@ -391,7 +396,6 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
             // since we have to deserialize in order and will read all ranges might as well reverse the ranges and
             // behave as if it was not reversed
             super(reversed);
-            System.err.println("---");
 
             OnDiskAtom.Serializer atomSerializer = emptyColumnFamily.getOnDiskSerializer();
             int columns = file.readInt();
@@ -399,8 +403,6 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
             for (int i = 0; i < columns; i++)
             {
                 OnDiskAtom column = atomSerializer.deserializeFromSSTable(file, sstable.descriptor.version);
-                System.err.println("[Start: " + new String(start.array()) + " Finish: " + new String(finish.array())
-                        + " Reverse: " + reversed + "]READ COLUMN: " + new String(column.name().array()));
 
                 // col is before slice
                 if (start.remaining() != 0 && comparator.compare(column.name(), start) < 0)
@@ -420,6 +422,20 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
 
         public void getMoreBlocks() throws IOException
         {
+        }
+
+        @Override
+        protected boolean nextSlice()
+        {
+            if (super.nextSlice())
+            {
+                if (reversed)
+                    sliceIndex--;
+                else
+                    sliceIndex++;
+                return true;
+            }
+            return false;
         }
     }
 

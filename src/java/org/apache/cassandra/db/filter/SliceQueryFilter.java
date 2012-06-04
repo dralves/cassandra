@@ -24,6 +24,7 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.apache.cassandra.db.ColumnFamily;
+import org.apache.cassandra.db.ColumnSlice;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.IColumn;
 import org.apache.cassandra.db.IColumnContainer;
@@ -35,7 +36,6 @@ import org.apache.cassandra.db.columniterator.SSTableSliceIterator;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.util.FileDataInput;
-import org.apache.cassandra.thrift.SliceRange;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,20 +46,20 @@ public class SliceQueryFilter implements IFilter
 {
     private static final Logger logger = LoggerFactory.getLogger(SliceQueryFilter.class);
 
-    private final SliceRange[] ranges;
+    private final ColumnSlice[] ranges;
     public final boolean reversed;
     public volatile int count;
 
     public SliceQueryFilter(ByteBuffer start, ByteBuffer finish, boolean reversed, int count)
     {
-        this(new SliceRange[] { new SliceRange(start, finish, reversed, count) }, reversed, count);
+        this(new ColumnSlice[] { new ColumnSlice(start, finish) }, reversed, count);
     }
 
     /**
      * Constructor that accepts multiple ranges. All ranges are assumed to be in the same direction (forward or
      * reversed).
      */
-    public SliceQueryFilter(SliceRange[] ranges, boolean reversed, int count)
+    public SliceQueryFilter(ColumnSlice[] ranges, boolean reversed, int count)
     {
         this.ranges = ranges;
         this.reversed = reversed;
@@ -166,7 +166,7 @@ public class SliceQueryFilter implements IFilter
 
     public void setStart(ByteBuffer start)
     {
-        this.ranges[0].start = start;
+        this.ranges[0] = new ColumnSlice(start, this.ranges[0].finish);
     }
 
     @Override
