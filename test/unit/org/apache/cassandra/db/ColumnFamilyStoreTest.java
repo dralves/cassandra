@@ -1019,59 +1019,21 @@ public class ColumnFamilyStoreTest extends SchemaLoader
     }
     
     @Test
-    public void testMultipleRangesSlicesNoIndexedColumns() throws Throwable
-    {
-        // small values so that cols won't be indexed
-        testMultiRangeSlicesBehavior(prepareMultiRangeSlicesTest(10));
-    }
-
-    @Test
-    public void testMultipleRangesSlicesWithIndexedColumns() throws Throwable
-    {
-        // min val size before cols are indexed is 4kb while testing so lets make sure cols are indexed
-        testMultiRangeSlicesBehavior(prepareMultiRangeSlicesTest(1024));
-    }
-
-    private ColumnFamilyStore prepareMultiRangeSlicesTest(int valueSize) throws Throwable
-    {
-        String tableName = "Keyspace1";
-        String cfName = "Standard1";
-        Table table = Table.open(tableName);
-        ColumnFamilyStore cfs = table.getColumnFamilyStore(cfName);
-        cfs.clearUnsafe();
-
-        String[] letters = new String[] { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l" };
-        Column[] cols = new Column[12];
-        for (int i = 0; i < cols.length; i++)
-        {
-            cols[i] = new Column(ByteBufferUtil.bytes("col" + letters[i]), ByteBuffer.wrap(new byte[valueSize]), 1);
-        }
-
-        for (int i = 0; i < 12; i++)
-        {
-            putColsStandard(cfs, dk(letters[i]), Arrays.copyOfRange(cols, 0, i + 1));
-        }
-        cfs.forceBlockingFlush();
-
-        return cfs;
-    }
-
-    @Test
     public void testMultiRangeIndexed() throws Throwable
     {
         // in order not to change thrift interfaces at this stage we build SliceQueryFilter
         // directly instead of using QueryFilter to build it for us
-        List<SliceRange> ranges = ImmutableList.of(
+        SliceRange[] ranges = new SliceRange[] {
                 new SliceRange().setStart(EMPTY_BYTE_ARRAY).setFinish(bytes("colA")),
                 new SliceRange().setStart(bytes("colC")).setFinish(bytes("colE")),
                 new SliceRange().setStart(bytes("colG")).setFinish(bytes("colG")),
-                new SliceRange().setStart(bytes("colI")).setFinish(EMPTY_BYTE_ARRAY));
+                new SliceRange().setStart(bytes("colI")).setFinish(EMPTY_BYTE_ARRAY) };
 
-        List<SliceRange> rangesReversed = ImmutableList.of(
+        SliceRange[] rangesReversed = new SliceRange[] {
                 new SliceRange().setStart(EMPTY_BYTE_ARRAY).setFinish(bytes("colI")),
                 new SliceRange().setStart(bytes("colG")).setFinish(bytes("colG")),
                 new SliceRange().setStart(bytes("colE")).setFinish(bytes("colC")),
-                new SliceRange().setStart(bytes("colA")).setFinish(EMPTY_BYTE_ARRAY));
+                new SliceRange().setStart(bytes("colA")).setFinish(EMPTY_BYTE_ARRAY) };
 
         String tableName = "Keyspace1";
         String cfName = "Standard1";
@@ -1115,38 +1077,76 @@ public class ColumnFamilyStoreTest extends SchemaLoader
         findRowGetSlicesAndAssertColsFound(cfs, multiRangeReverseWithCounting, "a", "colI", "colG", "colE");
 
     }
+    
+    @Test
+    public void testMultipleRangesSlicesNoIndexedColumns() throws Throwable
+    {
+        // small values so that cols won't be indexed
+        testMultiRangeSlicesBehavior(prepareMultiRangeSlicesTest(10));
+    }
+
+    @Test
+    public void testMultipleRangesSlicesWithIndexedColumns() throws Throwable
+    {
+        // min val size before cols are indexed is 4kb while testing so lets make sure cols are indexed
+        testMultiRangeSlicesBehavior(prepareMultiRangeSlicesTest(1024));
+    }
+
+    private ColumnFamilyStore prepareMultiRangeSlicesTest(int valueSize) throws Throwable
+    {
+        String tableName = "Keyspace1";
+        String cfName = "Standard1";
+        Table table = Table.open(tableName);
+        ColumnFamilyStore cfs = table.getColumnFamilyStore(cfName);
+        cfs.clearUnsafe();
+
+        String[] letters = new String[] { "a", "b", "c", "d", "e", "f", "g", "h", "i", "j", "k", "l" };
+        Column[] cols = new Column[12];
+        for (int i = 0; i < cols.length; i++)
+        {
+            cols[i] = new Column(ByteBufferUtil.bytes("col" + letters[i]), ByteBuffer.wrap(new byte[valueSize]), 1);
+        }
+
+        for (int i = 0; i < 12; i++)
+        {
+            putColsStandard(cfs, dk(letters[i]), Arrays.copyOfRange(cols, 0, i + 1));
+        }
+        cfs.forceBlockingFlush();
+
+        return cfs;
+    }
 
     private void testMultiRangeSlicesBehavior(ColumnFamilyStore cfs)
     {
         // in order not to change thrift interfaces at this stage we build SliceQueryFilter
         // directly instead of using QueryFilter to build it for us
-        List<SliceRange> startMiddleAndEndRanges = ImmutableList.of(
+        SliceRange[] startMiddleAndEndRanges = new SliceRange[] {
                 new SliceRange().setStart(EMPTY_BYTE_ARRAY).setFinish(bytes("colc")),
                 new SliceRange().setStart(bytes("colf")).setFinish(bytes("colg")),
-                new SliceRange().setStart(bytes("colj")).setFinish(EMPTY_BYTE_ARRAY));
+                new SliceRange().setStart(bytes("colj")).setFinish(EMPTY_BYTE_ARRAY) };
 
-        List<SliceRange> startMiddleAndEndRangesReversed = ImmutableList.of(
+        SliceRange[] startMiddleAndEndRangesReversed = new SliceRange[] {
                 new SliceRange().setStart(EMPTY_BYTE_ARRAY).setFinish(bytes("colj")),
                 new SliceRange().setStart(bytes("colg")).setFinish(bytes("colf")),
-                new SliceRange().setStart(bytes("colc")).setFinish(EMPTY_BYTE_ARRAY));
+                new SliceRange().setStart(bytes("colc")).setFinish(EMPTY_BYTE_ARRAY) };
 
-        List<SliceRange> startOnlyRange =
-                ImmutableList.of(new SliceRange().setStart(EMPTY_BYTE_ARRAY).setFinish(bytes("colc")));
+        SliceRange[] startOnlyRange =
+                new SliceRange[] { new SliceRange().setStart(EMPTY_BYTE_ARRAY).setFinish(bytes("colc")) };
 
-        List<SliceRange> startOnlyRangeReversed =
-                ImmutableList.of(new SliceRange().setStart(bytes("colc")).setFinish(EMPTY_BYTE_ARRAY));
+        SliceRange[] startOnlyRangeReversed =
+                new SliceRange[] { new SliceRange().setStart(bytes("colc")).setFinish(EMPTY_BYTE_ARRAY) };
 
-        List<SliceRange> middleOnlyRanges =
-                ImmutableList.of(new SliceRange().setStart(bytes("colf")).setFinish(bytes("colg")));
+        SliceRange[] middleOnlyRanges =
+                new SliceRange[] { new SliceRange().setStart(bytes("colf")).setFinish(bytes("colg")) };
 
-        List<SliceRange> middleOnlyRangesReversed =
-                ImmutableList.of(new SliceRange().setStart(bytes("colg")).setFinish(bytes("colf")));
+        SliceRange[] middleOnlyRangesReversed =
+                new SliceRange[] { new SliceRange().setStart(bytes("colg")).setFinish(bytes("colf")) };
 
-        List<SliceRange> endOnlyRanges =
-                ImmutableList.of(new SliceRange().setStart(bytes("colj")).setFinish(EMPTY_BYTE_ARRAY));
+        SliceRange[] endOnlyRanges =
+                new SliceRange[] { new SliceRange().setStart(bytes("colj")).setFinish(EMPTY_BYTE_ARRAY) };
 
-        List<SliceRange> endOnlyRangesReversed =
-                ImmutableList.of(new SliceRange().setStart(EMPTY_BYTE_ARRAY).setFinish(bytes("colj")));
+        SliceRange[] endOnlyRangesReversed =
+                new SliceRange[] { new SliceRange().setStart(EMPTY_BYTE_ARRAY).setFinish(bytes("colj")) };
 
         SliceQueryFilter startOnlyFilter = new SliceQueryFilter(startOnlyRange, false,
                 Integer.MAX_VALUE);
@@ -1322,7 +1322,7 @@ public class ColumnFamilyStoreTest extends SchemaLoader
         assertSame("unexpected number of rows ", 1, rows.size());
         Row row = rows.get(0);
         Collection<IColumn> cols = !filter.isReversed() ? row.cf.getSortedColumns() : row.cf.getReverseSortedColumns();
-//        printRow(cfs, new String(row.key.key.array()), cols);
+        printRow(cfs, new String(row.key.key.array()), cols);
         String[] returnedColsNames = Iterables.toArray(Iterables.transform(cols, new Function<IColumn, String>()
         {
             @Override
