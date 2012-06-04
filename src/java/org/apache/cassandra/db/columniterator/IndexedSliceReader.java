@@ -31,7 +31,6 @@ import org.apache.cassandra.db.DeletionInfo;
 import org.apache.cassandra.db.OnDiskAtom;
 import org.apache.cassandra.db.RowIndexEntry;
 import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.io.IColumnSerializer;
 import org.apache.cassandra.io.sstable.IndexHelper;
 import org.apache.cassandra.io.sstable.IndexHelper.IndexInfo;
 import org.apache.cassandra.io.sstable.SSTableReader;
@@ -47,7 +46,7 @@ import com.google.common.collect.AbstractIterator;
  * This is a reader that finds the block for a starting column and returns blocks before/after it for each next call.
  * This function assumes that the CF is sorted by name and exploits the name index.
  */
-class IndexedSliceReader extends AbstractIterator<IColumn> implements IColumnIterator
+class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskAtomIterator
 {
     private final ColumnFamily emptyColumnFamily;
 
@@ -81,7 +80,7 @@ class IndexedSliceReader extends AbstractIterator<IColumn> implements IColumnIte
 
         try
         {
-            if (sstable.descriptor.hasPromotedIndexes)
+            if (sstable.descriptor.version.hasPromotedIndexes)
             {
                 this.indexes = indexEntry.columnsIndex();
                 if (indexes.isEmpty())
@@ -217,7 +216,7 @@ class IndexedSliceReader extends AbstractIterator<IColumn> implements IColumnIte
             return true;
         }
 
-        protected void addCol(IColumn col)
+        protected void addCol(OnDiskAtom col)
         {
             if (reversed)
                 blockColumns.addFirst(col);
@@ -390,7 +389,7 @@ class IndexedSliceReader extends AbstractIterator<IColumn> implements IColumnIte
             // behave as if it was not reversed
             super(reversed);
 
-            IColumnSerializer columnSerializer = emptyColumnFamily.getColumnSerializer();
+            OnDiskAtom.Serializer atomSerializer = emptyColumnFamily.getOnDiskSerializer();
             int columns = file.readInt();
 
             for (int i = 0; i < columns; i++)

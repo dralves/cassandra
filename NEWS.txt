@@ -9,6 +9,44 @@ upgrade, just in case you need to roll back to the previous version.
 by version X, but the inverse is not necessarily the case.)
 
 
+1.2
+===
+Upgrading
+---------
+    - 1.2 is NOT network-compatible with versions older than 1.0.  That
+      means if you want to do a rolling, zero-downtime upgrade, you'll need
+      to upgrade first to 1.0.x or 1.1.x, and then to 1.2.  1.2 retains
+      the ability to read data files from Cassandra versions at least
+      back to 0.6, so a non-rolling upgrade remains possible with just
+      one step.
+    - The hints schema was changed from 1.1 to 1.2. Cassandra automatically
+      snapshots and then truncates the hints column family as part of
+      starting up 1.2 for the first time.  Additionally, upgraded nodes
+      will not store new hints destined for older (pre-1.2) nodes.  It is
+      therefore recommended that you perform a cluster upgrade when all
+      nodes are up.
+    - The `nodetool removetoken` command (and corresponding JMX operation)
+      have been renamed to `nodetool removenode`.  This function is
+      incompatible with the earlier `nodetool removetoken`, and attempts to
+      remove nodes in this way with a mixed 1.1 (or lower) / 1.2 cluster,
+      is not supported.
+
+
+1.1.1
+=====
+
+Upgrading
+---------
+    - Nothing specific to this release, but please see 1.1 if you are upgrading
+      from a previous version.
+
+Features
+--------
+    - Continuous commitlog archiving and point-in-time recovery.
+      See conf/commitlog_archiving.properties
+    - Incremental repair by token range, exposed over JMX
+
+
 1.1
 ===
 
@@ -51,8 +89,10 @@ Upgrading
 Features
 --------
     - Concurrent schema updates are now supported, with any conflicts
-      automatically resolved.  This makes temporary columnfamilies and
-      other uses of dynamic schema appropriate to use in applications.
+      automatically resolved. Please note that simultaneously running
+      ‘CREATE COLUMN FAMILY’ operation on the different nodes wouldn’t
+      be safe until version 1.2 due to the nature of ColumnFamily
+      identifier generation, for more details see CASSANDRA-3794.
     - The CQL language has undergone a major revision, CQL3, the
       highlights of which are covered at [1].  CQL3 is not
       backwards-compatibile with CQL2, so we've introduced a

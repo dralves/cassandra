@@ -21,10 +21,12 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
+import java.security.MessageDigest;
 import java.util.*;
 
 import com.google.common.collect.MapDifference;
 import com.google.common.collect.Maps;
+import org.apache.commons.lang.ArrayUtils;
 import org.apache.commons.lang.StringUtils;
 import org.apache.commons.lang.builder.EqualsBuilder;
 import org.apache.commons.lang.builder.HashCodeBuilder;
@@ -70,6 +72,9 @@ public final class CFMetaData
     public final static ByteBuffer DEFAULT_KEY_NAME = ByteBufferUtil.bytes("KEY");
     public final static Caching DEFAULT_CACHING_STRATEGY = Caching.KEYS_ONLY;
     public final static Double DEFAULT_BF_FP_CHANCE = null;
+
+    // Note that this is the default only for user created tables
+    public final static String DEFAULT_COMPRESSOR = SnappyCompressor.isAvailable() ? SnappyCompressor.class.getCanonicalName() : null;
 
     public static final CFMetaData StatusCf = newSystemMetadata(SystemTable.STATUS_CF, 0, "persistent metadata for the local node", BytesType.instance, null);
     public static final CFMetaData HintsCf = newSystemMetadata(HintedHandOffManager.HINTS_CF, 1, "hinted handoff data", BytesType.instance, BytesType.instance);
@@ -156,6 +161,8 @@ public final class CFMetaData
                                           ColumnDefinition.ascii("component_index", 2));
     }
 
+    public static final CFMetaData HostIdCf = newSystemMetadata(SystemTable.HOST_ID_CF, 11, "Host Identifier", UUIDType.instance, null);
+
     public enum Caching
     {
         ALL, KEYS_ONLY, ROWS_ONLY, NONE;
@@ -174,7 +181,7 @@ public final class CFMetaData
     }
 
     //REQUIRED
-    public final Integer cfId;                        // internal id, never exposed to user
+    public final UUID cfId;                           // internal id, never exposed to user
     public final String ksName;                       // name of keyspace
     public final String cfName;                       // name of this column family
     public final ColumnFamilyType cfType;             // standard, super
@@ -238,10 +245,10 @@ public final class CFMetaData
 
     public CFMetaData(String keyspace, String name, ColumnFamilyType type, AbstractType<?> comp, AbstractType<?> subcc)
     {
-        this(keyspace, name, type, comp, subcc, Schema.instance.nextCFId());
+        this(keyspace, name, type, comp, subcc, getId(keyspace, name));
     }
 
-    CFMetaData(String keyspace, String name, ColumnFamilyType type, AbstractType<?> comp, AbstractType<?> subcc, int id)
+    CFMetaData(String keyspace, String name, ColumnFamilyType type, AbstractType<?> comp, AbstractType<?> subcc, UUID id)
     {
         // Final fields must be set in constructor
         ksName = keyspace;
@@ -249,12 +256,7 @@ public final class CFMetaData
         cfType = type;
         comparator = comp;
         subcolumnComparator = enforceSubccDefault(type, subcc);
-
-        // System cfs have specific ids, and copies of old CFMDs need
-        //  to copy over the old id.
         cfId = id;
-        caching = DEFAULT_CACHING_STRATEGY;
-        bloomFilterFpChance = DEFAULT_BF_FP_CHANCE;
 
         this.init();
     }
@@ -269,6 +271,11 @@ public final class CFMetaData
         return (comment == null) ? "" : comment.toString();
     }
 
+    static UUID getId(String ksName, String cfName)
+    {
+        return UUID.nameUUIDFromBytes(ArrayUtils.addAll(ksName.getBytes(), cfName.getBytes()));
+    }
+
     private void init()
     {
         // Set a bunch of defaults
@@ -278,6 +285,8 @@ public final class CFMetaData
         gcGraceSeconds               = DEFAULT_GC_GRACE_SECONDS;
         minCompactionThreshold       = DEFAULT_MIN_COMPACTION_THRESHOLD;
         maxCompactionThreshold       = DEFAULT_MAX_COMPACTION_THRESHOLD;
+        caching                      = DEFAULT_CACHING_STRATEGY;
+        bloomFilterFpChance          = DEFAULT_BF_FP_CHANCE;
 
         // Defaults strange or simple enough to not need a DEFAULT_T for
         defaultValidator = BytesType.instance;
@@ -301,10 +310,13 @@ public final class CFMetaData
         updateCfDef(); // init cqlCfDef
     }
 
-    private static CFMetaData newSystemMetadata(String cfName, int cfId, String comment, AbstractType<?> comparator, AbstractType<?> subcc)
+    private static CFMetaData newSystemMetadata(String cfName, int oldCfId, String comment, AbstractType<?> comparator, AbstractType<?> subcc)
     {
         ColumnFamilyType type = subcc == null ? ColumnFamilyType.Standard : ColumnFamilyType.Super;
-        CFMetaData newCFMD = new CFMetaData(Table.SYSTEM_TABLE, cfName, type, comparator,  subcc, cfId);
+        CFMetaData newCFMD = new CFMetaData(Table.SYSTEM_TABLE, cfName, type, comparator,  subcc);
+
+        // adding old -> new style ID mapping to support backward compatibility
+        Schema.instance.addOldCfIdMapping(oldCfId, newCFMD.cfId);
 
         return newCFMD.comment(comment)
                       .readRepairChance(0)
@@ -312,7 +324,7 @@ public final class CFMetaData
                       .gcGraceSeconds(0);
     }
 
-    private static CFMetaData newSchemaMetadata(String cfName, int cfId, String comment, AbstractType<?> comparator, AbstractType<?> subcc)
+    private static CFMetaData newSchemaMetadata(String cfName, int oldCfId, String comment, AbstractType<?> comparator, AbstractType<?> subcc)
     {
         /*
          * Schema column families needs a gc_grace (since they are replicated
@@ -320,16 +332,24 @@ public final class CFMetaData
          * could be dead for that long a time.
          */
         int gcGrace = 120 * 24 * 3600; // 3 months
-        return newSystemMetadata(cfName, cfId, comment, comparator, subcc).gcGraceSeconds(gcGrace);
+        return newSystemMetadata(cfName, oldCfId, comment, comparator, subcc).gcGraceSeconds(gcGrace);
     }
 
     public static CFMetaData newIndexMetadata(CFMetaData parent, ColumnDefinition info, AbstractType<?> columnComparator)
     {
+        // Depends on parent's cache setting, turn on its index CF's cache.
+        // Here, only key cache is enabled, but later (in KeysIndex) row cache will be turned on depending on cardinality.
+        Caching indexCaching = parent.getCaching() == Caching.ALL || parent.getCaching() == Caching.KEYS_ONLY
+                             ? Caching.KEYS_ONLY
+                             : Caching.NONE;
+
         return new CFMetaData(parent.ksName, parent.indexColumnFamilyName(info), ColumnFamilyType.Standard, columnComparator, null)
                              .keyValidator(info.getValidator())
                              .readRepairChance(0.0)
                              .dcLocalReadRepairChance(0.0)
-                             .caching(Caching.NONE)
+                             .caching(indexCaching)
+                             .compactionStrategyClass(parent.compactionStrategyClass)
+                             .compactionStrategyOptions(parent.compactionStrategyOptions)
                              .reloadSecondaryIndexMetadata(parent);
     }
 
@@ -514,7 +534,7 @@ public final class CFMetaData
             .append(keyValidator, rhs.keyValidator)
             .append(minCompactionThreshold, rhs.minCompactionThreshold)
             .append(maxCompactionThreshold, rhs.maxCompactionThreshold)
-            .append(cfId.intValue(), rhs.cfId.intValue())
+            .append(cfId, rhs.cfId)
             .append(column_metadata, rhs.column_metadata)
             .append(keyAlias, rhs.keyAlias)
             .append(columnAliases, rhs.columnAliases)
@@ -588,7 +608,8 @@ public final class CFMetaData
         {
             cf_def.setCompression_options(new HashMap<String, String>()
             {{
-                put(CompressionParameters.SSTABLE_COMPRESSION, SnappyCompressor.class.getCanonicalName());
+                if (DEFAULT_COMPRESSOR != null)
+                    put(CompressionParameters.SSTABLE_COMPRESSION, DEFAULT_COMPRESSOR);
             }});
         }
         if (!cf_def.isSetDclocal_read_repair_chance())
@@ -609,8 +630,7 @@ public final class CFMetaData
                                             cf_def.name,
                                             cfType,
                                             TypeParser.parse(cf_def.comparator_type),
-                                            cf_def.subcomparator_type == null ? null : TypeParser.parse(cf_def.subcomparator_type),
-                                            cf_def.isSetId() ? cf_def.id : Schema.instance.nextCFId());
+                                            cf_def.subcomparator_type == null ? null : TypeParser.parse(cf_def.subcomparator_type));
 
         if (cf_def.isSetGc_grace_seconds()) { newCFMD.gcGraceSeconds(cf_def.gc_grace_seconds); }
         if (cf_def.isSetMin_compaction_threshold()) { newCFMD.minCompactionThreshold(cf_def.min_compaction_threshold); }
@@ -785,7 +805,6 @@ public final class CFMetaData
     public org.apache.cassandra.thrift.CfDef toThrift()
     {
         org.apache.cassandra.thrift.CfDef def = new org.apache.cassandra.thrift.CfDef(ksName, cfName);
-        def.setId(cfId);
         def.setColumn_type(cfType.name());
         def.setComparator_type(comparator.toString());
         if (subcolumnComparator != null)
@@ -842,10 +861,18 @@ public final class CFMetaData
      */
     public void addDefaultIndexNames() throws ConfigurationException
     {
+        Set<String> existingNames = existingIndexNames(null);
         for (ColumnDefinition column : column_metadata.values())
         {
             if (column.getIndexType() != null && column.getIndexName() == null)
-                column.setIndexName(getDefaultIndexName(cfName, comparator, column.name));
+            {
+                String baseName = getDefaultIndexName(cfName, comparator, column.name);
+                String indexName = baseName;
+                int i = 0;
+                while (existingNames.contains(indexName))
+                    indexName = baseName + '_' + (++i);
+                column.setIndexName(indexName);
+            }
         }
     }
 
@@ -859,6 +886,13 @@ public final class CFMetaData
         if (cfType == ColumnFamilyType.Standard)
             return Column.serializer();
         return SuperColumn.serializer(subcolumnComparator);
+    }
+
+    public OnDiskAtom.Serializer getOnDiskSerializer()
+    {
+        if (cfType == ColumnFamilyType.Standard)
+            return Column.onDiskSerializer();
+        return SuperColumn.onDiskSerializer(subcolumnComparator);
     }
 
     public static boolean isNameValid(String name)
@@ -934,14 +968,7 @@ public final class CFMetaData
         validateAlias(valueAlias, "Value");
 
         // initialize a set of names NOT in the CF under consideration
-        Set<String> indexNames = new HashSet<String>();
-        for (ColumnFamilyStore cfs : ColumnFamilyStore.all())
-        {
-            if (!cfs.getColumnFamilyName().equals(cfName))
-                for (ColumnDefinition cd : cfs.metadata.getColumn_metadata().values())
-                    indexNames.add(cd.getIndexName());
-        }
-
+        Set<String> indexNames = existingIndexNames(cfName);
         for (ColumnDefinition c : column_metadata.values())
         {
             AbstractType<?> comparator = getColumnDefinitionComparator(c);
@@ -986,6 +1013,18 @@ public final class CFMetaData
         validateCompactionThresholds();
 
         return this;
+    }
+
+    private static Set<String> existingIndexNames(String cfToExclude)
+    {
+        Set<String> indexNames = new HashSet<String>();
+        for (ColumnFamilyStore cfs : ColumnFamilyStore.all())
+        {
+            if (cfToExclude == null || !cfs.getColumnFamilyName().equals(cfToExclude))
+                for (ColumnDefinition cd : cfs.metadata.getColumn_metadata().values())
+                    indexNames.add(cd.getIndexName());
+        }
+        return indexNames;
     }
 
     private static void validateAlias(ByteBuffer alias, String msg) throws ConfigurationException
@@ -1108,7 +1147,11 @@ public final class CFMetaData
         ColumnFamily cf = rm.addOrGet(SystemTable.SCHEMA_COLUMNFAMILIES_CF);
         int ldt = (int) (System.currentTimeMillis() / 1000);
 
-        cf.addColumn(Column.create(cfId, timestamp, cfName, "id"));
+        Integer oldId = Schema.instance.convertNewCfId(cfId);
+
+        if (oldId != null) // keep old ids (see CASSANDRA-3794 for details)
+            cf.addColumn(Column.create(oldId, timestamp, cfName, "id"));
+
         cf.addColumn(Column.create(cfType.toString(), timestamp, cfName, "type"));
         cf.addColumn(Column.create(comparator.toString(), timestamp, cfName, "comparator"));
         if (subcolumnComparator != null)
@@ -1145,8 +1188,11 @@ public final class CFMetaData
                                             result.getString("columnfamily"),
                                             ColumnFamilyType.valueOf(result.getString("type")),
                                             TypeParser.parse(result.getString("comparator")),
-                                            result.has("subcomparator") ? TypeParser.parse(result.getString("subcomparator")) : null,
-                                            result.getInt("id"));
+                                            result.has("subcomparator") ? TypeParser.parse(result.getString("subcomparator")) : null);
+
+            if (result.has("id"))// try to identify if ColumnFamily Id is old style (before C* 1.2) and add old -> new mapping if so
+                Schema.instance.addOldCfIdMapping(result.getInt("id"), cfm.cfId);
+
             cfm.readRepairChance(result.getDouble("read_repair_chance"));
             cfm.dcLocalReadRepairChance(result.getDouble("local_read_repair_chance"));
             cfm.replicateOnWrite(result.getBoolean("replicate_on_write"));

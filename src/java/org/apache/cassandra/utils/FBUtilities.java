@@ -32,6 +32,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+
 import com.google.common.base.Joiner;
 import com.google.common.collect.AbstractIterator;
 import org.apache.commons.lang.StringUtils;
@@ -48,7 +49,6 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.io.util.DataOutputBuffer;
-import org.apache.cassandra.locator.PropertyFileSnitch;
 import org.apache.cassandra.net.IAsyncResult;
 import org.apache.thrift.TBase;
 import org.apache.thrift.TDeserializer;
@@ -56,7 +56,6 @@ import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.map.ObjectMapper;
-import org.codehaus.jackson.type.TypeReference;
 
 public class FBUtilities
 {
@@ -220,7 +219,7 @@ public class FBUtilities
         for (ByteBuffer block : data)
         {
             if (block.hasArray())
-                messageDigest.update(block.array(), block.position(), block.remaining());
+                messageDigest.update(block.array(), block.arrayOffset() + block.position(), block.remaining());
             else
                 messageDigest.update(block.duplicate());
         }
@@ -236,6 +235,12 @@ public class FBUtilities
         }
     }
 
+    public static void renameWithOutConfirm(String tmpFilename, String filename) throws IOException
+    {
+        new File(tmpFilename).renameTo(new File(filename));
+    }
+
+    @Deprecated
     public static void serialize(TSerializer serializer, TBase struct, DataOutput out)
     throws IOException
     {
@@ -255,6 +260,7 @@ public class FBUtilities
         out.write(bytes);
     }
 
+    @Deprecated
     public static void deserialize(TDeserializer deserializer, TBase struct, DataInput in)
     throws IOException
     {
@@ -299,23 +305,6 @@ public class FBUtilities
             // unwrapped range (left < right).  standard sort is all we need.
             Collections.sort(keys);
         }
-    }
-
-    public static int encodedUTF8Length(String st)
-    {
-        int strlen = st.length();
-        int utflen = 0;
-        for (int i = 0; i < strlen; i++)
-        {
-            int c = st.charAt(i);
-            if ((c >= 0x0001) && (c <= 0x007F))
-                utflen++;
-            else if (c > 0x07FF)
-                utflen += 3;
-            else
-                utflen += 2;
-        }
-        return utflen;
     }
 
     public static String resourceToFile(String filename) throws ConfigurationException
@@ -580,6 +569,18 @@ public class FBUtilities
         }
     }
 
+    public static void sleep(int millis)
+    {
+        try
+        {
+            Thread.sleep(millis);
+        }
+        catch (InterruptedException e)
+        {
+            throw new AssertionError();
+        }
+    }
+
     private static final class WrappedCloseableIterator<T>
         extends AbstractIterator<T> implements CloseableIterator<T>
     {
@@ -605,7 +606,7 @@ public class FBUtilities
         DataOutputBuffer buffer = new DataOutputBuffer(size);
         serializer.serialize(object, buffer, version);
         assert buffer.getLength() == size && buffer.getData().length == size
-               : String.format("Final buffer length %s to accomodate data size of %s (predicted %s) for %s",
+               : String.format("Final buffer length %s to accommodate data size of %s (predicted %s) for %s",
                                buffer.getData().length, buffer.getLength(), size, object);
         return buffer.getData();
     }

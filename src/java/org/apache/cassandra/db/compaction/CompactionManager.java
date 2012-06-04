@@ -33,6 +33,7 @@ import javax.management.ObjectName;
 import org.apache.cassandra.cache.AutoSavingCache;
 import org.apache.cassandra.concurrent.DebuggableThreadPoolExecutor;
 import org.apache.cassandra.concurrent.NamedThreadFactory;
+import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.*;
@@ -112,6 +113,10 @@ public class CompactionManager implements CompactionManagerMBean
      */
     public Future<?> submitBackground(final ColumnFamilyStore cfs)
     {
+        logger.debug("Scheduling a background task check for {}.{} with {}",
+                     new Object[] {cfs.table.name,
+                                   cfs.columnFamily,
+                                   cfs.getCompactionStrategy().getClass().getSimpleName()});
         Runnable runnable = new WrappedRunnable()
         {
             protected void runMayThrow() throws IOException
@@ -119,10 +124,25 @@ public class CompactionManager implements CompactionManagerMBean
                 compactionLock.readLock().lock();
                 try
                 {
+                    logger.debug("Checking {}.{}", cfs.table.name, cfs.columnFamily); // log after we get the lock so we can see delays from that if any
+                    if (!cfs.isValid())
+                    {
+                        logger.debug("Aborting compaction for dropped CF");
+                        return;
+                    }
+
                     AbstractCompactionStrategy strategy = cfs.getCompactionStrategy();
                     AbstractCompactionTask task = strategy.getNextBackgroundTask(getDefaultGcBefore(cfs));
-                    if (task == null || !task.markSSTablesForCompaction())
+                    if (task == null)
+                    {
+                        logger.debug("No tasks available");
                         return;
+                    }
+                    if (!task.markSSTablesForCompaction())
+                    {
+                        logger.debug("Unable to mark SSTables for {}", task);
+                        return;
+                    }
 
                     try
                     {
@@ -482,7 +502,7 @@ public class CompactionManager implements CompactionManagerMBean
             ByteBuffer nextIndexKey = ByteBufferUtil.readWithShortLength(indexFile);
             {
                 // throw away variable so we don't have a side effect in the assert
-                long firstRowPositionFromIndex = RowIndexEntry.serializer.deserialize(indexFile, sstable.descriptor).position;
+                long firstRowPositionFromIndex = RowIndexEntry.serializer.deserialize(indexFile, sstable.descriptor.version).position;
                 assert firstRowPositionFromIndex == 0 : firstRowPositionFromIndex;
             }
 
@@ -491,7 +511,7 @@ public class CompactionManager implements CompactionManagerMBean
 
             while (!dataFile.isEOF())
             {
-                if (scrubInfo.isStopped())
+                if (scrubInfo.isStopRequested())
                     throw new CompactionInterruptedException(scrubInfo.getCompactionInfo());
                 long rowStart = dataFile.getFilePointer();
                 if (logger.isDebugEnabled())
@@ -502,7 +522,7 @@ public class CompactionManager implements CompactionManagerMBean
                 try
                 {
                     key = SSTableReader.decodeKey(sstable.partitioner, sstable.descriptor, ByteBufferUtil.readWithShortLength(dataFile));
-                    dataSize = sstable.descriptor.hasIntRowSize ? dataFile.readInt() : dataFile.readLong();
+                    dataSize = sstable.descriptor.version.hasIntRowSize ? dataFile.readInt() : dataFile.readLong();
                     if (logger.isDebugEnabled())
                         logger.debug(String.format("row %s is %s bytes", ByteBufferUtil.bytesToHex(key.key), dataSize));
                 }
@@ -519,7 +539,7 @@ public class CompactionManager implements CompactionManagerMBean
                     nextIndexKey = indexFile.isEOF() ? null : ByteBufferUtil.readWithShortLength(indexFile);
                     nextRowPositionFromIndex = indexFile.isEOF()
                                              ? dataFile.length()
-                                             : RowIndexEntry.serializer.deserialize(indexFile, sstable.descriptor).position;
+                                             : RowIndexEntry.serializer.deserialize(indexFile, sstable.descriptor.version).position;
                 }
                 catch (Throwable th)
                 {
@@ -531,7 +551,7 @@ public class CompactionManager implements CompactionManagerMBean
                 long dataStart = dataFile.getFilePointer();
                 long dataStartFromIndex = currentIndexKey == null
                                         ? -1
-                                        : rowStart + 2 + currentIndexKey.remaining() + (sstable.descriptor.hasIntRowSize ? 4 : 8);
+                                        : rowStart + 2 + currentIndexKey.remaining() + (sstable.descriptor.version.hasIntRowSize ? 4 : 8);
                 long dataSizeFromIndex = nextRowPositionFromIndex - dataStartFromIndex;
                 assert currentIndexKey != null || indexFile.isEOF();
                 if (logger.isDebugEnabled() && currentIndexKey != null)
@@ -694,7 +714,7 @@ public class CompactionManager implements CompactionManagerMBean
 
             logger.info("Cleaning up " + sstable);
             // Calculate the expected compacted filesize
-            long expectedRangeFileSize = cfs.getExpectedCompactedFileSize(Arrays.asList(sstable)) / 2;
+            long expectedRangeFileSize = cfs.getExpectedCompactedFileSize(Arrays.asList(sstable), OperationType.CLEANUP);
             File compactionFileLocation = cfs.directories.getDirectoryForNewSSTables(expectedRangeFileSize);
             if (compactionFileLocation == null)
                 throw new IOException("disk full");
@@ -710,7 +730,7 @@ public class CompactionManager implements CompactionManagerMBean
             {
                 while (scanner.hasNext())
                 {
-                    if (ci.isStopped())
+                    if (ci.isStopRequested())
                         throw new CompactionInterruptedException(ci.getCompactionInfo());
                     SSTableIdentityIterator row = (SSTableIdentityIterator) scanner.next();
                     if (Range.isInRanges(row.getKey().token, ranges))
@@ -733,15 +753,15 @@ public class CompactionManager implements CompactionManagerMBean
 
                             while (row.hasNext())
                             {
-                                IColumn column = row.next();
+                                OnDiskAtom column = row.next();
                                 if (column instanceof CounterColumn)
                                     renewer.maybeRenew((CounterColumn) column);
-                                if (indexedColumns.contains(column.name()))
+                                if (column instanceof IColumn && indexedColumns.contains(column.name()))
                                 {
                                     if (indexedColumnsInRow == null)
                                         indexedColumnsInRow = new ArrayList<IColumn>();
 
-                                    indexedColumnsInRow.add(column);
+                                    indexedColumnsInRow.add((IColumn)column);
                                 }
                             }
 
@@ -761,7 +781,7 @@ public class CompactionManager implements CompactionManagerMBean
                         }
                     }
                     if ((rowsRead++ % 1000) == 0)
-                        controller.mayThrottle(scanner.getFilePointer());
+                        controller.mayThrottle(scanner.getCurrentPosition());
                 }
                 if (writer != null)
                     newSstable = writer.closeAndOpenReader(sstable.maxDataAge);
@@ -861,7 +881,7 @@ public class CompactionManager implements CompactionManagerMBean
             validator.prepare(cfs);
             while (nni.hasNext())
             {
-                if (ci.isStopped())
+                if (ci.isStopRequested())
                     throw new CompactionInterruptedException(ci.getCompactionInfo());
                 AbstractCompactedRow row = nni.next();
                 validator.add(row);
@@ -987,16 +1007,8 @@ public class CompactionManager implements CompactionManagerMBean
         public ValidationCompactionIterable(ColumnFamilyStore cfs, Collection<SSTableReader> sstables, Range<Token> range) throws IOException
         {
             super(OperationType.VALIDATION,
-                  getScanners(sstables, range),
+                  cfs.getCompactionStrategy().getScanners(sstables, range),
                   new CompactionController(cfs, sstables, getDefaultGcBefore(cfs), true));
-        }
-
-        protected static List<SSTableScanner> getScanners(Iterable<SSTableReader> sstables, Range<Token> range) throws IOException
-        {
-            ArrayList<SSTableScanner> scanners = new ArrayList<SSTableScanner>();
-            for (SSTableReader sstable : sstables)
-                scanners.add(sstable.getDirectScanner(range));
-            return scanners;
         }
     }
 
@@ -1040,7 +1052,7 @@ public class CompactionManager implements CompactionManagerMBean
             // notify
             ci.finished();
             compactions.remove(ci);
-            totalBytesCompacted += ci.getCompactionInfo().getTotalBytes();
+            totalBytesCompacted += ci.getCompactionInfo().getTotal();
             totalCompactionsCompleted += 1;
         }
 
@@ -1053,7 +1065,7 @@ public class CompactionManager implements CompactionManagerMBean
         {
             long bytesCompletedInProgress = 0L;
             for (CompactionInfo.Holder ci : compactions)
-                bytesCompletedInProgress += ci.getCompactionInfo().getBytesComplete();
+                bytesCompletedInProgress += ci.getCompactionInfo().getCompleted();
             return bytesCompletedInProgress + totalBytesCompacted;
         }
 
@@ -1197,12 +1209,9 @@ public class CompactionManager implements CompactionManagerMBean
         {
             try
             {
-                return new CompactionInfo(this.hashCode(),
-                                          sstable.descriptor.ksname,
-                                          sstable.descriptor.cfname,
-                                          OperationType.CLEANUP,
-                                          scanner.getFilePointer(),
-                                          scanner.getFileLength());
+                return new CompactionInfo(OperationType.CLEANUP,
+                                          scanner.getCurrentPosition(),
+                                          scanner.getLengthInBytes());
             }
             catch (Exception e)
             {
@@ -1225,10 +1234,7 @@ public class CompactionManager implements CompactionManagerMBean
         {
             try
             {
-                return new CompactionInfo(this.hashCode(),
-                                          sstable.descriptor.ksname,
-                                          sstable.descriptor.cfname,
-                                          OperationType.SCRUB,
+                return new CompactionInfo(OperationType.SCRUB,
                                           dataFile.getFilePointer(),
                                           dataFile.length());
             }
@@ -1246,6 +1252,25 @@ public class CompactionManager implements CompactionManagerMBean
         {
             if (holder.getCompactionInfo().getTaskType() == operation)
                 holder.stop();
+        }
+    }
+
+    /**
+     * Try to stop all of the compactions for given ColumnFamilies.
+     * Note that this method does not wait indefinitely for all compactions to finish, maximum wait time is 30 secs.
+     *
+     * @param columnFamilies The ColumnFamilies to try to stop compaction upon.
+     */
+    public void stopCompactionFor(Collection<CFMetaData> columnFamilies)
+    {
+        assert columnFamilies != null;
+
+        for (Holder compactionHolder : CompactionExecutor.getCompactions())
+        {
+            CompactionInfo info = compactionHolder.getCompactionInfo();
+
+            if (columnFamilies.contains(info.getCFMetaData()))
+                compactionHolder.stop(); // signal compaction to stop
         }
     }
 }

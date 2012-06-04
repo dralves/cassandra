@@ -17,7 +17,7 @@
  ~ specific language governing permissions and limitations
  ~ under the License.
  -->
-<project basedir="." default="build" name="apache-cassandra"
+<project basedir="." default="jar" name="apache-cassandra"
          xmlns:artifact="antlib:org.apache.maven.artifact.ant">
     <property environment="env"/>
     <property file="build.properties" />
@@ -25,7 +25,7 @@
     <property name="debuglevel" value="source,lines,vars"/>
 
     <!-- default version and SCM information -->
-    <property name="base.version" value="1.1.0"/>
+    <property name="base.version" value="1.2.0"/>
     <property name="scm.connection" value="scm:git://git.apache.org/cassandra.git"/>
     <property name="scm.developerConnection" value="scm:git://git.apache.org/cassandra.git"/>
     <property name="scm.url" value="http://git-wip-us.apache.org/repos/asf?p=cassandra.git;a=tree"/>
@@ -781,9 +781,6 @@
       <mkdir dir="${build.dir}/tools/lib/" />
       <jar destfile="${build.dir}/tools/lib/stress.jar" manifest="${stress.manifest}">
         <fileset dir="${stress.build.classes}"/>
-        <fileset dir="${basedir}/build/classes/main" />
-        <fileset dir="${basedir}/build/classes/thrift" />
-        <zipgroupfileset dir="${build.lib}" includes="*.jar" />
       </jar>
     </target>
 
@@ -1077,7 +1074,6 @@
         </fileset>
         <fileset dir="${build.lib}">
           <include name="**/guava*.jar" />
-          <include name="**/commons-lang*.jar" />
         </fileset>
       </classpath>
     </junit>
@@ -1119,11 +1115,18 @@
     </testmacro>
   </target>
 
+  <target name="msg-ser-test-10" depends="build-test" description="Tests message serializations on 1.0 messages">
+    <testmacro suitename="unit" inputdir="${test.unit.src}" 
+               timeout="60000" filter="**/SerializationsTest.java">
+      <jvmarg value="-Dcassandra.version=1.0"/>
+    </testmacro>
+  </target>
 
   <target name="long-test" depends="build-test" description="Execute functional tests">
     <testmacro suitename="long" inputdir="${test.long.src}"
-               timeout="${test.long.timeout}" />
+               timeout="${test.long.timeout}">
       <jvmarg value="-Dcassandra.ring_delay_ms=1000"/>
+    </testmacro>
   </target>
 
   <!-- instruments the classes to later create code coverage reports -->

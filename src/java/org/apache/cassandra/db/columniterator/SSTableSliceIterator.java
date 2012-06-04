@@ -18,23 +18,30 @@
 package org.apache.cassandra.db.columniterator;
 
 import java.io.IOException;
+<<<<<<< .merge_file_9UCBSc
 import java.util.List;
 import java.util.SortedSet;
 
+=======
+import java.nio.ByteBuffer;
+>>>>>>> .merge_file_DoNZp7
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.DecoratedKey;
-import org.apache.cassandra.db.IColumn;
+import org.apache.cassandra.db.OnDiskAtom;
 import org.apache.cassandra.db.RowIndexEntry;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.util.FileDataInput;
+<<<<<<< .merge_file_9UCBSc
 import org.apache.cassandra.thrift.SliceRange;
+=======
+>>>>>>> .merge_file_DoNZp7
 
 /**
  *  A Column Iterator over SSTable
  */
-public class SSTableSliceIterator implements IColumnIterator
+public class SSTableSliceIterator implements OnDiskAtomIterator
 {
-    private final IColumnIterator reader;
+    private final OnDiskAtomIterator reader;
     private final DecoratedKey key;
 
     public SSTableSliceIterator(SSTableReader sstable, DecoratedKey key, List<SliceRange> ranges, boolean reversed)
@@ -62,7 +69,11 @@ public class SSTableSliceIterator implements IColumnIterator
         reader = createReader(sstable, indexEntry, file, ranges, reversed);
     }
 
+<<<<<<< .merge_file_9UCBSc
     private static IColumnIterator createReader(SSTableReader sstable, RowIndexEntry indexEntry, FileDataInput file, List<SliceRange> ranges, boolean reversed)
+=======
+    private static OnDiskAtomIterator createReader(SSTableReader sstable, RowIndexEntry indexEntry, FileDataInput file, ByteBuffer startColumn, ByteBuffer finishColumn, boolean reversed)
+>>>>>>> .merge_file_DoNZp7
     {
         return ranges.size() == 1 && ranges.get(0).start.remaining() == 0 && !reversed
                  ? new SimpleSliceReader(sstable, indexEntry, file, ranges.get(ranges.size()-1).finish)
@@ -84,7 +95,7 @@ public class SSTableSliceIterator implements IColumnIterator
         return reader != null && reader.hasNext();
     }
 
-    public IColumn next()
+    public OnDiskAtom next()
     {
         return reader.next();
     }

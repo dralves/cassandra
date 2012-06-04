@@ -19,6 +19,7 @@ package org.apache.cassandra.service;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.util.List;
 import java.util.Map;
@@ -154,6 +155,12 @@ public interface StorageServiceMBean
      */
     public Map<String, String> getTokenToEndpointMap();
 
+    /** Retrieve this hosts unique ID */
+    public String getLocalHostId();
+
+    /** Retrieve the mapping of endpoint to host ID */
+    public Map<String, String> getHostIdMap();
+
     /**
      * Numeric load value.
      */
@@ -279,7 +286,7 @@ public interface StorageServiceMBean
      * removeToken removes token (and all data associated with
      * enpoint that had it) from the ring
      */
-    public void removeToken(String token);
+    public void removeNode(String token);
 
     /**
      * Get the status of a token removal.

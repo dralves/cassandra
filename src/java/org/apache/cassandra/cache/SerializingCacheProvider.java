@@ -23,17 +23,19 @@ import java.io.IOError;
 import java.io.IOException;
 
 import org.apache.cassandra.db.ColumnFamily;
-import org.apache.cassandra.db.DBConstants;
+import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.io.ISerializer;
+import org.apache.cassandra.net.MessagingService;
 
 public class SerializingCacheProvider implements IRowCacheProvider
 {
-    public ICache<RowCacheKey, IRowCacheEntry> create(int capacity, boolean useMemoryWeigher)
+    public ICache<RowCacheKey, IRowCacheEntry> create(long capacity, boolean useMemoryWeigher)
     {
         return new SerializingCache<RowCacheKey, IRowCacheEntry>(capacity, useMemoryWeigher, new RowCacheSerializer());
     }
 
-    private static class RowCacheSerializer implements ISerializer<IRowCacheEntry>
+    // Package protected for tests
+    static class RowCacheSerializer implements ISerializer<IRowCacheEntry>
     {
         public void serialize(IRowCacheEntry cf, DataOutput out)
         {
@@ -44,7 +46,7 @@ public class SerializingCacheProvider implements IRowCacheProvider
                 if (cf instanceof RowCacheSentinel)
                     out.writeLong(((RowCacheSentinel) cf).sentinelId);
                 else
-                    ColumnFamily.serializer.serialize((ColumnFamily) cf, out);
+                    ColumnFamily.serializer.serialize((ColumnFamily) cf, out, MessagingService.current_version);
             }
             catch (IOException e)
             {
@@ -57,15 +59,17 @@ public class SerializingCacheProvider implements IRowCacheProvider
             boolean isSentinel = in.readBoolean();
             if (isSentinel)
                 return new RowCacheSentinel(in.readLong());
-            return ColumnFamily.serializer.deserialize(in);
+            return ColumnFamily.serializer.deserialize(in, MessagingService.current_version);
         }
 
-        public long serializedSize(IRowCacheEntry cf)
+        public long serializedSize(IRowCacheEntry cf, TypeSizes typeSizes)
         {
-            return DBConstants.BOOL_SIZE
-                   + (cf instanceof RowCacheSentinel
-                      ? DBConstants.INT_SIZE + DBConstants.LONG_SIZE
-                      : ColumnFamily.serializer().serializedSize((ColumnFamily) cf));
+            int size = typeSizes.sizeof(true);
+            if (cf instanceof RowCacheSentinel)
+                size += typeSizes.sizeof(((RowCacheSentinel) cf).sentinelId);
+            else
+                size += ColumnFamily.serializer.serializedSize((ColumnFamily) cf, typeSizes, MessagingService.current_version);
+            return size;
         }
     }
 }

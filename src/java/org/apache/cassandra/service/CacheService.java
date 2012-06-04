@@ -17,9 +17,15 @@
  */
 package org.apache.cassandra.service;
 
+import java.io.DataInputStream;
+import java.io.DataOutput;
+import java.io.IOException;
 import java.lang.management.ManagementFactory;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.List;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 
@@ -27,10 +33,21 @@ import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
 import org.apache.cassandra.cache.*;
+import org.apache.cassandra.cache.AutoSavingCache.CacheSerializer;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamily;
+import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.RowIndexEntry;
+import org.apache.cassandra.db.TypeSizes;
+import org.apache.cassandra.db.filter.QueryFilter;
+import org.apache.cassandra.db.filter.QueryPath;
+import org.apache.cassandra.io.sstable.Descriptor;
+import org.apache.cassandra.io.sstable.SSTableReader;
+import org.apache.cassandra.io.sstable.SSTableReader.Operator;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.Pair;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -96,12 +113,12 @@ public class CacheService implements CacheServiceMBean
     {
         logger.info("Initializing key cache with capacity of {} MBs.", DatabaseDescriptor.getKeyCacheSizeInMB());
 
-        int keyCacheInMemoryCapacity = DatabaseDescriptor.getKeyCacheSizeInMB() * 1024 * 1024;
+        long keyCacheInMemoryCapacity = DatabaseDescriptor.getKeyCacheSizeInMB() * 1024 * 1024;
 
         // as values are constant size we can use singleton weigher
         // where 48 = 40 bytes (average size of the key) + 8 bytes (size of value)
         ICache<KeyCacheKey, RowIndexEntry> kc = ConcurrentLinkedHashCache.create(keyCacheInMemoryCapacity / AVERAGE_KEY_CACHE_ROW_SIZE);
-        AutoSavingCache<KeyCacheKey, RowIndexEntry> keyCache = new AutoSavingCache<KeyCacheKey, RowIndexEntry>(kc, CacheType.KEY_CACHE);
+        AutoSavingCache<KeyCacheKey, RowIndexEntry> keyCache = new AutoSavingCache<KeyCacheKey, RowIndexEntry>(kc, CacheType.KEY_CACHE, new KeyCacheSerializer());
 
         int keyCacheKeysToSave = DatabaseDescriptor.getKeyCacheKeysToSave();
 
@@ -123,11 +140,11 @@ public class CacheService implements CacheServiceMBean
                     DatabaseDescriptor.getRowCacheSizeInMB(),
                     DatabaseDescriptor.getRowCacheProvider().getClass().getName());
 
-        int rowCacheInMemoryCapacity = DatabaseDescriptor.getRowCacheSizeInMB() * 1024 * 1024;
+        long rowCacheInMemoryCapacity = DatabaseDescriptor.getRowCacheSizeInMB() * 1024 * 1024;
 
         // cache object
         ICache<RowCacheKey, IRowCacheEntry> rc = DatabaseDescriptor.getRowCacheProvider().create(rowCacheInMemoryCapacity, true);
-        AutoSavingCache<RowCacheKey, IRowCacheEntry> rowCache = new AutoSavingCache<RowCacheKey, IRowCacheEntry>(rc, CacheType.ROW_CACHE);
+        AutoSavingCache<RowCacheKey, IRowCacheEntry> rowCache = new AutoSavingCache<RowCacheKey, IRowCacheEntry>(rc, CacheType.ROW_CACHE, new RowCacheSerializer());
 
         int rowCacheKeysToSave = DatabaseDescriptor.getRowCacheKeysToSave();
 
@@ -208,17 +225,17 @@ public class CacheService implements CacheServiceMBean
         rowCache.clear();
     }
 
-    public int getRowCacheCapacityInBytes()
+    public long getRowCacheCapacityInBytes()
     {
         return rowCache.getCapacity();
     }
 
-    public int getRowCacheCapacityInMB()
+    public long getRowCacheCapacityInMB()
     {
         return getRowCacheCapacityInBytes() / 1024 / 1024;
     }
 
-    public void setRowCacheCapacityInMB(int capacity)
+    public void setRowCacheCapacityInMB(long capacity)
     {
         if (capacity < 0)
             throw new RuntimeException("capacity should not be negative.");
@@ -226,17 +243,17 @@ public class CacheService implements CacheServiceMBean
         rowCache.setCapacity(capacity * 1024 * 1024);
     }
 
-    public int getKeyCacheCapacityInBytes()
+    public long getKeyCacheCapacityInBytes()
     {
         return keyCache.getCapacity() * AVERAGE_KEY_CACHE_ROW_SIZE;
     }
 
-    public int getKeyCacheCapacityInMB()
+    public long getKeyCacheCapacityInMB()
     {
         return getKeyCacheCapacityInBytes() / 1024 / 1024;
     }
 
-    public void setKeyCacheCapacityInMB(int capacity)
+    public void setKeyCacheCapacityInMB(long capacity)
     {
         if (capacity < 0)
             throw new RuntimeException("capacity should not be negative.");
@@ -244,12 +261,12 @@ public class CacheService implements CacheServiceMBean
         keyCache.setCapacity(capacity * 1024 * 1024 / 48);
     }
 
-    public int getRowCacheSize()
+    public long getRowCacheSize()
     {
         return rowCache.weightedSize();
     }
 
-    public int getKeyCacheSize()
+    public long getKeyCacheSize()
     {
         return keyCache.weightedSize() * AVERAGE_KEY_CACHE_ROW_SIZE;
     }
@@ -280,5 +297,93 @@ public class CacheService implements CacheServiceMBean
 
         FBUtilities.waitOnFutures(futures);
         logger.debug("cache saves completed");
+    }
+
+    public class RowCacheSerializer implements CacheSerializer<RowCacheKey, IRowCacheEntry>
+    {
+        public void serialize(RowCacheKey key, DataOutput out) throws IOException
+        {
+            ByteBufferUtil.writeWithLength(key.key, out);
+        }
+
+        public Pair<RowCacheKey, IRowCacheEntry> deserialize(DataInputStream in, ColumnFamilyStore store) throws IOException
+        {
+            ByteBuffer buffer = ByteBufferUtil.readWithLength(in);
+            DecoratedKey key = store.partitioner.decorateKey(buffer);
+            ColumnFamily data = store.getTopLevelColumns(QueryFilter.getIdentityFilter(key, new QueryPath(store.columnFamily)), Integer.MIN_VALUE, true);
+            return new Pair<RowCacheKey, IRowCacheEntry>(new RowCacheKey(store.metadata.cfId, key), data);
+        }
+
+        @Override
+        public void load(Set<ByteBuffer> buffers, ColumnFamilyStore store)
+        {
+            for (ByteBuffer key : buffers)
+            {
+                DecoratedKey dk = store.partitioner.decorateKey(key);
+                ColumnFamily data = store.getTopLevelColumns(QueryFilter.getIdentityFilter(dk, new QueryPath(store.columnFamily)), Integer.MIN_VALUE, true);
+                rowCache.put(new RowCacheKey(store.metadata.cfId, dk), data);
+            }
+        }
+    }
+
+    public class KeyCacheSerializer implements CacheSerializer<KeyCacheKey, RowIndexEntry>
+    {
+        public void serialize(KeyCacheKey key, DataOutput out) throws IOException
+        {
+            RowIndexEntry entry = CacheService.instance.keyCache.get(key);
+            if (entry == null)
+                return;
+            ByteBufferUtil.writeWithLength(key.key, out);
+            Descriptor desc = key.desc;
+            out.writeInt(desc.generation);
+            out.writeBoolean(desc.version.hasPromotedIndexes);
+            if (!desc.version.hasPromotedIndexes)
+                return;
+            RowIndexEntry.serializer.serialize(entry, out);
+        }
+
+        public Pair<KeyCacheKey, RowIndexEntry> deserialize(DataInputStream input, ColumnFamilyStore store) throws IOException
+        {
+            ByteBuffer key = ByteBufferUtil.readWithLength(input);
+            int generation = input.readInt();
+            SSTableReader reader = findDesc(generation, store.getSSTables());
+            if (reader == null)
+            {
+                RowIndexEntry.serializer.skipPromotedIndex(input);
+                return null;
+            }
+            RowIndexEntry entry;
+            if (input.readBoolean())
+                entry = RowIndexEntry.serializer.deserialize(input, reader.descriptor.version);
+            else
+                entry = reader.getPosition(reader.partitioner.decorateKey(key), Operator.EQ);
+            return new Pair<KeyCacheKey, RowIndexEntry>(new KeyCacheKey(reader.descriptor, key), entry);
+        }
+
+        private SSTableReader findDesc(int generation, Collection<SSTableReader> collection)
+        {
+            for (SSTableReader sstable : collection)
+            {
+                if (sstable.descriptor.generation == generation)
+                    return sstable;
+            }
+            return null;
+        }
+
+        @Override
+        public void load(Set<ByteBuffer> buffers, ColumnFamilyStore store)
+        {
+            for (ByteBuffer key : buffers)
+            {
+                DecoratedKey dk = store.partitioner.decorateKey(key);
+
+                for (SSTableReader sstable : store.getSSTables())
+                {
+                    RowIndexEntry entry = sstable.getPosition(dk, Operator.EQ);
+                    if (entry != null)
+                        keyCache.put(new KeyCacheKey(sstable.descriptor, key), entry);
+                }
+            }
+        }
     }
 }

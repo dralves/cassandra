@@ -47,10 +47,7 @@ public class SecondaryIndexBuilder extends CompactionInfo.Holder
 
     public CompactionInfo getCompactionInfo()
     {
-        return new CompactionInfo(this.hashCode(),
-                                  cfs.table.name,
-                                  cfs.columnFamily,
-                                  OperationType.INDEX_BUILD,
+        return new CompactionInfo(OperationType.INDEX_BUILD,
                                   iter.getBytesRead(),
                                   iter.getTotalBytes());
     }
@@ -59,7 +56,7 @@ public class SecondaryIndexBuilder extends CompactionInfo.Holder
     {
         while (iter.hasNext())
         {
-            if (isStopped())
+            if (isStopRequested())
                 throw new CompactionInterruptedException(getCompactionInfo());
             DecoratedKey key = iter.next();
             Table.indexRow(key, cfs, columns);

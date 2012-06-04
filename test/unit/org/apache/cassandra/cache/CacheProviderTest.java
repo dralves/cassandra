@@ -24,6 +24,8 @@ package org.apache.cassandra.cache;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
+
 import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
@@ -38,11 +40,11 @@ public class CacheProviderTest extends SchemaLoader
     String key3 = "key3";
     String key4 = "key4";
     String key5 = "key5";
-    private static final int CAPACITY = 4;
+    private static final long CAPACITY = 4;
     private String tableName = "Keyspace1";
     private String cfName = "Standard1";
 
-    private void simpleCase(ColumnFamily cf, ICache<String, ColumnFamily> cache)
+    private void simpleCase(ColumnFamily cf, ICache<String, IRowCacheEntry> cache)
     {
         cache.put(key1, cf);
         assert cache.get(key1) != null;
@@ -56,14 +58,15 @@ public class CacheProviderTest extends SchemaLoader
         assertEquals(CAPACITY, cache.size());
     }
 
-    private void assertDigests(ColumnFamily one, ColumnFamily two)
+    private void assertDigests(IRowCacheEntry one, ColumnFamily two)
     {
         // CF does not implement .equals
-        assert ColumnFamily.digest(one).equals(ColumnFamily.digest(two));
+        assert one instanceof ColumnFamily;
+        assert ColumnFamily.digest((ColumnFamily)one).equals(ColumnFamily.digest(two));
     }
 
     // TODO this isn't terribly useful
-    private void concurrentCase(final ColumnFamily cf, final ICache<String, ColumnFamily> cache) throws InterruptedException
+    private void concurrentCase(final ColumnFamily cf, final ICache<String, IRowCacheEntry> cache) throws InterruptedException
     {
         Runnable runable = new Runnable()
         {
@@ -102,7 +105,7 @@ public class CacheProviderTest extends SchemaLoader
     @Test
     public void testHeapCache() throws InterruptedException
     {
-        ICache<String, ColumnFamily> cache = ConcurrentLinkedHashCache.create(CAPACITY);
+        ICache<String, IRowCacheEntry> cache = ConcurrentLinkedHashCache.create(CAPACITY);
         ColumnFamily cf = createCF();
         simpleCase(cf, cache);
         concurrentCase(cf, cache);
@@ -111,7 +114,7 @@ public class CacheProviderTest extends SchemaLoader
     @Test
     public void testSerializingCache() throws InterruptedException
     {
-        ICache<String, ColumnFamily> cache = new SerializingCache<String, ColumnFamily>(CAPACITY, false, ColumnFamily.serializer());
+        ICache<String, IRowCacheEntry> cache = new SerializingCache<String, IRowCacheEntry>(CAPACITY, false, new SerializingCacheProvider.RowCacheSerializer());
         ColumnFamily cf = createCF();
         simpleCase(cf, cache);
         concurrentCase(cf, cache);
@@ -120,15 +123,17 @@ public class CacheProviderTest extends SchemaLoader
     @Test
     public void testKeys()
     {
+        UUID cfId = UUID.randomUUID();
+
         byte[] b1 = {1, 2, 3, 4};
-        RowCacheKey key1 = new RowCacheKey(123, ByteBuffer.wrap(b1));
+        RowCacheKey key1 = new RowCacheKey(cfId, ByteBuffer.wrap(b1));
         byte[] b2 = {1, 2, 3, 4};
-        RowCacheKey key2 = new RowCacheKey(123, ByteBuffer.wrap(b2));
+        RowCacheKey key2 = new RowCacheKey(cfId, ByteBuffer.wrap(b2));
         assertEquals(key1, key2);
         assertEquals(key1.hashCode(), key2.hashCode());
         
         byte[] b3 = {1, 2, 3, 5};
-        RowCacheKey key3 = new RowCacheKey(123, ByteBuffer.wrap(b3));
+        RowCacheKey key3 = new RowCacheKey(cfId, ByteBuffer.wrap(b3));
         assertNotSame(key1, key3);
         assertNotSame(key1.hashCode(), key3.hashCode());
     }

@@ -27,7 +27,6 @@ import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.thrift.ColumnParent;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.FBUtilities;
 
 public class SliceByNamesReadCommand extends ReadCommand
 {
@@ -110,16 +109,22 @@ class SliceByNamesReadCommandSerializer implements IVersionedSerializer<ReadComm
 
     public long serializedSize(ReadCommand cmd, int version)
     {
+        TypeSizes sizes = TypeSizes.NATIVE;
         SliceByNamesReadCommand command = (SliceByNamesReadCommand) cmd;
-        int size = DBConstants.BOOL_SIZE;
-        size += DBConstants.SHORT_SIZE + FBUtilities.encodedUTF8Length(command.table);
-        size += DBConstants.SHORT_SIZE + command.key.remaining();
-        size += command.queryPath.serializedSize();
-        size += DBConstants.INT_SIZE;
+        int size = sizes.sizeof(command.isDigestQuery());
+        int keySize = command.key.remaining();
+
+        size += sizes.sizeof(command.table);
+        size += sizes.sizeof((short)keySize) + keySize;
+        size += command.queryPath.serializedSize(sizes);
+        size += sizes.sizeof(command.columnNames.size());
         if (!command.columnNames.isEmpty())
         {
             for (ByteBuffer cName : command.columnNames)
-                size += DBConstants.SHORT_SIZE + cName.remaining();
+            {
+                int cNameSize = cName.remaining();
+                size += sizes.sizeof((short) cNameSize) + cNameSize;
+            }
         }
         return size;
     }

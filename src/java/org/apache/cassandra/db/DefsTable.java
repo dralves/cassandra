@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.db;
 
+import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
@@ -34,15 +35,16 @@ import org.apache.avro.io.DecoderFactory;
 import org.apache.avro.specific.SpecificDatumReader;
 import org.apache.avro.specific.SpecificRecord;
 import org.apache.cassandra.config.*;
+import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.db.filter.QueryPath;
 import org.apache.cassandra.db.marshal.AsciiType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.db.migration.avro.KsDef;
+import org.apache.cassandra.io.util.FastByteArrayInputStream;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.StorageService;
-import org.apache.cassandra.thrift.CfDef;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 
@@ -151,7 +153,7 @@ public class DefsTable
 
         for (Row row : serializedSchema)
         {
-            if (row.cf == null || row.cf.isEmpty() || row.cf.isMarkedForDelete())
+            if (row.cf == null || (row.cf.isMarkedForDelete() && row.cf.isEmpty()))
                 continue;
 
             keyspaces.add(KSMetaData.fromSchema(row, serializedColumnFamilies(row.key)));
@@ -237,17 +239,6 @@ public class DefsTable
      * @throws ConfigurationException If one of metadata attributes has invalid value
      * @throws IOException If data was corrupted during transportation or failed to apply fs operations
      */
-    public static void mergeRemoteSchema(byte[] data, int version) throws ConfigurationException, IOException
-    {
-        if (version < MessagingService.VERSION_11)
-        {
-            logger.error("Can't accept schema migrations from Cassandra versions previous to 1.1, please update first.");
-            return;
-        }
-
-        mergeSchema(MigrationManager.deserializeMigrationMessage(data, version));
-    }
-
     public static synchronized void mergeSchema(Collection<RowMutation> mutations) throws ConfigurationException, IOException
     {
         // current state of the schema
@@ -473,6 +464,8 @@ public class DefsTable
         KSMetaData ksm = Schema.instance.getTableDefinition(ksName);
         String snapshotName = Table.getTimestampedSnapshotName(ksName);
 
+        CompactionManager.instance.stopCompactionFor(ksm.cfMetaData().values());
+
         // remove all cfs from the table instance.
         for (CFMetaData cfm : ksm.cfMetaData().values())
         {
@@ -505,6 +498,8 @@ public class DefsTable
 
         Schema.instance.purge(cfm);
         Schema.instance.setTableDefinition(makeNewKeyspaceDefinition(ksm, cfm));
+
+        CompactionManager.instance.stopCompactionFor(Arrays.asList(cfm));
 
         if (!StorageService.instance.isClientMode())
         {

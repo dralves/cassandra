@@ -30,7 +30,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.concurrent.DebuggableThreadPoolExecutor;
 import org.apache.cassandra.concurrent.NamedThreadFactory;
-import org.apache.cassandra.db.columniterator.IColumnIterator;
+import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
 import org.apache.cassandra.db.columniterator.SimpleAbstractColumnIterator;
 import org.apache.cassandra.db.commitlog.ReplayPosition;
 import org.apache.cassandra.db.filter.AbstractColumnIterator;
@@ -38,6 +38,7 @@ import org.apache.cassandra.db.filter.NamesQueryFilter;
 import org.apache.cassandra.db.filter.SliceQueryFilter;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.sstable.SSTableWriter;
+import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.SlabAllocator;
 import org.apache.cassandra.utils.WrappedRunnable;
@@ -119,9 +120,7 @@ public class Memtable
 
     public long getLiveSize()
     {
-        // 25% fudge factor on the base throughput * liveRatio calculation.  (Based on observed
-        // pre-slabbing behavior -- not sure what accounts for this. May have changed with introduction of slabbing.)
-        return (long) (currentThroughput.get() * cfs.liveRatio * 1.25);
+        return (long) (currentThroughput.get() * cfs.liveRatio);
     }
 
     public long getSerializedSize()
@@ -225,7 +224,7 @@ public class Memtable
 
     private void resolve(DecoratedKey key, ColumnFamily cf)
     {
-        currentThroughput.addAndGet(cf.size());
+        currentThroughput.addAndGet(cf.dataSize());
         currentOperations.addAndGet((cf.getColumnCount() == 0)
                                     ? cf.isMarkedForDelete() ? 1 : 0
                                     : cf.getColumnCount());
@@ -260,7 +259,7 @@ public class Memtable
     }
 
 
-    private SSTableReader writeSortedContents(ReplayPosition context) throws IOException
+    private SSTableReader writeSortedContents(Future<ReplayPosition> context) throws IOException, ExecutionException, InterruptedException
     {
         logger.info("Writing " + this);
 
@@ -277,7 +276,7 @@ public class Memtable
                                      * 1.2); // bloom filter and row index overhead
         SSTableReader ssTable;
         // errors when creating the writer that may leave empty temp files.
-        SSTableWriter writer = cfs.createFlushWriter(columnFamilies.size(), estimatedSize, context);
+        SSTableWriter writer = cfs.createFlushWriter(columnFamilies.size(), estimatedSize, context.get());
         try
         {
             // (we can't clear out the map as-we-go to free up memory,
@@ -303,16 +302,16 @@ public class Memtable
             writer.abort();
             throw FBUtilities.unchecked(e);
         }
-        logger.info(String.format("Completed flushing %s (%d bytes)",
-                                  ssTable.getFilename(), new File(ssTable.getFilename()).length()));
+        logger.info(String.format("Completed flushing %s (%d bytes) for commitlog position %s",
+                                  ssTable.getFilename(), new File(ssTable.getFilename()).length(), context.get()));
         return ssTable;
     }
 
-    public void flushAndSignal(final CountDownLatch latch, ExecutorService writer, final ReplayPosition context)
+    public void flushAndSignal(final CountDownLatch latch, ExecutorService writer, final Future<ReplayPosition> context)
     {
         writer.execute(new WrappedRunnable()
         {
-            public void runMayThrow() throws IOException
+            public void runMayThrow() throws Exception
             {
                 SSTableReader sstable = writeSortedContents(context);
                 cfs.replaceFlushed(Memtable.this, sstable);
@@ -367,7 +366,7 @@ public class Memtable
     /**
      * obtain an iterator of columns in this memtable in the specified order starting from a given column.
      */
-    public static IColumnIterator getSliceIterator(final DecoratedKey key, final ColumnFamily cf, SliceQueryFilter filter)
+    public static OnDiskAtomIterator getSliceIterator(final DecoratedKey key, final ColumnFamily cf, SliceQueryFilter filter)
     {
         assert cf != null;
         final Iterator<IColumn> filteredIter = filter.reversed
@@ -391,14 +390,14 @@ public class Memtable
                 return filteredIter.hasNext();
             }
 
-            public IColumn next()
+            public OnDiskAtom next()
             {
                 return filteredIter.next();
             }
         };
     }
 
-    public static IColumnIterator getNamesIterator(final DecoratedKey key, final ColumnFamily cf, final NamesQueryFilter filter)
+    public static OnDiskAtomIterator getNamesIterator(final DecoratedKey key, final ColumnFamily cf, final NamesQueryFilter filter)
     {
         assert cf != null;
         final boolean isStandard = !cf.isSuper();
@@ -417,7 +416,7 @@ public class Memtable
                 return key;
             }
 
-            protected IColumn computeNext()
+            protected OnDiskAtom computeNext()
             {
                 while (iter.hasNext())
                 {

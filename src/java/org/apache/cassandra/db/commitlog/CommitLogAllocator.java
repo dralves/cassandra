@@ -23,6 +23,7 @@ import java.io.IOError;
 import java.io.IOException;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.UUID;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -100,6 +101,7 @@ public class CommitLogAllocator
                         // almost always a segment available when it's needed.
                         if (availableSegments.isEmpty() && (activeSegments.isEmpty() || createReserveSegments))
                         {
+                            logger.debug("No segments in reserve; creating a fresh one");
                             createFreshSegment();
                         }
                     }
@@ -155,6 +157,8 @@ public class CommitLogAllocator
             discardSegment(segment, true);
             return;
         }
+
+        logger.debug("Recycling {}", segment);
         queue.add(new Runnable()
         {
             public void run()
@@ -176,8 +180,10 @@ public class CommitLogAllocator
         // check against SEGMENT_SIZE avoids recycling odd-sized or empty segments from old C* versions and unit tests
         if (isCapExceeded() || file.length() != DatabaseDescriptor.getCommitLogSegmentSize())
         {
+            // (don't decrease managed size, since this was never a "live" segment)
             try
             {
+                logger.debug("(Unopened) segment {} is no longer needed and will be deleted now", file);
                 FileUtils.deleteWithConfirm(file);
             }
             catch (IOException e)
@@ -187,6 +193,9 @@ public class CommitLogAllocator
             return;
         }
 
+        logger.debug("Recycling {}", file);
+        // this wasn't previously a live segment, so add it to the managed size when we make it live
+        size.addAndGet(DatabaseDescriptor.getCommitLogSegmentSize());
         queue.add(new Runnable()
         {
             public void run()
@@ -204,6 +213,7 @@ public class CommitLogAllocator
      */
     private void discardSegment(final CommitLogSegment segment, final boolean deleteFile)
     {
+        logger.debug("Segment {} is no longer active and will be deleted {}", segment, deleteFile ? "now" : "by the archive script");
         size.addAndGet(-DatabaseDescriptor.getCommitLogSegmentSize());
 
         queue.add(new Runnable()
@@ -268,7 +278,9 @@ public class CommitLogAllocator
      */
     private boolean isCapExceeded()
     {
-        return size.get() > DatabaseDescriptor.getTotalCommitlogSpaceInMB() * 1024 * 1024;
+        long currentSize = size.get();
+        logger.debug("Total active commitlog segment space used is {}", currentSize);
+        return currentSize > DatabaseDescriptor.getTotalCommitlogSpaceInMB() * 1024 * 1024;
     }
 
     /**
@@ -289,7 +301,7 @@ public class CommitLogAllocator
 
         if (oldestSegment != null)
         {
-            for (Integer dirtyCFId : oldestSegment.getDirtyCFIDs())
+            for (UUID dirtyCFId : oldestSegment.getDirtyCFIDs())
             {
                 String keypace = Schema.instance.getCF(dirtyCFId).left;
                 final ColumnFamilyStore cfs = Table.open(keypace).getColumnFamilyStore(dirtyCFId);

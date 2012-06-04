@@ -28,6 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.RowPosition;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
@@ -184,6 +185,14 @@ public class LeveledManifest
         for (SSTableReader ssTableReader : added)
             add(ssTableReader, newLevel);
 
+        DecoratedKey last = null;
+        Collections.sort(generations[newLevel], SSTable.sstableComparator);
+        for (SSTableReader sstable : generations[newLevel])
+        {
+            assert last == null || sstable.first.compareTo(last) > 0;
+            last = sstable.last;
+        }
+
         serialize();
     }
 
@@ -221,7 +230,7 @@ public class LeveledManifest
     private long maxBytesForLevel(int level)
     {
         if (level == 0)
-            return 4 * maxSSTableSizeInMB * 1024 * 1024;
+            return 4L * maxSSTableSizeInMB * 1024 * 1024;
         double bytes = Math.pow(10, level) * maxSSTableSizeInMB * 1024 * 1024;
         if (bytes > Long.MAX_VALUE)
             throw new RuntimeException("At most " + Long.MAX_VALUE + " bytes may be in a compaction level; your maxSSTableSize must be absurdly high to compute " + bytes);
@@ -299,7 +308,6 @@ public class LeveledManifest
 
     public int getLevelSize(int i)
     {
-
         return generations.length > i ? generations[i].size() : 0;
     }
 
@@ -318,7 +326,7 @@ public class LeveledManifest
         }
     }
 
-    private int levelOf(SSTableReader sstable)
+    int levelOf(SSTableReader sstable)
     {
         Integer level = sstableGenerations.get(sstable);
         if (level == null)
@@ -459,16 +467,20 @@ public class LeveledManifest
         return generations[i];
     }
 
-    public int getEstimatedTasks()
+    public synchronized int getEstimatedTasks()
     {
         long tasks = 0;
+        long[] estimated = new long[generations.length];
+
         for (int i = generations.length - 1; i >= 0; i--)
         {
             List<SSTableReader> sstables = generations[i];
-            long n = Math.max(0L, SSTableReader.getTotalBytes(sstables) - maxBytesForLevel(i)) / (maxSSTableSizeInMB * 1024 * 1024);
-            logger.debug("Estimating " + n + " compaction tasks in level " + i);
-            tasks += n;
+            estimated[i] = Math.max(0L, SSTableReader.getTotalBytes(sstables) - maxBytesForLevel(i)) / (maxSSTableSizeInMB * 1024L * 1024);
+            tasks += estimated[i];
         }
+
+        logger.debug("Estimating {} compactions to do for {}.{}",
+                     new Object[] {Arrays.asList(estimated), cfs.table.name, cfs.columnFamily});
         return Ints.checkedCast(tasks);
     }
 }

@@ -23,7 +23,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 import org.apache.cassandra.io.IVersionedSerializer;
-import org.apache.cassandra.net.Message;
+import org.apache.cassandra.net.MessageOut;
+import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 
@@ -35,17 +36,11 @@ import org.apache.cassandra.utils.FBUtilities;
  */
 public class WriteResponse
 {
-    private static final WriteResponseSerializer serializer = new WriteResponseSerializer();
+    public static final WriteResponseSerializer serializer = new WriteResponseSerializer();
 
-    public static WriteResponseSerializer serializer()
+    public MessageOut<WriteResponse> createMessage()
     {
-        return serializer;
-    }
-
-    public static Message makeWriteResponseMessage(Message original, WriteResponse respose) throws IOException
-    {
-        byte[] bytes = FBUtilities.serialize(respose, WriteResponse.serializer(), original.getVersion());
-        return original.getReply(FBUtilities.getBroadcastAddress(), bytes, original.getVersion());
+        return new MessageOut<WriteResponse>(MessagingService.Verb.REQUEST_RESPONSE, this, serializer);
     }
 
     private final String table;
@@ -93,9 +88,11 @@ public class WriteResponse
 
         public long serializedSize(WriteResponse response, int version)
         {
-            int size = DBConstants.SHORT_SIZE + FBUtilities.encodedUTF8Length(response.table());
-            size += DBConstants.SHORT_SIZE + response.key().remaining();
-            size += DBConstants.BOOL_SIZE;
+            TypeSizes sizes = TypeSizes.NATIVE;
+            int keySize = response.key().remaining();
+            int size = sizes.sizeof(response.table());
+            size += sizes.sizeof((short) keySize) + keySize;
+            size += sizes.sizeof(response.isSuccess());
             return size;
         }
     }

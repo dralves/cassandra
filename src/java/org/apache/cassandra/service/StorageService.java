@@ -56,10 +56,7 @@ import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.DynamicEndpointSnitch;
 import org.apache.cassandra.locator.IEndpointSnitch;
 import org.apache.cassandra.locator.TokenMetadata;
-import org.apache.cassandra.net.IAsyncResult;
-import org.apache.cassandra.net.Message;
-import org.apache.cassandra.net.MessagingService;
-import org.apache.cassandra.net.ResponseVerbHandler;
+import org.apache.cassandra.net.*;
 import org.apache.cassandra.service.AntiEntropyService.TreeRequestVerbHandler;
 import org.apache.cassandra.streaming.*;
 import org.apache.cassandra.thrift.*;
@@ -79,81 +76,6 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
     private static final Logger logger = LoggerFactory.getLogger(StorageService.class);
 
     public static final int RING_DELAY = getRingDelay(); // delay after which we assume ring has stablized
-
-    /* All verb handler identifiers */
-    public enum Verb
-    {
-        MUTATION,
-        BINARY, // Deprecated
-        READ_REPAIR,
-        READ,
-        REQUEST_RESPONSE, // client-initiated reads and writes
-        STREAM_INITIATE, // Deprecated
-        STREAM_INITIATE_DONE, // Deprecated
-        STREAM_REPLY,
-        STREAM_REQUEST,
-        RANGE_SLICE,
-        BOOTSTRAP_TOKEN,
-        TREE_REQUEST,
-        TREE_RESPONSE,
-        JOIN, // Deprecated
-        GOSSIP_DIGEST_SYN,
-        GOSSIP_DIGEST_ACK,
-        GOSSIP_DIGEST_ACK2,
-        DEFINITIONS_ANNOUNCE, // Deprecated
-        DEFINITIONS_UPDATE,
-        TRUNCATE,
-        SCHEMA_CHECK,
-        INDEX_SCAN, // Deprecated
-        REPLICATION_FINISHED,
-        INTERNAL_RESPONSE, // responses to internal calls
-        COUNTER_MUTATION,
-        STREAMING_REPAIR_REQUEST,
-        STREAMING_REPAIR_RESPONSE,
-        SNAPSHOT, // Similar to nt snapshot
-        MIGRATION_REQUEST,
-        GOSSIP_SHUTDOWN,
-        // use as padding for backwards compatability where a previous version needs to validate a verb from the future.
-        UNUSED_1,
-        UNUSED_2,
-        UNUSED_3,
-        ;
-        // remember to add new verbs at the end, since we serialize by ordinal
-    }
-    public static final Verb[] VERBS = Verb.values();
-
-    public static final EnumMap<StorageService.Verb, Stage> verbStages = new EnumMap<StorageService.Verb, Stage>(StorageService.Verb.class)
-    {{
-        put(Verb.MUTATION, Stage.MUTATION);
-        put(Verb.BINARY, Stage.MUTATION);
-        put(Verb.READ_REPAIR, Stage.MUTATION);
-        put(Verb.TRUNCATE, Stage.MUTATION);
-        put(Verb.READ, Stage.READ);
-        put(Verb.REQUEST_RESPONSE, Stage.REQUEST_RESPONSE);
-        put(Verb.STREAM_REPLY, Stage.MISC); // TODO does this really belong on misc? I've just copied old behavior here
-        put(Verb.STREAM_REQUEST, Stage.STREAM);
-        put(Verb.RANGE_SLICE, Stage.READ);
-        put(Verb.BOOTSTRAP_TOKEN, Stage.MISC);
-        put(Verb.TREE_REQUEST, Stage.ANTI_ENTROPY);
-        put(Verb.TREE_RESPONSE, Stage.ANTI_ENTROPY);
-        put(Verb.STREAMING_REPAIR_REQUEST, Stage.ANTI_ENTROPY);
-        put(Verb.STREAMING_REPAIR_RESPONSE, Stage.ANTI_ENTROPY);
-        put(Verb.GOSSIP_DIGEST_ACK, Stage.GOSSIP);
-        put(Verb.GOSSIP_DIGEST_ACK2, Stage.GOSSIP);
-        put(Verb.GOSSIP_DIGEST_SYN, Stage.GOSSIP);
-        put(Verb.GOSSIP_SHUTDOWN, Stage.GOSSIP);
-        put(Verb.DEFINITIONS_UPDATE, Stage.MIGRATION);
-        put(Verb.SCHEMA_CHECK, Stage.MIGRATION);
-        put(Verb.MIGRATION_REQUEST, Stage.MIGRATION);
-        put(Verb.INDEX_SCAN, Stage.READ);
-        put(Verb.REPLICATION_FINISHED, Stage.MISC);
-        put(Verb.INTERNAL_RESPONSE, Stage.INTERNAL_RESPONSE);
-        put(Verb.COUNTER_MUTATION, Stage.MUTATION);
-        put(Verb.SNAPSHOT, Stage.MISC);
-        put(Verb.UNUSED_1, Stage.INTERNAL_RESPONSE);
-        put(Verb.UNUSED_2, Stage.INTERNAL_RESPONSE);
-        put(Verb.UNUSED_3, Stage.INTERNAL_RESPONSE);
-    }};
 
     private static int getRingDelay()
     {
@@ -252,7 +174,8 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
             logger.debug("Setting token to {}", token);
         SystemTable.updateToken(token);
         tokenMetadata.updateNormalToken(token, FBUtilities.getBroadcastAddress());
-        Gossiper.instance.addLocalApplicationState(ApplicationState.STATUS, valueFactory.normal(getLocalToken()));
+        Gossiper.instance.addLocalApplicationState(ApplicationState.STATUS,
+                                                   valueFactory.normal(getLocalToken(), SystemTable.getLocalHostId()));
         setMode(Mode.NORMAL, false);
     }
 
@@ -269,36 +192,36 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         }
 
         /* register the verb handlers */
-        MessagingService.instance().registerVerbHandlers(Verb.MUTATION, new RowMutationVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.READ_REPAIR, new ReadRepairVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.READ, new ReadVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.RANGE_SLICE, new RangeSliceVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.INDEX_SCAN, new IndexScanVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.COUNTER_MUTATION, new CounterMutationVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.TRUNCATE, new TruncateVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.MUTATION, new RowMutationVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.READ_REPAIR, new ReadRepairVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.READ, new ReadVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.RANGE_SLICE, new RangeSliceVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.INDEX_SCAN, new IndexScanVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.COUNTER_MUTATION, new CounterMutationVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.TRUNCATE, new TruncateVerbHandler());
 
         // see BootStrapper for a summary of how the bootstrap verbs interact
-        MessagingService.instance().registerVerbHandlers(Verb.BOOTSTRAP_TOKEN, new BootStrapper.BootstrapTokenVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.STREAM_REQUEST, new StreamRequestVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.STREAM_REPLY, new StreamReplyVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.REPLICATION_FINISHED, new ReplicationFinishedVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.REQUEST_RESPONSE, new ResponseVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.INTERNAL_RESPONSE, new ResponseVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.TREE_REQUEST, new TreeRequestVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.TREE_RESPONSE, new AntiEntropyService.TreeResponseVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.STREAMING_REPAIR_REQUEST, new StreamingRepairTask.StreamingRepairRequest());
-        MessagingService.instance().registerVerbHandlers(Verb.STREAMING_REPAIR_RESPONSE, new StreamingRepairTask.StreamingRepairResponse());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.BOOTSTRAP_TOKEN, new BootStrapper.BootstrapTokenVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.STREAM_REQUEST, new StreamRequestVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.STREAM_REPLY, new StreamReplyVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.REPLICATION_FINISHED, new ReplicationFinishedVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.REQUEST_RESPONSE, new ResponseVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.INTERNAL_RESPONSE, new ResponseVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.TREE_REQUEST, new TreeRequestVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.TREE_RESPONSE, new AntiEntropyService.TreeResponseVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.STREAMING_REPAIR_REQUEST, new StreamingRepairTask.StreamingRepairRequest());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.STREAMING_REPAIR_RESPONSE, new StreamingRepairTask.StreamingRepairResponse());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.GOSSIP_SHUTDOWN, new GossipShutdownVerbHandler());
 
-        MessagingService.instance().registerVerbHandlers(Verb.GOSSIP_DIGEST_SYN, new GossipDigestSynVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.GOSSIP_DIGEST_ACK, new GossipDigestAckVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.GOSSIP_DIGEST_ACK2, new GossipDigestAck2VerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.GOSSIP_SHUTDOWN, new GossipShutdownVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.GOSSIP_DIGEST_SYN, new GossipDigestSynVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.GOSSIP_DIGEST_ACK, new GossipDigestAckVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.GOSSIP_DIGEST_ACK2, new GossipDigestAck2VerbHandler());
 
-        MessagingService.instance().registerVerbHandlers(Verb.DEFINITIONS_UPDATE, new DefinitionsUpdateVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.SCHEMA_CHECK, new SchemaCheckVerbHandler());
-        MessagingService.instance().registerVerbHandlers(Verb.MIGRATION_REQUEST, new MigrationRequestVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.DEFINITIONS_UPDATE, new DefinitionsUpdateVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.SCHEMA_CHECK, new SchemaCheckVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.MIGRATION_REQUEST, new MigrationRequestVerbHandler());
 
-        MessagingService.instance().registerVerbHandlers(Verb.SNAPSHOT, new SnapshotVerbHandler());
+        MessagingService.instance().registerVerbHandlers(MessagingService.Verb.SNAPSHOT, new SnapshotVerbHandler());
 
         // spin up the streaming service so it is available for jmx tools.
         if (StreamingService.instance == null)
@@ -533,6 +456,8 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         logger.info("Starting up server gossip");
         joined = true;
 
+        // Seed the host ID-to-endpoint map with our own ID.
+        getTokenMetadata().updateHostId(SystemTable.getLocalHostId(), FBUtilities.getBroadcastAddress());
 
         // have to start the gossip service before we can see any info on other nodes.  this is necessary
         // for bootstrap to get the load info it needs.
@@ -759,7 +684,8 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         if (null == DatabaseDescriptor.getReplaceToken())
         {
             // if not an existing token then bootstrap
-            Gossiper.instance.addLocalApplicationState(ApplicationState.STATUS, valueFactory.bootstrapping(token));
+            Gossiper.instance.addLocalApplicationState(ApplicationState.STATUS,
+                                                       valueFactory.bootstrapping(token, SystemTable.getLocalHostId()));
             setMode(Mode.JOINING, "sleeping " + RING_DELAY + " ms for pending range setup", true);
             try
             {
@@ -972,6 +898,19 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         return mapString;
     }
 
+    public String getLocalHostId()
+    {
+        return getTokenMetadata().getHostId(FBUtilities.getBroadcastAddress()).toString();
+    }
+
+    public Map<String, String> getHostIdMap()
+    {
+        Map<String, String> mapOut = new HashMap<String, String>();
+        for (Map.Entry<InetAddress, UUID> entry : getTokenMetadata().getEndpointToHostIdMapForReading().entrySet())
+            mapOut.put(entry.getKey().getHostAddress(), entry.getValue().toString());
+        return mapOut;
+    }
+
     /**
      * Construct the range to endpoint mapping based on the true view
      * of the world.
@@ -1074,7 +1013,19 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
     private void handleStateBootstrap(InetAddress endpoint, String[] pieces)
     {
         assert pieces.length >= 2;
-        Token token = getPartitioner().getTokenFactory().fromString(pieces[1]);
+
+        // Parse versioned values according to end-point version:
+        //   versions  < 1.2 .....: STATUS,TOKEN
+        //   versions >= 1.2 .....: STATUS,HOST_ID,TOKEN,TOKEN,...
+        int tokenPos;
+        if (Gossiper.instance.getVersion(endpoint) >= MessagingService.VERSION_12)
+        {
+            assert pieces.length >= 3;
+            tokenPos = 2;
+        }
+            else tokenPos = 1;
+
+        Token token = getPartitioner().getTokenFactory().fromString(pieces[tokenPos]);
 
         if (logger.isDebugEnabled())
             logger.debug("Node " + endpoint + " state bootstrapping, token " + token);
@@ -1096,6 +1047,9 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
 
         tokenMetadata.addBootstrapToken(token, endpoint);
         calculatePendingRanges();
+
+        if (Gossiper.instance.getVersion(endpoint) >= MessagingService.VERSION_12)
+            tokenMetadata.updateHostId(UUID.fromString(pieces[1]), endpoint);
     }
 
     /**
@@ -1108,13 +1062,30 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
     private void handleStateNormal(InetAddress endpoint, String[] pieces)
     {
         assert pieces.length >= 2;
-        Token token = getPartitioner().getTokenFactory().fromString(pieces[1]);
+
+        // Parse versioned values according to end-point version:
+        //   versions  < 1.2 .....: STATUS,TOKEN
+        //   versions >= 1.2 .....: STATUS,HOST_ID,TOKEN,TOKEN,...
+        int tokensPos;
+        if (Gossiper.instance.getVersion(endpoint) >= MessagingService.VERSION_12)
+        {
+            assert pieces.length >= 3;
+            tokensPos = 2;
+        }
+        else
+            tokensPos = 1;
+
+        Token token = getPartitioner().getTokenFactory().fromString(pieces[tokensPos]);
 
         if (logger.isDebugEnabled())
             logger.debug("Node " + endpoint + " state normal, token " + token);
 
         if (tokenMetadata.isMember(endpoint))
             logger.info("Node " + endpoint + " state jump to normal");
+
+        // Order Matters, TM.updateHostID() should be called before TM.updateNormalToken(), (see CASSANDRA-4300).
+        if (Gossiper.instance.getVersion(endpoint) >= MessagingService.VERSION_12)
+            tokenMetadata.updateHostId(UUID.fromString(pieces[1]), endpoint);
 
         // we don't want to update if this node is responsible for the token and it has a later startup time than endpoint.
         InetAddress currentOwner = tokenMetadata.getEndpoint(token);
@@ -1266,9 +1237,9 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
 
                 // find the endpoint coordinating this removal that we need to notify when we're done
                 String[] coordinator = Gossiper.instance.getEndpointStateForEndpoint(endpoint).getApplicationState(ApplicationState.REMOVAL_COORDINATOR).value.split(VersionedValue.DELIMITER_STR, -1);
-                Token coordtoken = getPartitioner().getTokenFactory().fromString(coordinator[1]);
+                UUID hostId = UUID.fromString(coordinator[1]);
                 // grab any data we are now responsible for and notify responsible node
-                restoreReplicaCount(endpoint, tokenMetadata.getEndpoint(coordtoken));
+                restoreReplicaCount(endpoint, tokenMetadata.getEndpointForHostId(hostId));
             }
         } // not a member, nothing to do
     }
@@ -1457,13 +1428,12 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
     /**
      * Sends a notification to a node indicating we have finished replicating data.
      *
-     * @param local the local address
      * @param remote node to send notification to
      */
-    private void sendReplicationNotification(InetAddress local, InetAddress remote)
+    private void sendReplicationNotification(InetAddress remote)
     {
         // notify the remote token
-        Message msg = new Message(local, StorageService.Verb.REPLICATION_FINISHED, new byte[0], Gossiper.instance.getVersion(remote));
+        MessageOut msg = new MessageOut(MessagingService.Verb.REPLICATION_FINISHED);
         IFailureDetector failureDetector = FailureDetector.instance;
         if (logger.isDebugEnabled())
             logger.debug("Notifying " + remote.toString() + " of replication completion\n");
@@ -1530,7 +1500,7 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
                         {
                             fetchSources.remove(source, table);
                             if (fetchSources.isEmpty())
-                                sendReplicationNotification(myAddress, notifyEndpoint);
+                                sendReplicationNotification(notifyEndpoint);
                         }
                     }
 
@@ -2297,10 +2267,11 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         calculatePendingRanges();
 
         Gossiper.instance.addLocalApplicationState(ApplicationState.STATUS, valueFactory.left(getLocalToken(),Gossiper.computeExpireTime()));
-        logger.info("Announcing that I have left the ring for " + RING_DELAY + "ms");
+        int delay = Math.max(RING_DELAY, Gossiper.intervalInMillis * 2);
+        logger.info("Announcing that I have left the ring for " + delay + "ms");
         try
         {
-            Thread.sleep(RING_DELAY);
+            Thread.sleep(delay);
         }
         catch (InterruptedException e)
         {
@@ -2373,10 +2344,8 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
                 throw new UnsupportedOperationException("data is currently moving to this node; unable to leave the ring");
         }
 
-        // setting 'moving' application state
         Gossiper.instance.addLocalApplicationState(ApplicationState.STATUS, valueFactory.moving(newToken));
-
-        logger.info(String.format("Moving %s from %s to %s.", localAddress, getLocalToken(), newToken));
+        setMode(Mode.MOVING, String.format("Moving %s from %s to %s.", localAddress, getLocalToken(), newToken), true);
 
         IEndpointSnitch snitch = DatabaseDescriptor.getEndpointSnitch();
 
@@ -2445,8 +2414,7 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
 
         if (!rangesToStreamByTable.isEmpty() || !rangesToFetch.isEmpty())
         {
-            logger.info("Sleeping {} ms before start streaming/fetching ranges.", RING_DELAY);
-
+            setMode(Mode.MOVING, String.format("Sleeping %s ms before start streaming/fetching ranges", RING_DELAY), true);
             try
             {
                 Thread.sleep(RING_DELAY);
@@ -2457,7 +2425,6 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
             }
 
             setMode(Mode.MOVING, "fetching new ranges and streaming old ranges", true);
-
             if (logger.isDebugEnabled())
                 logger.debug("[Move->STREAMING] Work Map: " + rangesToStreamByTable);
 
@@ -2510,8 +2477,9 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
             logger.warn("Removal not confirmed for for " + StringUtils.join(this.replicatingNodes, ","));
             for (InetAddress endpoint : tokenMetadata.getLeavingEndpoints())
             {
+                UUID hostId = tokenMetadata.getHostId(endpoint);
+                Gossiper.instance.advertiseTokenRemoved(endpoint, hostId);
                 Token token = tokenMetadata.getToken(endpoint);
-                Gossiper.instance.advertiseTokenRemoved(endpoint, token);
                 excise(token, endpoint);
             }
             replicatingNodes.clear();
@@ -2530,23 +2498,25 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
      * restore the replica count, finally forceRemoveCompleteion should be
      * called to forcibly remove the node without regard to replica count.
      *
-     * @param tokenString token for the node
+     * @param hostIdString token for the node
      */
-    public void removeToken(String tokenString)
+    public void removeNode(String hostIdString)
     {
         InetAddress myAddress = FBUtilities.getBroadcastAddress();
-        Token localToken = tokenMetadata.getToken(myAddress);
-        Token token = getPartitioner().getTokenFactory().fromString(tokenString);
-        InetAddress endpoint = tokenMetadata.getEndpoint(token);
+        UUID localHostId = tokenMetadata.getHostId(myAddress);
+        UUID hostId = UUID.fromString(hostIdString);
+        InetAddress endpoint = tokenMetadata.getEndpointForHostId(hostId);
 
         if (endpoint == null)
-            throw new UnsupportedOperationException("Token not found.");
+            throw new UnsupportedOperationException("Host ID not found.");
+
+        Token token = tokenMetadata.getToken(endpoint);
 
         if (endpoint.equals(myAddress))
-             throw new UnsupportedOperationException("Cannot remove node's own token");
+             throw new UnsupportedOperationException("Cannot remove self");
 
         if (Gossiper.instance.getLiveMembers().contains(endpoint))
-            throw new UnsupportedOperationException("Node " + endpoint + " is alive and owns this token. Use decommission command to remove it from the ring");
+            throw new UnsupportedOperationException("Node " + endpoint + " is alive and owns this ID. Use decommission command to remove it from the ring");
 
         // A leaving endpoint that is dead is already being removed.
         if (tokenMetadata.isLeaving(endpoint))
@@ -2580,7 +2550,7 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         calculatePendingRanges();
         // the gossiper will handle spoofing this node's state to REMOVING_TOKEN for us
         // we add our own token so other nodes to let us know when they're done
-        Gossiper.instance.advertiseRemoving(endpoint, token, localToken);
+        Gossiper.instance.advertiseRemoving(endpoint, hostId, localHostId);
 
         // kick off streaming commands
         restoreReplicaCount(endpoint, myAddress);
@@ -2601,7 +2571,7 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         excise(token, endpoint);
 
         // gossiper will indicate the token has left
-        Gossiper.instance.advertiseTokenRemoved(endpoint, token);
+        Gossiper.instance.advertiseTokenRemoved(endpoint, hostId);
 
         replicatingNodes.clear();
         removingNode = null;

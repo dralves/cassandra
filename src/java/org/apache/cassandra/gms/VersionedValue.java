@@ -21,10 +21,13 @@ import java.io.*;
 import java.net.InetAddress;
 import java.util.UUID;
 
+import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.IVersionedSerializer;
+import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.commons.lang.StringUtils;
 
 
 /**
@@ -88,6 +91,11 @@ public class VersionedValue implements Comparable<VersionedValue>
         return "Value(" + value + "," + version + ")";
     }
 
+    private static String versionString(String...args)
+    {
+        return StringUtils.join(args, VersionedValue.DELIMITER);
+    }
+
     public static class VersionedValueFactory
     {
         final IPartitioner partitioner;
@@ -97,14 +105,18 @@ public class VersionedValue implements Comparable<VersionedValue>
             this.partitioner = partitioner;
         }
 
-        public VersionedValue bootstrapping(Token token)
+        public VersionedValue bootstrapping(Token token, UUID hostId)
         {
-            return new VersionedValue(VersionedValue.STATUS_BOOTSTRAPPING + VersionedValue.DELIMITER + partitioner.getTokenFactory().toString(token));
+            return new VersionedValue(versionString(VersionedValue.STATUS_BOOTSTRAPPING,
+                                                    hostId.toString(),
+                                                    partitioner.getTokenFactory().toString(token)));
         }
 
-        public VersionedValue normal(Token token)
+        public VersionedValue normal(Token token, UUID hostId)
         {
-            return new VersionedValue(VersionedValue.STATUS_NORMAL + VersionedValue.DELIMITER + partitioner.getTokenFactory().toString(token));
+            return new VersionedValue(versionString(VersionedValue.STATUS_NORMAL,
+                                                    hostId.toString(),
+                                                    partitioner.getTokenFactory().toString(token)));
         }
 
         public VersionedValue load(double load)
@@ -133,20 +145,19 @@ public class VersionedValue implements Comparable<VersionedValue>
             return new VersionedValue(VersionedValue.STATUS_MOVING + VersionedValue.DELIMITER + partitioner.getTokenFactory().toString(token));
         }
 
-        public VersionedValue removingNonlocal(Token token)
+        public VersionedValue removingNonlocal(UUID hostId)
         {
-            return new VersionedValue(VersionedValue.REMOVING_TOKEN + VersionedValue.DELIMITER + partitioner.getTokenFactory().toString(token));
+            return new VersionedValue(versionString(VersionedValue.REMOVING_TOKEN, hostId.toString()));
         }
 
-        public VersionedValue removedNonlocal(Token token, long expireTime)
+        public VersionedValue removedNonlocal(UUID hostId, long expireTime)
         {
-            return new VersionedValue(VersionedValue.REMOVED_TOKEN + VersionedValue.DELIMITER
-                    + partitioner.getTokenFactory().toString(token) + VersionedValue.DELIMITER + expireTime);
+            return new VersionedValue(versionString(VersionedValue.REMOVED_TOKEN, hostId.toString(), Long.toString(expireTime)));
         }
 
-        public VersionedValue removalCoordinator(Token token)
+        public VersionedValue removalCoordinator(UUID hostId)
         {
-            return new VersionedValue(VersionedValue.REMOVAL_COORDINATOR + VersionedValue.DELIMITER + partitioner.getTokenFactory().toString(token));
+            return new VersionedValue(versionString(VersionedValue.REMOVAL_COORDINATOR, hostId.toString()));
         }
 
         public VersionedValue hibernate(boolean value)
@@ -189,8 +200,30 @@ public class VersionedValue implements Comparable<VersionedValue>
     {
         public void serialize(VersionedValue value, DataOutput dos, int version) throws IOException
         {
-            dos.writeUTF(value.value);
+            dos.writeUTF(outValue(value, version));
             dos.writeInt(value.version);
+        }
+
+        private String outValue(VersionedValue value, int version)
+        {
+            String outValue = value.value;
+
+            if (version < MessagingService.VERSION_12)
+            {
+                String[] pieces = value.value.split(DELIMITER_STR, -1);
+                String type = pieces[0];
+
+                if ((type.equals(STATUS_NORMAL)) || type.equals(STATUS_BOOTSTRAPPING))
+                {
+                    assert pieces.length >= 3;
+                    outValue = versionString(pieces[0], pieces[2]);
+                }
+
+                if ((type.equals(REMOVAL_COORDINATOR)) || (type.equals(REMOVING_TOKEN)) || (type.equals(REMOVED_TOKEN)))
+                    throw new RuntimeException(String.format("Unable to serialize %s(%s...) for nodes older than 1.2",
+                                                             VersionedValue.class.getName(), type));
+            }
+            return outValue;
         }
 
         public VersionedValue deserialize(DataInput dis, int version) throws IOException
@@ -202,7 +235,7 @@ public class VersionedValue implements Comparable<VersionedValue>
 
         public long serializedSize(VersionedValue value, int version)
         {
-            throw new UnsupportedOperationException();
+            return TypeSizes.NATIVE.sizeof(outValue(value, version)) + TypeSizes.NATIVE.sizeof(value.version);
         }
     }
 }

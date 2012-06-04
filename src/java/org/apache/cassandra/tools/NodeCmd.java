@@ -20,6 +20,7 @@ package org.apache.cassandra.tools;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.lang.management.MemoryUsage;
+import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.text.DecimalFormat;
@@ -93,7 +94,9 @@ public class NodeCmd
         FLUSH,
         GETCOMPACTIONTHRESHOLD,
         GETENDPOINTS,
+        GETSSTABLES,
         GOSSIPINFO,
+        IDS,
         INFO,
         INVALIDATEKEYCACHE,
         INVALIDATEROWCACHE,
@@ -104,6 +107,7 @@ public class NodeCmd
         REBUILD,
         REFRESH,
         REMOVETOKEN,
+        REMOVENODE,
         REPAIR,
         RING,
         SCRUB,
@@ -133,15 +137,16 @@ public class NodeCmd
         StringBuilder header = new StringBuilder();
         header.append("\nAvailable commands:\n");
         // No args
-        addCmdHelp(header, "ring", "Print informations on the token ring");
+        addCmdHelp(header, "ring", "Print information about the token ring");
         addCmdHelp(header, "join", "Join the ring");
-        addCmdHelp(header, "info", "Print node informations (uptime, load, ...)");
+        addCmdHelp(header, "info", "Print node information (uptime, load, ...)");
         addCmdHelp(header, "cfstats", "Print statistics on column families");
+        addCmdHelp(header, "ids", "Print list of unique host IDs");
         addCmdHelp(header, "version", "Print cassandra version");
         addCmdHelp(header, "tpstats", "Print usage statistics of thread pools");
         addCmdHelp(header, "proxyhistograms", "Print statistic histograms for network operations");
         addCmdHelp(header, "drain", "Drain the node (stop accepting writes and flush all column families)");
-        addCmdHelp(header, "decommission", "Decommission the node");
+        addCmdHelp(header, "decommission", "Decommission the *node I am connecting to*");
         addCmdHelp(header, "compactionstats", "Print statistics on compactions");
         addCmdHelp(header, "disablegossip", "Disable gossip (effectively marking the node dead)");
         addCmdHelp(header, "enablegossip", "Reenable gossip");
@@ -156,7 +161,7 @@ public class NodeCmd
         // One arg
         addCmdHelp(header, "netstats [host]", "Print network information on provided host (connecting node by default)");
         addCmdHelp(header, "move <new token>", "Move node on the token ring to a new token");
-        addCmdHelp(header, "removetoken status|force|<token>", "Show status of current token removal, force completion of pending removal or remove providen token");
+        addCmdHelp(header, "removenode status|force|<ID>", "Show status of current node removal, force completion of pending removal or remove provided ID");
         addCmdHelp(header, "setcompactionthroughput <value_in_mb>", "Set the MB/s throughput cap for compaction in the system, or 0 to disable throttling.");
         addCmdHelp(header, "setstreamthroughput <value_in_mb>", "Set the MB/s throughput cap for streaming in the system, or 0 to disable throttling.");
         addCmdHelp(header, "describering [keyspace]", "Shows the token ranges info of a given keyspace.");
@@ -180,6 +185,7 @@ public class NodeCmd
 
         // Three args
         addCmdHelp(header, "getendpoints <keyspace> <cf> <key>", "Print the end points that owns the key");
+        addCmdHelp(header, "getsstables <keyspace> <cf> <key>", "Print the sstable filenames that own the key");
 
         // Four args
         addCmdHelp(header, "setcachecapacity <keyspace> <cfname> <keycachecapacity> <rowcachecapacity>", "Set the key and row cache capacities of a given column family");
@@ -224,12 +230,12 @@ public class NodeCmd
         try
         {
             ownerships = probe.effectiveOwnership(keyspace);
-            outs.printf(format, "Address", "DC", "Rack", "Status", "State", "Load", "Effective-Owership", "Token");
+            outs.printf(format, "Address", "DC", "Rack", "Status", "State", "Load", "Effective-Ownership", "Token");
         }
         catch (ConfigurationException ex)
         {
             ownerships = probe.getOwnership();
-            outs.printf("Note: Ownership information does not include topology, please specify a keyspace. \n");
+            outs.printf("Note: Ownership information does not include topology, please specify a keyspace. %n");
             outs.printf(format, "Address", "DC", "Rack", "Status", "State", "Load", "Owns", "Token");
         }
 
@@ -282,6 +288,20 @@ public class NodeCmd
         }
     }
 
+    /** Writes a table of host IDs to a PrintStream */
+    public void printHostIds(PrintStream outs)
+    {
+        System.out.print(String.format("%-16s %-7s %s%n", "Address", "Status", "Host ID"));
+        for (Map.Entry<String, String> entry : probe.getHostIdMap().entrySet())
+        {
+            String status;
+            if      (probe.getLiveNodes().contains(entry.getKey()))        status = "Up";
+            else if (probe.getUnreachableNodes().contains(entry.getKey())) status = "Down";
+            else                                                           status = "?";
+            System.out.print(String.format("%-16s %-7s %s%n", entry.getKey(), status, entry.getValue()));
+        }
+    }
+
     public void printThreadPoolStats(PrintStream outs)
     {
         outs.printf("%-25s%10s%10s%15s%10s%18s%n", "Pool Name", "Active", "Pending", "Completed", "Blocked", "All time blocked");
@@ -315,7 +335,9 @@ public class NodeCmd
     {
         boolean gossipInitialized = probe.isInitialized();
         outs.printf("%-17s: %s%n", "Token", probe.getToken());
+        outs.printf("%-17s: %s%n", "ID", probe.getLocalHostId());
         outs.printf("%-17s: %s%n", "Gossip active", gossipInitialized);
+        outs.printf("%-17s: %s%n", "Thrift active", probe.isThriftServerRunning());
         outs.printf("%-17s: %s%n", "Load", probe.getLoadString());
         if (gossipInitialized)
             outs.printf("%-17s: %s%n", "Generation No", probe.getCurrentGenerationNumber());
@@ -452,16 +474,16 @@ public class NodeCmd
         CompactionManagerMBean cm = probe.getCompactionManagerProxy();
         outs.println("pending tasks: " + cm.getPendingTasks());
         if (cm.getCompactions().size() > 0)
-            outs.printf("%25s%16s%16s%16s%16s%10s%n", "compaction type", "keyspace", "column family", "bytes compacted", "bytes total", "progress");
+            outs.printf("%25s%16s%16s%16s%16s%10s%10s%n", "compaction type", "keyspace", "column family", "completed", "total", "unit", "progress");
         long remainingBytes = 0;
         for (Map<String, String> c : cm.getCompactions())
         {
-            String percentComplete = new Long(c.get("totalBytes")) == 0
+            String percentComplete = new Long(c.get("total")) == 0
                                    ? "n/a"
-                                   : new DecimalFormat("0.00").format((double) new Long(c.get("bytesComplete")) / new Long(c.get("totalBytes")) * 100) + "%";
-            outs.printf("%25s%16s%16s%16s%16s%10s%n", c.get("taskType"), c.get("keyspace"), c.get("columnfamily"), c.get("bytesComplete"), c.get("totalBytes"), percentComplete);
+                                   : new DecimalFormat("0.00").format((double) new Long(c.get("completed")) / new Long(c.get("total")) * 100) + "%";
+            outs.printf("%25s%16s%16s%16s%16s%10s%10s%n", c.get("taskType"), c.get("keyspace"), c.get("columnfamily"), c.get("completed"), c.get("total"), c.get("unit"), percentComplete);
             if (c.get("taskType").equals(OperationType.COMPACTION.toString()))
-                remainingBytes += (new Long(c.get("totalBytes")) - new Long(c.get("bytesComplete")));
+                remainingBytes += (new Long(c.get("total")) - new Long(c.get("completed")));
         }
         long remainingTimeInSecs = compactionThroughput == 0 || remainingBytes == 0
                         ? -1 
@@ -632,6 +654,15 @@ public class NodeCmd
         }
     }
 
+    private void printSSTables(String keyspace, String cf, String key, PrintStream output)
+    {
+        List<String> sstables = this.probe.getSSTables(keyspace, cf, key);
+        for (String sstable : sstables)
+        {
+            output.println(sstable);
+        }
+    }
+
     private void printIsThriftServerRunning(PrintStream outs)
     {
         outs.println(probe.isThriftServerRunning() ? "running" : "not running");
@@ -678,7 +709,21 @@ public class NodeCmd
         }
         catch (IOException ioe)
         {
-            err(ioe, "Error connection to remote JMX agent!");
+            Throwable inner = findInnermostThrowable(ioe);
+            if (inner instanceof ConnectException)
+            {
+                System.err.printf("Failed to connect to '%s:%d': %s%n", host, port, inner.getMessage());
+                System.exit(1);
+            }
+            else if (inner instanceof UnknownHostException)
+            {
+                System.err.printf("Cannot resolve '%s': unknown host%n", host);
+                System.exit(1);
+            }
+            else
+            {
+                err(ioe, "Error connecting to remote JMX agent!");
+            }
         }
         try
         {
@@ -710,7 +755,6 @@ public class NodeCmd
 
                 case INFO            : nodeCmd.printInfo(System.out); break;
                 case CFSTATS         : nodeCmd.printColumnFamilyStats(System.out); break;
-                case DECOMMISSION    : probe.decommission(); break;
                 case TPSTATS         : nodeCmd.printThreadPoolStats(System.out); break;
                 case VERSION         : nodeCmd.printReleaseVersion(System.out); break;
                 case COMPACTIONSTATS : nodeCmd.printCompactionStats(System.out); break;
@@ -720,6 +764,16 @@ public class NodeCmd
                 case ENABLETHRIFT    : probe.startThriftServer(); break;
                 case STATUSTHRIFT    : nodeCmd.printIsThriftServerRunning(System.out); break;
                 case RESETLOCALSCHEMA: probe.resetLocalSchema(); break;
+                case IDS             : nodeCmd.printHostIds(System.out); break;
+
+                case DECOMMISSION :
+                    if (arguments.length > 0)
+                    {
+                        System.err.println("Decommission will decommission the node you are connected to and does not take arguments!");
+                        System.exit(1);
+                    }
+                    probe.decommission();
+                    break;
 
                 case DRAIN :
                     try { probe.drain(); }
@@ -769,11 +823,12 @@ public class NodeCmd
                     probe.rebuild(arguments.length == 1 ? arguments[0] : null);
                     break;
 
+                case REMOVENODE  :
                 case REMOVETOKEN :
-                    if (arguments.length != 1) { badUse("Missing an argument for removetoken (either status, force, or a token)"); }
+                    if (arguments.length != 1) { badUse("Missing an argument for removenode (either status, force, or an ID)"); }
                     else if (arguments[0].equals("status")) { nodeCmd.printRemovalStatus(System.out); }
                     else if (arguments[0].equals("force"))  { nodeCmd.printRemovalStatus(System.out); probe.forceRemoveCompletion(); }
-                    else                                    { probe.removeToken(arguments[0]); }
+                    else                                    { probe.removeNode(arguments[0]); }
                     break;
 
                 case INVALIDATEKEYCACHE :
@@ -828,6 +883,11 @@ public class NodeCmd
                     nodeCmd.printProxyHistograms(System.out);
                     break;
 
+                case GETSSTABLES:
+                    if (arguments.length != 3) { badUse("getsstables requires ks, cf and key args"); }
+                    nodeCmd.printSSTables(arguments[0], arguments[1], arguments[2], System.out);
+                    break;
+
                 case REFRESH:
                     if (arguments.length != 2) { badUse("load_new_sstables requires ks and cf args"); }
                     probe.loadNewSSTables(arguments[0], arguments[1]);
@@ -877,6 +937,12 @@ public class NodeCmd
             }
         }
         System.exit(0);
+    }
+
+    private static Throwable findInnermostThrowable(Throwable ex)
+    {
+        Throwable inner = ex.getCause();
+        return inner == null ? ex : findInnermostThrowable(inner);
     }
 
     private void printDescribeRing(String keyspaceName, PrintStream out)

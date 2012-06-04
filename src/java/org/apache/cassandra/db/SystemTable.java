@@ -44,6 +44,7 @@ import org.apache.cassandra.thrift.Constants;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.NodeId;
+import org.apache.cassandra.utils.UUIDGen;
 
 public class SystemTable
 {
@@ -52,6 +53,7 @@ public class SystemTable
     public static final String INDEX_CF = "IndexInfo";
     public static final String NODE_ID_CF = "NodeIdInfo";
     public static final String VERSION_CF = "Versions";
+    public static final String HOST_ID_CF = "HostUUID";
     // see layout description in the DefsTable class header
     public static final String SCHEMA_KEYSPACES_CF = "schema_keyspaces";
     public static final String SCHEMA_COLUMNFAMILIES_CF = "schema_columnfamilies";
@@ -67,6 +69,7 @@ public class SystemTable
     private static final ByteBuffer CLUSTERNAME = ByteBufferUtil.bytes("ClusterName");
     private static final ByteBuffer CURRENT_LOCAL_NODE_ID_KEY = ByteBufferUtil.bytes("CurrentLocal");
     private static final ByteBuffer ALL_LOCAL_NODE_ID_KEY = ByteBufferUtil.bytes("Local");
+    private static final ByteBuffer HOST_ID_KEY = ByteBufferUtil.bytes("Id");
 
     private static DecoratedKey decorate(ByteBuffer key)
     {
@@ -106,7 +109,7 @@ public class SystemTable
     /** if hints become incompatible across versions of cassandra, that logic (and associated purging) is managed here. */
     private static void purgeIncompatibleHints() throws IOException
     {
-        ByteBuffer upgradeMarker = ByteBufferUtil.bytes("Pre-1.0 hints purged");
+        ByteBuffer upgradeMarker = ByteBufferUtil.bytes("Pre-1.2 hints purged");
         Table table = Table.open(Table.SYSTEM_TABLE);
         QueryFilter filter = QueryFilter.getNamesFilter(decorate(COOKIE_KEY), new QueryPath(STATUS_CF), upgradeMarker);
         ColumnFamily cf = table.getColumnFamilyStore(STATUS_CF).getColumnFamily(filter);
@@ -423,6 +426,50 @@ public class SystemTable
         }
 
         forceBlockingFlush(INDEX_CF);
+    }
+
+    /**
+     * Read the host ID from the system table, creating (and storing) one if
+     * none exists.
+     */
+    public static UUID getLocalHostId()
+    {
+        UUID hostId = null;
+
+        // Look up the Host UUID (return it if found)
+        Table table = Table.open(Table.SYSTEM_TABLE);
+        QueryFilter filter = QueryFilter.getIdentityFilter(decorate(HOST_ID_KEY), new QueryPath(HOST_ID_CF));
+        ColumnFamily cf = table.getColumnFamilyStore(HOST_ID_CF).getColumnFamily(filter);
+
+        if (cf != null)
+        {
+            cf = ColumnFamilyStore.removeDeleted(cf, 0);
+            assert cf.getColumnCount() <= 1;
+            if (cf.getColumnCount() > 0)
+                return UUIDGen.getUUID(cf.iterator().next().name());
+        }
+
+        // ID not found, generate a new one, persist, and then return it.
+        hostId = UUID.randomUUID();
+        long now = FBUtilities.timestampMicros();
+
+        logger.warn("No host ID found, created {} (Note: This should happen exactly once per node).", hostId);
+
+        cf = ColumnFamily.create(Table.SYSTEM_TABLE, HOST_ID_CF);
+        cf.addColumn(new Column(ByteBuffer.wrap(UUIDGen.decompose(hostId)), ByteBufferUtil.bytes(now), now));
+
+        RowMutation rm = new RowMutation(Table.SYSTEM_TABLE, HOST_ID_KEY);
+        rm.add(cf);
+        try
+        {
+            rm.apply();
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+
+        return hostId;
     }
 
     /**

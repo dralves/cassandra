@@ -313,6 +313,16 @@ public class NodeProbe
         return ssProxy.getToken();
     }
 
+    public String getLocalHostId()
+    {
+        return ssProxy.getLocalHostId();
+    }
+
+    public Map<String, String> getHostIdMap()
+    {
+        return ssProxy.getHostIdMap();
+    }
+
     public String getLoadString()
     {
         return ssProxy.getLoadString();
@@ -387,9 +397,9 @@ public class NodeProbe
         ssProxy.move(newToken);
     }
 
-    public void removeToken(String token)
+    public void removeNode(String token)
     {
-        ssProxy.removeToken(token);
+        ssProxy.removeNode(token);
     }
 
     public String getRemovalStatus()
@@ -462,6 +472,12 @@ public class NodeProbe
     public List<InetAddress> getEndpoints(String keyspace, String cf, String key)
     {
         return ssProxy.getNaturalEndpoints(keyspace, cf, key);
+    }
+
+    public List<String> getSSTables(String keyspace, String cf, String key)
+    {
+        ColumnFamilyStoreMBean cfsProxy = getCfsProxy(keyspace, cf);
+        return cfsProxy.getSSTablesForKey(key);
     }
 
     public Set<InetAddress> getStreamDestinations()

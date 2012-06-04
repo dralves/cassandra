@@ -1,6 +1,4 @@
-package org.apache.cassandra.io;
 /*
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -17,9 +15,8 @@ package org.apache.cassandra.io;
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
- *
  */
-
+package org.apache.cassandra.io;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -39,6 +36,7 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.compaction.*;
 import org.apache.cassandra.db.filter.QueryPath;
+import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.IndexHelper;
 import org.apache.cassandra.io.sstable.SSTableIdentityIterator;
 import org.apache.cassandra.io.sstable.SSTableReader;
@@ -57,23 +55,24 @@ public class LazilyCompactedRowTest extends SchemaLoader
 {
     private static void assertBytes(ColumnFamilyStore cfs, int gcBefore) throws IOException
     {
+        AbstractCompactionStrategy strategy = cfs.getCompactionStrategy();
         Collection<SSTableReader> sstables = cfs.getSSTables();
 
         // compare eager and lazy compactions
         AbstractCompactionIterable eager = new CompactionIterable(OperationType.UNKNOWN,
-                                                                  sstables,
+                                                                  strategy.getScanners(sstables),
                                                                   new PreCompactingController(cfs, sstables, gcBefore, false));
         AbstractCompactionIterable lazy = new CompactionIterable(OperationType.UNKNOWN,
-                                                                 sstables,
+                                                                 strategy.getScanners(sstables),
                                                                  new LazilyCompactingController(cfs, sstables, gcBefore, false));
         assertBytes(cfs, sstables, eager, lazy);
 
         // compare eager and parallel-lazy compactions
         eager = new CompactionIterable(OperationType.UNKNOWN,
-                                       sstables,
+                                       strategy.getScanners(sstables),
                                        new PreCompactingController(cfs, sstables, gcBefore, false));
         AbstractCompactionIterable parallel = new ParallelCompactionIterable(OperationType.UNKNOWN,
-                                                                             sstables,
+                                                                             strategy.getScanners(sstables),
                                                                              new CompactionController(cfs, sstables, gcBefore, false),
                                                                              0);
         assertBytes(cfs, sstables, eager, parallel);
@@ -122,17 +121,16 @@ public class LazilyCompactedRowTest extends SchemaLoader
             // cf metadata
             ColumnFamily cf1 = ColumnFamily.create(cfs.metadata);
             ColumnFamily cf2 = ColumnFamily.create(cfs.metadata);
-            ColumnFamily.serializer().deserializeFromSSTableNoColumns(cf1, in1);
-            ColumnFamily.serializer().deserializeFromSSTableNoColumns(cf2, in2);
-            assert cf1.getLocalDeletionTime() == cf2.getLocalDeletionTime();
-            assert cf1.getMarkedForDeleteAt() == cf2.getMarkedForDeleteAt();
+            cf1.delete(DeletionInfo.serializer().deserializeFromSSTable(in1, Descriptor.Version.CURRENT));
+            cf2.delete(DeletionInfo.serializer().deserializeFromSSTable(in2, Descriptor.Version.CURRENT));
+            assert cf1.deletionInfo().equals(cf2.deletionInfo());
             // columns
             int columns = in1.readInt();
             assert columns == in2.readInt();
             for (int i = 0; i < columns; i++)
             {
-                IColumn c1 = cf1.getColumnSerializer().deserialize(in1);
-                IColumn c2 = cf2.getColumnSerializer().deserialize(in2);
+                IColumn c1 = (IColumn)cf1.getOnDiskSerializer().deserializeFromSSTable(in1, Descriptor.Version.CURRENT);
+                IColumn c2 = (IColumn)cf2.getOnDiskSerializer().deserializeFromSSTable(in2, Descriptor.Version.CURRENT);
                 assert c1.equals(c2) : c1.getString(cfs.metadata.comparator) + " != " + c2.getString(cfs.metadata.comparator);
             }
             // that should be everything
@@ -143,9 +141,10 @@ public class LazilyCompactedRowTest extends SchemaLoader
 
     private void assertDigest(ColumnFamilyStore cfs, int gcBefore) throws IOException, NoSuchAlgorithmException
     {
+        AbstractCompactionStrategy strategy = cfs.getCompactionStrategy();
         Collection<SSTableReader> sstables = cfs.getSSTables();
-        AbstractCompactionIterable ci1 = new CompactionIterable(OperationType.UNKNOWN, sstables, new PreCompactingController(cfs, sstables, gcBefore, false));
-        AbstractCompactionIterable ci2 = new CompactionIterable(OperationType.UNKNOWN, sstables, new LazilyCompactingController(cfs, sstables, gcBefore, false));
+        AbstractCompactionIterable ci1 = new CompactionIterable(OperationType.UNKNOWN, strategy.getScanners(sstables), new PreCompactingController(cfs, sstables, gcBefore, false));
+        AbstractCompactionIterable ci2 = new CompactionIterable(OperationType.UNKNOWN, strategy.getScanners(sstables), new LazilyCompactingController(cfs, sstables, gcBefore, false));
         CloseableIterator<AbstractCompactedRow> iter1 = ci1.iterator();
         CloseableIterator<AbstractCompactedRow> iter2 = ci2.iterator();
 
@@ -220,7 +219,7 @@ public class LazilyCompactedRowTest extends SchemaLoader
             rm.add(new QueryPath("Standard1", null, ByteBufferUtil.bytes(i)), ByteBufferUtil.EMPTY_BYTE_BUFFER, 0);
         rm.apply();
         DataOutputBuffer out = new DataOutputBuffer();
-        RowMutation.serializer().serialize(rm, out, MessagingService.current_version);
+        RowMutation.serializer.serialize(rm, out, MessagingService.current_version);
         assert out.getLength() > DatabaseDescriptor.getColumnIndexSize();
         cfs.forceBlockingFlush();
 
