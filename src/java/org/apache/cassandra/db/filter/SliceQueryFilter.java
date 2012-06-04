@@ -24,7 +24,6 @@ import java.util.Iterator;
 import java.util.List;
 
 import org.apache.cassandra.db.ColumnFamily;
-import org.apache.cassandra.db.ColumnSlice;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.IColumn;
 import org.apache.cassandra.db.IColumnContainer;
@@ -36,6 +35,7 @@ import org.apache.cassandra.db.columniterator.SSTableSliceIterator;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.util.FileDataInput;
+import org.apache.cassandra.utils.Pair;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,20 +46,21 @@ public class SliceQueryFilter implements IFilter
 {
     private static final Logger logger = LoggerFactory.getLogger(SliceQueryFilter.class);
 
-    private final ColumnSlice[] ranges;
+    private final Pair<ByteBuffer, ByteBuffer>[] ranges;
     public final boolean reversed;
     public volatile int count;
 
+    @SuppressWarnings("unchecked")
     public SliceQueryFilter(ByteBuffer start, ByteBuffer finish, boolean reversed, int count)
     {
-        this(new ColumnSlice[] { new ColumnSlice(start, finish) }, reversed, count);
+        this(new Pair[] { new Pair<ByteBuffer, ByteBuffer>(start, finish) }, reversed, count);
     }
 
     /**
      * Constructor that accepts multiple ranges. All ranges are assumed to be in the same direction (forward or
      * reversed).
      */
-    public SliceQueryFilter(ColumnSlice[] ranges, boolean reversed, int count)
+    public SliceQueryFilter(Pair<ByteBuffer, ByteBuffer>[] ranges, boolean reversed, int count)
     {
         this.ranges = ranges;
         this.reversed = reversed;
@@ -105,7 +106,7 @@ public class SliceQueryFilter implements IFilter
         while (subcolumns.hasNext())
         {
             IColumn column = subcolumns.next();
-            if (comparator.compare(column.name(), ranges[0].start) >= 0)
+            if (comparator.compare(column.name(), ranges[0].left) >= 0)
             {
                 subcolumns = Iterators.concat(Iterators.singletonIterator(column), subcolumns);
                 break;
@@ -136,9 +137,9 @@ public class SliceQueryFilter implements IFilter
                 logger.debug(String.format("collecting %s of %s: %s",
                         liveColumns, count, column.getString(comparator)));
 
-            if (ranges[ranges.length - 1].finish.remaining() > 0
-                    && ((!reversed && comparator.compare(column.name(), ranges[ranges.length - 1].finish) > 0))
-                    || (reversed && comparator.compare(column.name(), ranges[ranges.length - 1].finish) < 0))
+            if (ranges[ranges.length - 1].right.remaining() > 0
+                    && ((!reversed && comparator.compare(column.name(), ranges[ranges.length - 1].right) > 0))
+                    || (reversed && comparator.compare(column.name(), ranges[ranges.length - 1].right) < 0))
                 break;
 
             // only count live columns towards the `count` criteria
@@ -156,17 +157,17 @@ public class SliceQueryFilter implements IFilter
 
     public ByteBuffer start()
     {
-        return this.ranges[0].start;
+        return this.ranges[0].left;
     }
 
     public ByteBuffer finish()
     {
-        return this.ranges[0].finish;
+        return this.ranges[0].right;
     }
 
     public void setStart(ByteBuffer start)
     {
-        this.ranges[0] = new ColumnSlice(start, this.ranges[0].finish);
+        this.ranges[0] = new Pair<ByteBuffer, ByteBuffer>(start, this.ranges[0].right);
     }
 
     @Override

@@ -76,6 +76,7 @@ import org.apache.cassandra.thrift.IndexType;
 import org.apache.cassandra.thrift.SlicePredicate;
 import org.apache.cassandra.thrift.SliceRange;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.WrappedRunnable;
 import org.apache.commons.lang.ArrayUtils;
 import org.apache.commons.lang.StringUtils;
@@ -1037,22 +1038,23 @@ public class ColumnFamilyStoreTest extends SchemaLoader
         return k;
     }
     
+    @SuppressWarnings("unchecked")
     @Test
     public void testMultiRangeIndexed() throws Throwable
     {
         // in order not to change thrift interfaces at this stage we build SliceQueryFilter
         // directly instead of using QueryFilter to build it for us
-        ColumnSlice[] ranges = new ColumnSlice[] {
-                new ColumnSlice(ByteBuffer.wrap(EMPTY_BYTE_ARRAY), bytes("colA")),
-                new ColumnSlice(bytes("colC"), bytes("colE")),
-                new ColumnSlice(bytes("colG"), bytes("colG")),
-                new ColumnSlice(bytes("colI"), ByteBuffer.wrap(EMPTY_BYTE_ARRAY)) };
+        Pair<ByteBuffer, ByteBuffer>[] ranges = new Pair[] {
+                new Pair<ByteBuffer, ByteBuffer>(ByteBuffer.wrap(EMPTY_BYTE_ARRAY), bytes("colA")),
+                new Pair<ByteBuffer, ByteBuffer>(bytes("colC"), bytes("colE")),
+                new Pair<ByteBuffer, ByteBuffer>(bytes("colG"), bytes("colG")),
+                new Pair<ByteBuffer, ByteBuffer>(bytes("colI"), ByteBuffer.wrap(EMPTY_BYTE_ARRAY)) };
 
-        ColumnSlice[] rangesReversed = new ColumnSlice[] {
-                new ColumnSlice(ByteBuffer.wrap(EMPTY_BYTE_ARRAY), bytes("colI")),
-                new ColumnSlice(bytes("colG"), bytes("colG")),
-                new ColumnSlice(bytes("colE"), bytes("colC")),
-                new ColumnSlice(bytes("colA"), ByteBuffer.wrap(EMPTY_BYTE_ARRAY)) };
+        Pair<ByteBuffer, ByteBuffer>[] rangesReversed = new Pair[] {
+                new Pair<ByteBuffer, ByteBuffer>(ByteBuffer.wrap(EMPTY_BYTE_ARRAY), bytes("colI")),
+                new Pair<ByteBuffer, ByteBuffer>(bytes("colG"), bytes("colG")),
+                new Pair<ByteBuffer, ByteBuffer>(bytes("colE"), bytes("colC")),
+                new Pair<ByteBuffer, ByteBuffer>(bytes("colA"), ByteBuffer.wrap(EMPTY_BYTE_ARRAY)) };
 
         String tableName = "Keyspace1";
         String cfName = "Standard1";
@@ -1135,37 +1137,38 @@ public class ColumnFamilyStoreTest extends SchemaLoader
         return cfs;
     }
 
+    @SuppressWarnings("unchecked")
     private void testMultiRangeSlicesBehavior(ColumnFamilyStore cfs)
     {
         // in order not to change thrift interfaces at this stage we build SliceQueryFilter
         // directly instead of using QueryFilter to build it for us
-        ColumnSlice[] startMiddleAndEndRanges = new ColumnSlice[] {
-                new ColumnSlice(ByteBuffer.wrap(EMPTY_BYTE_ARRAY), bytes("colc")),
-                new ColumnSlice(bytes("colf"), bytes("colg")),
-                new ColumnSlice(bytes("colj"), ByteBuffer.wrap(EMPTY_BYTE_ARRAY)) };
+        Pair<ByteBuffer, ByteBuffer>[] startMiddleAndEndRanges = new Pair[] {
+                new Pair<ByteBuffer, ByteBuffer>(ByteBuffer.wrap(EMPTY_BYTE_ARRAY), bytes("colc")),
+                new Pair<ByteBuffer, ByteBuffer>(bytes("colf"), bytes("colg")),
+                new Pair<ByteBuffer, ByteBuffer>(bytes("colj"), ByteBuffer.wrap(EMPTY_BYTE_ARRAY)) };
 
-        ColumnSlice[] startMiddleAndEndRangesReversed = new ColumnSlice[] {
-                new ColumnSlice(ByteBuffer.wrap(EMPTY_BYTE_ARRAY), bytes("colj")),
-                new ColumnSlice(bytes("colg"), bytes("colf")),
-                new ColumnSlice(bytes("colc"), ByteBuffer.wrap(EMPTY_BYTE_ARRAY)) };
+        Pair<ByteBuffer, ByteBuffer>[] startMiddleAndEndRangesReversed = new Pair[] {
+                new Pair<ByteBuffer, ByteBuffer>(ByteBuffer.wrap(EMPTY_BYTE_ARRAY), bytes("colj")),
+                new Pair<ByteBuffer, ByteBuffer>(bytes("colg"), bytes("colf")),
+                new Pair<ByteBuffer, ByteBuffer>(bytes("colc"), ByteBuffer.wrap(EMPTY_BYTE_ARRAY)) };
 
-        ColumnSlice[] startOnlyRange =
-                new ColumnSlice[] { new ColumnSlice(ByteBuffer.wrap(EMPTY_BYTE_ARRAY), bytes("colc")) };
+        Pair<ByteBuffer, ByteBuffer>[] startOnlyRange =
+                new Pair[] { new Pair<ByteBuffer, ByteBuffer>(ByteBuffer.wrap(EMPTY_BYTE_ARRAY), bytes("colc")) };
 
-        ColumnSlice[] startOnlyRangeReversed =
-                new ColumnSlice[] { new ColumnSlice(bytes("colc"), ByteBuffer.wrap(EMPTY_BYTE_ARRAY)) };
+        Pair<ByteBuffer, ByteBuffer>[] startOnlyRangeReversed =
+                new Pair[] { new Pair<ByteBuffer, ByteBuffer>(bytes("colc"), ByteBuffer.wrap(EMPTY_BYTE_ARRAY)) };
 
-        ColumnSlice[] middleOnlyRanges =
-                new ColumnSlice[] { new ColumnSlice(bytes("colf"), bytes("colg")) };
+        Pair<ByteBuffer, ByteBuffer>[] middleOnlyRanges =
+                new Pair[] { new Pair<ByteBuffer, ByteBuffer>(bytes("colf"), bytes("colg")) };
 
-        ColumnSlice[] middleOnlyRangesReversed =
-                new ColumnSlice[] { new ColumnSlice(bytes("colg"), bytes("colf")) };
+        Pair<ByteBuffer, ByteBuffer>[] middleOnlyRangesReversed =
+                new Pair[] { new Pair<ByteBuffer, ByteBuffer>(bytes("colg"), bytes("colf")) };
 
-        ColumnSlice[] endOnlyRanges =
-                new ColumnSlice[] { new ColumnSlice(bytes("colj"), ByteBuffer.wrap(EMPTY_BYTE_ARRAY)) };
+        Pair<ByteBuffer, ByteBuffer>[] endOnlyRanges =
+                new Pair[] { new Pair<ByteBuffer, ByteBuffer>(bytes("colj"), ByteBuffer.wrap(EMPTY_BYTE_ARRAY)) };
 
-        ColumnSlice[] endOnlyRangesReversed =
-                new ColumnSlice[] { new ColumnSlice(ByteBuffer.wrap(EMPTY_BYTE_ARRAY), bytes("colj")) };
+        Pair<ByteBuffer, ByteBuffer>[] endOnlyRangesReversed =
+                new Pair[] { new Pair<ByteBuffer, ByteBuffer>(ByteBuffer.wrap(EMPTY_BYTE_ARRAY), bytes("colj")) };
 
         SliceQueryFilter startOnlyFilter = new SliceQueryFilter(startOnlyRange, false,
                 Integer.MAX_VALUE);

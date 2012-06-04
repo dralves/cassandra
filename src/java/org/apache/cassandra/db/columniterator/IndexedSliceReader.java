@@ -26,7 +26,6 @@ import java.util.Deque;
 import java.util.List;
 
 import org.apache.cassandra.db.ColumnFamily;
-import org.apache.cassandra.db.ColumnSlice;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionInfo;
 import org.apache.cassandra.db.OnDiskAtom;
@@ -38,6 +37,7 @@ import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.io.util.FileMark;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.Pair;
 
 import com.google.common.collect.AbstractIterator;
 
@@ -54,7 +54,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
     private final FileDataInput originalInput;
     private FileDataInput file;
     private final boolean reversed;
-    private final ColumnSlice[] ranges;
+    private final Pair<ByteBuffer,ByteBuffer>[] ranges;
 
     private final BlockFetcher fetcher;
     private final Deque<OnDiskAtom> blockColumns = new ArrayDeque<OnDiskAtom>();
@@ -69,7 +69,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
      * assumes that validation has been performed in terms of intervals (no overlapping intervals).
      */
     public IndexedSliceReader(SSTableReader sstable, RowIndexEntry indexEntry, FileDataInput input,
-            ColumnSlice[] ranges, boolean reversed)
+            Pair<ByteBuffer,ByteBuffer>[] ranges, boolean reversed)
     {
 
         this.sstable = sstable;
@@ -179,7 +179,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
     private abstract class BlockFetcher
     {
         protected int sliceIndex;
-        protected ColumnSlice current;
+        protected Pair<ByteBuffer,ByteBuffer> current;
         protected ByteBuffer start;
         protected ByteBuffer finish;
 
@@ -216,8 +216,8 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
 
             // update current and reverse order if needed
             current = ranges[sliceIndex];
-            start = !reversed ? current.start : current.finish;
-            finish = !reversed ? current.finish : current.start;
+            start = !reversed ? current.left : current.right;
+            finish = !reversed ? current.right : current.left;
 
             return true;
         }
