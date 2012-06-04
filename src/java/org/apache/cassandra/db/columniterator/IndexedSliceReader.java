@@ -220,6 +220,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
 
         protected void addCol(OnDiskAtom col)
         {
+            System.err.println("ADDED COL [REV: " + reversed + "] " + new String(col.name().array()));
             if (reversed)
                 blockColumns.addFirst(col);
             else
@@ -398,7 +399,8 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
             for (int i = 0; i < columns; i++)
             {
                 OnDiskAtom column = atomSerializer.deserializeFromSSTable(file, sstable.descriptor.version);
-                System.err.println("READ COLUMN: " + new String(column.name().array()));
+                System.err.println("[Start: " + new String(start.array()) + " Finish: " + new String(finish.array())
+                        + " Reverse: " + reversed + "]READ COLUMN: " + new String(column.name().array()));
 
                 // col is before slice
                 if (start.remaining() != 0 && comparator.compare(column.name(), start) < 0)

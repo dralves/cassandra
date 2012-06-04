@@ -1184,38 +1184,38 @@ public class ColumnFamilyStoreTest extends SchemaLoader
                 1);
 
         findRowGetSlicesAndAssertColsFound(cfs, startOnlyFilter, "a", "cola");
-        System.err.println("***");
+        System.err.println("***1");
         findRowGetSlicesAndAssertColsFound(cfs, startOnlyFilterReversed, "a", "cola");
-        System.err.println("***");
+        System.err.println("***2");
         findRowGetSlicesAndAssertColsFound(cfs, startOnlyFilterWithCounting, "a", "cola");
-        System.err.println("***");
+        System.err.println("***3");
         findRowGetSlicesAndAssertColsFound(cfs, startOnlyFilterReversedWithCounting, "a", "cola");
-        System.err.println("***");
+        System.err.println("***4");
 
         findRowGetSlicesAndAssertColsFound(cfs, middleOnlyFilter, "a", new String[] {});
-        System.err.println("***");
+        System.err.println("***5");
         findRowGetSlicesAndAssertColsFound(cfs, middleOnlyFilterReversed, "a", new String[] {});
-        System.err.println("***");
+        System.err.println("***6");
         findRowGetSlicesAndAssertColsFound(cfs, middleOnlyFilterWithCounting, "a", new String[] {});
-        System.err.println("***");
+        System.err.println("***7");
         findRowGetSlicesAndAssertColsFound(cfs, middleOnlyFilterReversedWithCounting, "a", new String[] {});
         System.err.println("***");
 
         findRowGetSlicesAndAssertColsFound(cfs, endOnlyFilter, "a", new String[] {});
-        System.err.println("***");
+        System.err.println("***8");
         findRowGetSlicesAndAssertColsFound(cfs, endOnlyReversed, "a", new String[] {});
-        System.err.println("***");
+        System.err.println("***9");
         findRowGetSlicesAndAssertColsFound(cfs, endOnlyWithCounting, "a", new String[] {});
-        System.err.println("***");
+        System.err.println("***10");
         findRowGetSlicesAndAssertColsFound(cfs, endOnlyWithReversedCounting, "a", new String[] {});
-        System.err.println("***");
+        System.err.println("***11");
 
         findRowGetSlicesAndAssertColsFound(cfs, startMiddleAndEndFilter, "a", "cola");
-        System.err.println("***");
+        System.err.println("***12");
         findRowGetSlicesAndAssertColsFound(cfs, startMiddleAndEndFilterReversed, "a", "cola");
-        System.err.println("***");
+        System.err.println("***13");
         findRowGetSlicesAndAssertColsFound(cfs, startMiddleAndEndFilterWithCounting, "a", "cola");
-        System.err.println("***");
+        System.err.println("***14");
         findRowGetSlicesAndAssertColsFound(cfs, startMiddleAndEndFilterReversedWithCounting, "a", "cola");
 
         findRowGetSlicesAndAssertColsFound(cfs, startOnlyFilter, "c", "cola", "colb", "colc");
