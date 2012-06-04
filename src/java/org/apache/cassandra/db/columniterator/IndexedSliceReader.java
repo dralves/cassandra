@@ -70,12 +70,12 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
      * assumes that validation has been performed in terms of intervals (no overlapping intervals).
      */
     public IndexedSliceReader(SSTableReader sstable, RowIndexEntry indexEntry, FileDataInput input,
-            List<SliceRange> ranges, boolean reversed)
+            SliceRange[] ranges, boolean reversed)
     {
         this.sstable = sstable;
         this.originalInput = input;
         this.reversed = reversed;
-        this.ranges = ranges.toArray(new SliceRange[ranges.size()]);
+        this.ranges = ranges;
         this.comparator = sstable.metadata.comparator;
 
         try
@@ -87,7 +87,8 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
                 {
                     setToRowStart(sstable, indexEntry, input);
                     this.emptyColumnFamily = ColumnFamily.create(sstable.metadata);
-                    emptyColumnFamily.delete(DeletionInfo.serializer().deserializeFromSSTable(file, sstable.descriptor.version));
+                    emptyColumnFamily.delete(DeletionInfo.serializer().deserializeFromSSTable(file,
+                            sstable.descriptor.version));
                     fetcher = new SimpleBlockFetcher();
                 }
                 else
@@ -103,7 +104,8 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
                 IndexHelper.skipBloomFilter(file);
                 this.indexes = IndexHelper.deserializeIndex(file);
                 this.emptyColumnFamily = ColumnFamily.create(sstable.metadata);
-                emptyColumnFamily.delete(DeletionInfo.serializer().deserializeFromSSTable(file, sstable.descriptor.version));
+                emptyColumnFamily.delete(DeletionInfo.serializer().deserializeFromSSTable(file,
+                        sstable.descriptor.version));
                 fetcher = indexes.isEmpty() ? new SimpleBlockFetcher() : new IndexedBlockFetcher();
             }
         }
@@ -147,7 +149,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
         while (true)
         {
             // previously fetched blocks
-           OnDiskAtom column = blockColumns.poll();
+            OnDiskAtom column = blockColumns.poll();
 
             if (column != null)
                 return column;
@@ -241,21 +243,21 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
         // current index
         private IndexInfo curColPosition;
 
-        public IndexedBlockFetcher()
+        public IndexedBlockFetcher() throws IOException
         {
-            this(file.getFilePointer());
-
+            file.readInt();
+            basePosition = file.getFilePointer();
         }
 
-        public IndexedBlockFetcher(long position)
+        public IndexedBlockFetcher(RowIndexEntry entry)
         {
-            basePosition = position;
+            basePosition = entry.position;
         }
 
         @Override
         public void getMoreBlocks() throws IOException
         {
-            
+
             // if we're running reversed we might have previously deserialized this range
             if (reversed && cachedIndex == curRangeIndex && !cache.isEmpty())
             {
@@ -289,7 +291,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
                 // scan from index start
                 while (file.bytesPastMark(mark) < curColPosition.width)
                 {
-                   OnDiskAtom column = atomSerializer.deserializeFromSSTable(file, sstable.descriptor.version);
+                    OnDiskAtom column = atomSerializer.deserializeFromSSTable(file, sstable.descriptor.version);
                     // col is before slice
                     if (start.remaining() != 0 && comparator.compare(column.name(), start) < 0)
                     {
@@ -394,7 +396,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
 
             for (int i = 0; i < columns; i++)
             {
-               OnDiskAtom column = atomSerializer.deserializeFromSSTable(file, sstable.descriptor.version);
+                OnDiskAtom column = atomSerializer.deserializeFromSSTable(file, sstable.descriptor.version);
 
                 // col is before slice
                 if (start.remaining() != 0 && comparator.compare(column.name(), start) < 0)

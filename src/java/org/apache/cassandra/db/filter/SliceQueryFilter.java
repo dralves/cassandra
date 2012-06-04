@@ -23,7 +23,6 @@ import java.util.Comparator;
 import java.util.Iterator;
 import java.util.List;
 
-<<<<<<< .merge_file_dBPfHe
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.IColumn;
@@ -31,16 +30,7 @@ import org.apache.cassandra.db.IColumnContainer;
 import org.apache.cassandra.db.Memtable;
 import org.apache.cassandra.db.RowIndexEntry;
 import org.apache.cassandra.db.SuperColumn;
-import org.apache.cassandra.db.columniterator.IColumnIterator;
-=======
-import com.google.common.collect.Iterators;
-import com.google.common.collect.Lists;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
->>>>>>> .merge_file_pz4OQM
 import org.apache.cassandra.db.columniterator.SSTableSliceIterator;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.io.sstable.SSTableReader;
@@ -49,7 +39,6 @@ import org.apache.cassandra.thrift.SliceRange;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Iterators;
 import com.google.common.collect.Lists;
 
@@ -57,21 +46,20 @@ public class SliceQueryFilter implements IFilter
 {
     private static final Logger logger = LoggerFactory.getLogger(SliceQueryFilter.class);
 
-    private final List<SliceRange> ranges;
+    private final SliceRange[] ranges;
     public final boolean reversed;
     public volatile int count;
 
-
     public SliceQueryFilter(ByteBuffer start, ByteBuffer finish, boolean reversed, int count)
     {
-        this(ImmutableList.of(new SliceRange(start, finish, reversed, count)), reversed, count);
+        this(new SliceRange[] { new SliceRange(start, finish, reversed, count) }, reversed, count);
     }
 
     /**
      * Constructor that accepts multiple ranges. All ranges are assumed to be in the same direction (forward or
      * reversed).
      */
-    public SliceQueryFilter(List<SliceRange> ranges, boolean reversed, int count)
+    public SliceQueryFilter(SliceRange[] ranges, boolean reversed, int count)
     {
         this.ranges = ranges;
         this.reversed = reversed;
@@ -88,14 +76,16 @@ public class SliceQueryFilter implements IFilter
         return new SSTableSliceIterator(sstable, key, ranges, reversed);
     }
 
-    public OnDiskAtomIterator getSSTableColumnIterator(SSTableReader sstable, FileDataInput file, DecoratedKey key, RowIndexEntry indexEntry)
+    public OnDiskAtomIterator getSSTableColumnIterator(SSTableReader sstable, FileDataInput file, DecoratedKey key,
+            RowIndexEntry indexEntry)
     {
         return new SSTableSliceIterator(sstable, file, key, ranges, reversed, indexEntry);
     }
 
     public SuperColumn filterSuperColumn(SuperColumn superColumn, int gcBefore)
     {
-        // we clone shallow, then add, under the theory that generally we're interested in a relatively small number of subcolumns.
+        // we clone shallow, then add, under the theory that generally we're interested in a relatively small number of
+        // subcolumns.
         // this may be a poor assumption.
         SuperColumn scFiltered = superColumn.cloneMeShallow();
         Iterator<IColumn> subcolumns;
@@ -110,17 +100,18 @@ public class SliceQueryFilter implements IFilter
         }
 
         // iterate until we get to the "real" start column
-        Comparator<ByteBuffer> comparator = reversed ? superColumn.getComparator().reverseComparator : superColumn.getComparator();
+        Comparator<ByteBuffer> comparator = reversed ? superColumn.getComparator().reverseComparator : superColumn
+                .getComparator();
         while (subcolumns.hasNext())
         {
             IColumn column = subcolumns.next();
-            if (comparator.compare(column.name(), ranges.get(0).start) >= 0)
+            if (comparator.compare(column.name(), ranges[0].start) >= 0)
             {
                 subcolumns = Iterators.concat(Iterators.singletonIterator(column), subcolumns);
                 break;
             }
         }
-        // subcolumns is either empty now, or has been redefined in the loop above.  either is ok.
+        // subcolumns is either empty now, or has been redefined in the loop above. either is ok.
         collectReducedColumns(scFiltered, subcolumns, gcBefore);
         return scFiltered;
     }
@@ -143,16 +134,16 @@ public class SliceQueryFilter implements IFilter
             IColumn column = reducedColumns.next();
             if (logger.isDebugEnabled())
                 logger.debug(String.format("collecting %s of %s: %s",
-                                           liveColumns, count, column.getString(comparator)));
+                        liveColumns, count, column.getString(comparator)));
 
-            if (ranges.get(ranges.size()-1).finish.remaining() > 0
-                && ((!reversed && comparator.compare(column.name(), ranges.get(ranges.size()-1).finish) > 0))
-                    || (reversed && comparator.compare(column.name(), ranges.get(ranges.size()-1).finish) < 0))
+            if (ranges[ranges.length - 1].finish.remaining() > 0
+                    && ((!reversed && comparator.compare(column.name(), ranges[ranges.length - 1].finish) > 0))
+                    || (reversed && comparator.compare(column.name(), ranges[ranges.length - 1].finish) < 0))
                 break;
 
             // only count live columns towards the `count` criteria
             if (column.isLive()
-                && (!container.deletionInfo().isDeleted(column)))
+                    && (!container.deletionInfo().isDeleted(column)))
             {
                 liveColumns++;
             }
@@ -163,16 +154,19 @@ public class SliceQueryFilter implements IFilter
         }
     }
 
-    public ByteBuffer start() {
-        return this.ranges.get(0).start;
+    public ByteBuffer start()
+    {
+        return this.ranges[0].start;
     }
-    
-    public ByteBuffer finish() {
-        return this.ranges.get(0).finish;
+
+    public ByteBuffer finish()
+    {
+        return this.ranges[0].finish;
     }
-    
-    public void setStart(ByteBuffer start) {
-        this.ranges.get(0).start = start;
+
+    public void setStart(ByteBuffer start)
+    {
+        this.ranges[0].start = start;
     }
 
     @Override
