@@ -54,10 +54,11 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
     private final FileDataInput originalInput;
     private FileDataInput file;
     private final boolean reversed;
-    private final Pair<ByteBuffer,ByteBuffer>[] ranges;
+    private final Pair<ByteBuffer, ByteBuffer>[] ranges;
 
     private final BlockFetcher fetcher;
     private final Deque<OnDiskAtom> blockColumns = new ArrayDeque<OnDiskAtom>();
+    private final List<OnDiskAtom> prefetchedColumns = new ArrayList<OnDiskAtom>();
     private final AbstractType<?> comparator;
 
     private boolean isDone;
@@ -69,7 +70,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
      * assumes that validation has been performed in terms of intervals (no overlapping intervals).
      */
     public IndexedSliceReader(SSTableReader sstable, RowIndexEntry indexEntry, FileDataInput input,
-            Pair<ByteBuffer,ByteBuffer>[] ranges, boolean reversed)
+            Pair<ByteBuffer, ByteBuffer>[] ranges, boolean reversed)
     {
 
         this.sstable = sstable;
@@ -151,8 +152,12 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
             // previously fetched blocks
             OnDiskAtom column = blockColumns.poll();
 
+            System.out.println("polled col: " + (column != null ? new String(column.name().array()) : "null"));
+
             if (column != null)
+            {
                 return column;
+            }
 
             // if there are no previous blocks we might be done
             if (isDone)
@@ -170,6 +175,48 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
         }
     }
 
+    /**
+     * This is only ever called
+     * 
+     * @param column
+     * @return
+     */
+    private boolean isColumnNeeded(OnDiskAtom column, int sliceIndex)
+    {
+        // if not running reversed or running the simple fetcher then only relevant data is in the queue
+        if (!reversed || sliceIndex == -1)
+            return true;
+
+        // here's when things get tricky if we're reversed and using the indexed fetcher we might have cols in the queue
+        // that belong to the current range, to the next one or to none
+        sliceIndex = sliceIndex - 2;
+
+        ByteBuffer start = ranges[sliceIndex].right;
+        ByteBuffer finish = ranges[sliceIndex].left;
+
+        System.out.println("col: " + new String(column.name().array()) + " slice index: " + sliceIndex + " start "
+                + new String(start.array()) + " finish: " + new String(finish.array()));
+
+        // we're running reversed, if the col is bigger than start it's within the range
+        if (comparator.compare(column.name(), start) >= 0)
+            return true;
+
+        // if we have more slices
+        if (sliceIndex + 1 < ranges.length)
+        {
+            start = ranges[sliceIndex + 1].right;
+            finish = ranges[sliceIndex + 1].left;
+
+            if (comparator.compare(column.name(), finish) > 0)
+                return false;
+            if (comparator.compare(column.name(), start) >= 0)
+                return true;
+        }
+        System.out.println("dropped");
+        return false;
+
+    }
+
     public void close() throws IOException
     {
         if (originalInput == null && file != null)
@@ -179,7 +226,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
     private abstract class BlockFetcher
     {
         protected int sliceIndex;
-        protected Pair<ByteBuffer,ByteBuffer> current;
+        protected Pair<ByteBuffer, ByteBuffer> current;
         protected ByteBuffer start;
         protected ByteBuffer finish;
 
@@ -218,27 +265,35 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
             current = ranges[sliceIndex];
             start = !reversed ? current.left : current.right;
             finish = !reversed ? current.right : current.left;
-
             return true;
         }
 
-        protected void addCol(OnDiskAtom col)
+        protected void addCol(OnDiskAtom col, boolean inCurrentRange)
         {
+            // check if it fits the next range, i.e.: there is one more range, and the col is bigger than finish (start)
+            if (!inCurrentRange && sliceIndex + 1 < ranges.length
+                    && comparator.compare(col.name(), ranges[sliceIndex + 1].right) >= 0)
+            {
+                System.out.println("adding prefetched: " + new String(col.name().array()));
+                prefetchedColumns.add(col);
+                return;
+            }
+
             if (reversed)
                 blockColumns.addFirst(col);
             else
                 blockColumns.addLast(col);
         }
 
+        public int getSliceIndex()
+        {
+            return sliceIndex;
+        }
+
     }
 
     private class IndexedBlockFetcher extends BlockFetcher
     {
-
-        /** holds read cols that might be needed later. for reverse reads only */
-        private final List<OnDiskAtom> cache = new ArrayList<OnDiskAtom>();
-        /** the index segment that is cached **/
-        private int cachedIndex;
 
         // where this row starts
         private final long basePosition;
@@ -263,72 +318,52 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
         {
 
             // if we're running reversed we might have previously deserialized this range
-            if (reversed && cachedIndex == curRangeIndex && !cache.isEmpty())
-            {
-                for (OnDiskAtom cached : cache)
-                {
-                    // col is before slice
-                    if (start.remaining() != 0 && comparator.compare(cached.name(), start) < 0)
-                        continue;
+            /* seek to the correct offset to the data, and calculate the data size */
+            long positionToSeek = basePosition + curColPosition.offset;
 
-                    // col is within slice
-                    if (finish.remaining() == 0 || comparator.compare(cached.name(), finish) <= 0)
-                        addCol(cached);
+            // With new promoted indexes, our first seek in the data file will happen at that point.
+            if (file == null)
+                file = originalInput == null ? sstable.getFileDataInput(positionToSeek) : originalInput;
+
+            int prevRangeIndex = curRangeIndex;
+
+            OnDiskAtom.Serializer atomSerializer = emptyColumnFamily.getOnDiskSerializer();
+            file.seek(positionToSeek);
+            FileMark mark = file.mark();
+
+            // scan from index start
+            while (file.bytesPastMark(mark) < curColPosition.width)
+            {
+                OnDiskAtom column = atomSerializer.deserializeFromSSTable(file, sstable.descriptor.version);
+
+                // col is before slice
+                if (start.remaining() != 0 && comparator.compare(column.name(), start) < 0)
+                {
+                    // if we're reading reversed cache the values, we might need them because 'next' ranges are
+                    // actually before this one
+                    if (reversed)
+                        addCol(column, false);
+                    continue;
                 }
-            }
-            else
-            {
 
-                /* seek to the correct offset to the data, and calculate the data size */
-                long positionToSeek = basePosition + curColPosition.offset;
+                // col is within slice
+                if (finish.remaining() == 0 || comparator.compare(column.name(), finish) <= 0)
+                    addCol(column, true);
 
-                // With new promoted indexes, our first seek in the data file will happen at that point.
-                if (file == null)
-                    file = originalInput == null ? sstable.getFileDataInput(positionToSeek) : originalInput;
-
-                int prevRangeIndex = curRangeIndex;
-
-                OnDiskAtom.Serializer atomSerializer = emptyColumnFamily.getOnDiskSerializer();
-                file.seek(positionToSeek);
-                FileMark mark = file.mark();
-
-                // scan from index start
-                while (file.bytesPastMark(mark) < curColPosition.width)
+                // col is after slice.
+                else
                 {
-                    OnDiskAtom column = atomSerializer.deserializeFromSSTable(file, sstable.descriptor.version);
-
-                    // col is before slice
-                    if (start.remaining() != 0 && comparator.compare(column.name(), start) < 0)
-                    {
-                        // if we're reading reversed cache the values, we might need them because 'next' ranges are
-                        // actually before this one
-                        if (reversed)
-                        {
-                            cache.add(column);
-                            cachedIndex = curRangeIndex;
-                        }
+                    // if we're reading reversed we're sure that no col after finish will be needed.
+                    if (reversed)
+                        break;
+                    // when reading forward we check for the next slice and whether it's 'start' is still within
+                    // this index's range, if so we continue, if not we return
+                    else if (nextSlice() && prevRangeIndex == curRangeIndex)
                         continue;
-                    }
-
-                    // col is within slice
-                    if (finish.remaining() == 0 || comparator.compare(column.name(), finish) <= 0)
-                        addCol(column);
-
-                    // col is after slice.
                     else
-                    {
-                        // if we're reading reversed we're sure that no col after finish will be needed.
-                        if (reversed)
-                            break;
-                        // when reading forward we check for the next slice and whether it's 'start' is still within
-                        // this index's range, if so we continue, if not we return
-                        else if (nextSlice() && prevRangeIndex == curRangeIndex)
-                            continue;
-                        else
-                            return;
-                    }
-
+                        return;
                 }
+
             }
 
             // if we reach this point we're at the end of an index range
@@ -339,8 +374,6 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
                 if (comparator.compare(start, curColPosition.firstName) < 0)
                 {
                     curRangeIndex--;
-                    cache.clear();
-                    cachedIndex = -1;
                     updateIndexPosition();
                 }
                 // if not try the next slice
@@ -363,10 +396,12 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
         {
             if (super.nextSlice())
             {
+
                 // if there are more slices search for the next index (start by the indexed segment that hold the
                 // 'start' for a forward range and the one that holds 'finish' for a reversed range so that we don't
                 // read more that we need)
                 curRangeIndex = IndexHelper.indexFor(reversed ? finish : start, indexes, comparator, reversed);
+
                 // slice range falls out of the indexes
                 sliceIndex++;
                 return updateIndexPosition();
@@ -410,7 +445,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
 
                 // col is within slice
                 if (finish.remaining() == 0 || comparator.compare(column.name(), finish) <= 0)
-                    addCol(column);
+                    addCol(column, true);
 
                 // col is after slice. more slices?
                 else if (!nextSlice())
@@ -436,6 +471,12 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
                 return true;
             }
             return false;
+        }
+
+        @Override
+        public int getSliceIndex()
+        {
+            return -1;
         }
     }
 
