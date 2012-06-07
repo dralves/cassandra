@@ -397,7 +397,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
 
         private int indexForSlice(int slice)
         {
-            return IndexHelper.indexFor(reversed ? ranges[slice].right : ranges[slice].left,
+            return IndexHelper.indexFor(reversed ? finish : start,
                     indexes,
                     comparator, reversed);
         }
