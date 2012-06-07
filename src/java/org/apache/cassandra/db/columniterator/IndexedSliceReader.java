@@ -54,7 +54,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
     private final FileDataInput originalInput;
     private FileDataInput file;
     private final boolean reversed;
-    private final Pair<ByteBuffer, ByteBuffer>[] ranges;
+    private final ColumnSlice[] ranges;
     private final BlockFetcher fetcher;
     private final AbstractType<?> comparator;
 
@@ -65,7 +65,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
      * assumes that validation has been performed in terms of intervals (no overlapping intervals).
      */
     public IndexedSliceReader(SSTableReader sstable, RowIndexEntry indexEntry, FileDataInput input,
-            Pair<ByteBuffer, ByteBuffer>[] ranges, boolean reversed)
+            ColumnSlice[] ranges, boolean reversed)
     {
 
         this.sstable = sstable;
@@ -202,7 +202,6 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
             // no more slices? we're done
             if (currentSlice >= ranges.length || currentSlice < 0)
             {
-                System.err.println("no more slices " + currentSlice);
                 noMoreBlocks = true;
                 return false;
             }
@@ -216,9 +215,6 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
             current = ranges[currentSlice];
             start = !reversed ? current.left : current.right;
             finish = !reversed ? current.right : current.left;
-            System.err.println("updated slice: start: "
-                    + (start == null ? "null" : new String(start.array())) + " finish: "
-                    + (finish == null ? "null" : new String(finish.array())));
         }
 
         protected void addCol(OnDiskAtom col)
@@ -293,32 +289,19 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
                 // poll from the ordered blocks
                 currentColumn = blockColumns.poll();
                 if (currentColumn != null)
-                {
-                    System.err.println("returning polled column " + printCol(currentColumn));
                     return true;
-                }
-                else
-                {
-                    System.err.println("no polled column");
-                }
 
                 OnDiskAtom perfetchedCol;
                 if (reversed && (perfetchedCol = prefetched.peek()) != null)
                 {
-                    System.err.println("found prefetched column " + printCol(perfetchedCol));
 
                     // col is before slice, we update the slice
                     if (isColumnBeforeSliceStart(perfetchedCol))
                     {
-                        System.err.println("prefecthed is before current slice, more slices? "
-                                + printCol(perfetchedCol));
-                        if (!nextSlice())
-                        {
-                            System.err.println("no " + printCol(perfetchedCol));
-                            return false;
-                        }
 
-                        System.err.println("yes, continue " + printCol(perfetchedCol));
+                        if (!nextSlice())
+                            return false;
+
                         continue;
                     }
 
@@ -326,24 +309,16 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
                     if (isColumnBeforeSliceFinish(perfetchedCol))
                     {
                         currentColumn = prefetched.poll();
-                        System.err.println("returning prefetched column " + printCol(perfetchedCol));
                         return true;
                     }
 
                     // col is after slice, discard
                     prefetched.poll();
-                    System.err.println("skipping prefetch column " + printCol(perfetchedCol));
                     continue;
-                }
-                else
-                {
-                    System.err.println("no prefetched column");
                 }
 
                 if (noMoreBlocks)
                     return false;
-
-                System.err.println("----------------getting more blocks------------------------");
 
                 // try and get more from disk
                 getMoreBlocks();
@@ -356,16 +331,9 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
             return currentColumn;
         }
 
-        /**
-         * Reads additional blocks from disk usign the index, returns whether new blocks were found.
-         * 
-         * @return
-         * @throws IOException
-         */
         public void getMoreBlocks() throws IOException
         {
 
-            // if we're running reversed we might have previously deserialized this range
             /* seek to the correct offset to the data, and calculate the data size */
             long positionToSeek = basePosition + currentIndex.offset;
 
@@ -383,22 +351,13 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
 
                 OnDiskAtom column = atomSerializer.deserializeFromSSTable(file, sstable.descriptor.version);
 
-                System.err.println("deser'd " + printCol(column) + printSlice(currentSlice)
-                        + printIndex(curRangeIndex));
-
                 // col is before slice
                 if (isColumnBeforeSliceStart(column))
                 {
 
                     if (reversed)
-                    {
-                        System.err.println("added prefetch (before) " + printCol(column));
                         prefetched.addFirst(column);
-                    }
-                    else
-                    {
-                        System.err.println("skipped block (before) " + printCol(column));
-                    }
+
                     continue;
                 }
 
@@ -406,113 +365,42 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
                 if (isColumnBeforeSliceFinish(column))
                 {
                     addCol(column);
-                    System.err.println("added block " + printCol(column));
                     continue;
                 }
 
                 // col is after slice.
-                System.err.println("skipped block (after) " + printCol(column));
-
                 if (reversed)
-                {
                     break;
-                }
 
                 if (nextSlice() && indexForSlice(currentSlice) == curRangeIndex)
-                {
-                    System.err.println("next slice is withing current. continuing" + printSlice(currentSlice)
-                            + printIndex(curRangeIndex));
                     continue;
-                }
                 break;
 
             }
             if (!nextIndex())
-            {
                 noMoreBlocks = true;
-            }
         }
 
         private boolean nextIndex()
         {
-            System.err.println("updating index position current: " + printIndex(curRangeIndex));
             if (reversed)
                 curRangeIndex--;
             else
                 curRangeIndex++;
 
             if (curRangeIndex < 0 || curRangeIndex >= indexes.size())
-            {
-                System.err.println("no more index ranges: " + curRangeIndex);
                 return false;
-            }
 
             currentIndex = indexes.get(curRangeIndex);
-
-            System.err.println("updating index position to: " + printIndex(curRangeIndex));
             return true;
         }
 
         private int indexForSlice(int slice)
         {
-            int indexForSlice = IndexHelper.indexFor(reversed ? ranges[slice].right : ranges[slice].left,
+            return IndexHelper.indexFor(reversed ? ranges[slice].right : ranges[slice].left,
                     indexes,
                     comparator, reversed);
-            System.err.println("fetching index for slice. " + printSlice(slice) + printIndex(indexForSlice));
-            return indexForSlice;
         }
-
-        private String printSlice(int sliceIndex)
-        {
-            ByteBuffer start = !reversed ? ranges[sliceIndex].left : ranges[sliceIndex].right;
-            ByteBuffer finish = !reversed ? ranges[sliceIndex].right : ranges[sliceIndex].left;
-            return " slice[" + sliceIndex + "]: [start: "
-                    + new String(start.array()) + " finish: "
-                    + new String(finish.array()) + "]";
-        }
-
-        private String printIndex(int indexPos)
-        {
-            return "";
-            // return " index[" + indexPos + "]: [start: "
-            // + new String(indexes.get(indexPos).firstName.array()) + " finish: "
-            // + new String(indexes.get(indexPos).lastName.array()) + "]";
-        }
-
-        private String printCol(OnDiskAtom column)
-        {
-            return " column[" + new String(column.name().array()) + "]";
-        }
-
-        private void moveIndex()
-        {
-
-            // // if we reach this point we're at the end of an index range
-            // if (reversed)
-            // {
-            // curRangeIndex--;
-            // // // if we're reading reversed this range might continue to the previous index segment
-            // // if (comparator.compare(start, curColPosition.firstName) < 0)
-            // // {
-            //
-            // // updateIndex();
-            // // }
-            // // // if not try the next slice
-            // // else
-            // // {
-            // // nextSlice();
-            // // return;
-            // // }
-            // }
-            // // while reading forward we inc the index pos to start there next time
-            // else
-            // {
-            // curRangeIndex++;
-            // // updateIndex();
-            // }
-
-        }
-
     }
 
     private class SimpleBlockFetcher extends BlockFetcher

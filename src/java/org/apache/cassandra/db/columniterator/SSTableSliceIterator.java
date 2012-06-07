@@ -36,7 +36,7 @@ public class SSTableSliceIterator implements OnDiskAtomIterator
     private final OnDiskAtomIterator reader;
     private final DecoratedKey key;
 
-    public SSTableSliceIterator(SSTableReader sstable, DecoratedKey key, Pair<ByteBuffer, ByteBuffer>[] slices,
+    public SSTableSliceIterator(SSTableReader sstable, DecoratedKey key, ColumnSlice[] slices,
             boolean reversed)
     {
         this.key = key;
@@ -57,14 +57,14 @@ public class SSTableSliceIterator implements OnDiskAtomIterator
      * @param reversed Results are returned in reverse order iff reversed is true.
      */
     public SSTableSliceIterator(SSTableReader sstable, FileDataInput file, DecoratedKey key,
-            Pair<ByteBuffer, ByteBuffer>[] slices, boolean reversed, RowIndexEntry indexEntry)
+            ColumnSlice[] slices, boolean reversed, RowIndexEntry indexEntry)
     {
         this.key = key;
         reader = createReader(sstable, indexEntry, file, slices, reversed);
     }
 
     private static OnDiskAtomIterator createReader(SSTableReader sstable, RowIndexEntry indexEntry, FileDataInput file,
-            Pair<ByteBuffer, ByteBuffer>[] slices, boolean reversed)
+            ColumnSlice[] slices, boolean reversed)
     {
         return slices.length == 1 && slices[0].left.remaining() == 0 && !reversed
                 ? new SimpleSliceReader(sstable, indexEntry, file, slices[slices.length - 1].right)
