@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -7,14 +7,13 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package org.apache.cassandra.io.compress;
 
@@ -23,6 +22,7 @@ import java.lang.reflect.Method;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Set;
 
 import org.apache.avro.util.Utf8;
 import org.apache.commons.lang.builder.EqualsBuilder;
@@ -82,7 +82,7 @@ public class CompressionParameters
 
     private static Class<? extends ICompressor> parseCompressorClass(String className) throws ConfigurationException
     {
-        if (className == null)
+        if (className == null || className.isEmpty())
             return null;
 
         className = className.contains(".") ? className : "org.apache.cassandra.io.compress." + className;
@@ -104,7 +104,13 @@ public class CompressionParameters
         try
         {
             Method method = compressorClass.getMethod("create", Map.class);
-            return (ICompressor)method.invoke(null, compressionOptions);
+            ICompressor compressor = (ICompressor)method.invoke(null, compressionOptions);
+            // Check for unknown options
+            Set<String> supportedOpts = compressor.supportedOptions();
+            for (String provided : compressionOptions.keySet())
+                if (!supportedOpts.contains(provided))
+                    throw new ConfigurationException("Unknown compression options " + provided);
+            return compressor;
         }
         catch (NoSuchMethodException e)
         {
@@ -194,21 +200,6 @@ public class CompressionParameters
 
         if (crcChance > 1.0d || crcChance < 0.0d)
             throw new ConfigurationException("crc_check_chance should be between 0.0 to 1.0");
-    }
-
-    public Map<CharSequence, CharSequence> asAvroOptions()
-    {
-        Map<CharSequence, CharSequence> options = new HashMap<CharSequence, CharSequence>();
-        for (Map.Entry<String, String> entry : otherOptions.entrySet())
-            options.put(new Utf8(entry.getKey()), new Utf8(entry.getValue()));
-
-        if (sstableCompressor == null)
-            return options;
-
-        options.put(new Utf8(SSTABLE_COMPRESSION), new Utf8(sstableCompressor.getClass().getName()));
-        if (chunkLength != null)
-            options.put(new Utf8(CHUNK_LENGTH_KB), new Utf8(chunkLengthInKB()));
-        return options;
     }
 
     public Map<String, String> asThriftOptions()

@@ -1,6 +1,4 @@
-package org.apache.cassandra.cache;
 /*
- * 
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -8,17 +6,16 @@ package org.apache.cassandra.cache;
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * 
- *   http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- * 
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
+package org.apache.cassandra.cache;
 
 import java.util.Set;
 
@@ -49,7 +46,7 @@ public class ConcurrentLinkedHashCache<K, V> implements ICache<K, V>
      *
      * @return initialized cache
      */
-    public static <K, V> ConcurrentLinkedHashCache<K, V> create(int capacity)
+    public static <K, V> ConcurrentLinkedHashCache<K, V> create(long capacity)
     {
         return create(capacity, Weighers.<V>singleton());
     }
@@ -65,11 +62,10 @@ public class ConcurrentLinkedHashCache<K, V> implements ICache<K, V>
      *
      * @return initialized cache
      */
-    public static <K, V> ConcurrentLinkedHashCache<K, V> create(int weightedCapacity, Weigher<V> weigher)
+    public static <K, V> ConcurrentLinkedHashCache<K, V> create(long weightedCapacity, Weigher<V> weigher)
     {
         ConcurrentLinkedHashMap<K, V> map = new ConcurrentLinkedHashMap.Builder<K, V>()
                                             .weigher(weigher)
-                                            .initialCapacity(0)
                                             .maximumWeightedCapacity(weightedCapacity)
                                             .concurrencyLevel(DEFAULT_CONCURENCY_LEVEL)
                                             .build();
@@ -77,12 +73,12 @@ public class ConcurrentLinkedHashCache<K, V> implements ICache<K, V>
         return new ConcurrentLinkedHashCache<K, V>(map);
     }
 
-    public int capacity()
+    public long capacity()
     {
         return map.capacity();
     }
 
-    public void setCapacity(int capacity)
+    public void setCapacity(long capacity)
     {
         map.setCapacity(capacity);
     }
@@ -97,7 +93,7 @@ public class ConcurrentLinkedHashCache<K, V> implements ICache<K, V>
         return map.size();
     }
 
-    public int weightedSize()
+    public long weightedSize()
     {
         return map.weightedSize();
     }
@@ -115,6 +111,16 @@ public class ConcurrentLinkedHashCache<K, V> implements ICache<K, V>
     public void put(K key, V value)
     {
         map.put(key, value);
+    }
+
+    public boolean putIfAbsent(K key, V value)
+    {
+        return map.putIfAbsent(key, value) == null;
+    }
+
+    public boolean replace(K key, V old, V value)
+    {
+        return map.replace(key, old, value);
     }
 
     public void remove(K key)

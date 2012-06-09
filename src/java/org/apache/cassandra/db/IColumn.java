@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,11 +15,9 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.cassandra.db;
 
 import java.nio.ByteBuffer;
-import java.security.MessageDigest;
 import java.util.Collection;
 
 import org.apache.cassandra.config.CFMetaData;
@@ -29,16 +27,21 @@ import org.apache.cassandra.utils.Allocator;
 import org.apache.cassandra.utils.FBUtilities;
 
 /** TODO: rename */
-public interface IColumn
+public interface IColumn extends OnDiskAtom
 {
     public static final int MAX_NAME_LENGTH = FBUtilities.MAX_UNSIGNED_SHORT;
 
+    /**
+     * @return true if the column has been deleted (is a tombstone).  This depends on comparing the server clock
+     * with getLocalDeletionTime, so it can change during a single request if you're not careful.
+     */
     public boolean isMarkedForDelete();
+
     public long getMarkedForDeleteAt();
     public long mostRecentLiveChangeAt();
-    public ByteBuffer name();
-    public int size();
-    public int serializedSize();
+    public long mostRecentNonGCableChangeAt(int gcbefore);
+    /** the size of user-provided data, not including internal overhead */
+    public int dataSize();
     public int serializationFlags();
     public long timestamp();
     public ByteBuffer value();
@@ -49,9 +52,7 @@ public interface IColumn
     public IColumn diff(IColumn column);
     public IColumn reconcile(IColumn column);
     public IColumn reconcile(IColumn column, Allocator allocator);
-    public void updateDigest(MessageDigest digest);
-    public int getLocalDeletionTime(); // for tombstone GC, so int is sufficient granularity
-    public String getString(AbstractType comparator);
+    public String getString(AbstractType<?> comparator);
     public void validateFields(CFMetaData metadata) throws MarshalException;
 
     /** clones the column for the row cache, interning column names and making copies of other underlying byte buffers */
@@ -75,10 +76,4 @@ public interface IColumn
      * @return true if the column or any its subcolumns expired before @param gcBefore
      */
     public boolean hasExpiredTombstones(int gcBefore);
-
-    /**
-     * For a standard column, this is the same as timestamp().
-     * For a super column, this is the max column timestamp of the sub columns.
-     */
-    public long maxTimestamp();
 }

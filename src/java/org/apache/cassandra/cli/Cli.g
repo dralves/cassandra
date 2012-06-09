@@ -79,6 +79,8 @@ tokens {
     PAIR;
 
     NODE_LIMIT;
+    NODE_COLUMNS;
+    NODE_REVERSED;
     NODE_KEY_RANGE;
 }
 
@@ -117,16 +119,7 @@ package org.apache.cassandra.cli;
 {
     public void reportError(RecognitionException e) 
     {
-        String errorMessage;
-
-        if (e instanceof NoViableAltException)
-        {
-            errorMessage = "Command not found: `" + this.input + "`. Type 'help;' or '?' for help.";
-        }
-        else
-        {
-            errorMessage = "Syntax error at position " + e.charPositionInLine + ": " + this.getErrorMessage(e, this.getTokenNames());
-        }
+        String errorMessage = "Syntax error at position " + e.charPositionInLine + ": " + this.getErrorMessage(e, this.getTokenNames());
 
         throw new RuntimeException(errorMessage);
     }
@@ -291,8 +284,8 @@ showStatement
     ;
 
 listStatement
-    : LIST columnFamily keyRangeExpr? ('LIMIT' limit=IntegerPositiveLiteral)?
-        -> ^(NODE_LIST columnFamily keyRangeExpr? ^(NODE_LIMIT $limit)?)
+    : LIST columnFamily keyRangeExpr? rowLimitExpr? columnLimitExpr?
+        -> ^(NODE_LIST columnFamily keyRangeExpr? rowLimitExpr? columnLimitExpr?)
     ;
 
 truncateStatement
@@ -301,8 +294,8 @@ truncateStatement
     ;
 
 assumeStatement
-    : ASSUME columnFamily assumptionElement=Identifier 'AS' defaultType=Identifier
-        -> ^(NODE_ASSUME columnFamily $assumptionElement $defaultType)
+    : ASSUME columnFamily assumptionElement=Identifier 'AS' entityName
+        -> ^(NODE_ASSUME columnFamily $assumptionElement entityName)
     ;
 
 consistencyLevelStatement
@@ -426,6 +419,21 @@ columnFamilyExpr
 keyRangeExpr
     :    '[' ( startKey=entityName? ':' endKey=entityName? )? ']'
       -> ^(NODE_KEY_RANGE $startKey? $endKey?)
+    ;
+
+rowLimitExpr
+    : 'LIMIT' limit=IntegerPositiveLiteral
+        -> ^(NODE_LIMIT $limit)
+    ;
+
+columnLimitExpr
+    : 'COLUMNS' columns=IntegerPositiveLiteral reversedExpr?
+        -> ^(NODE_COLUMNS $columns reversedExpr?)
+    ;
+
+reversedExpr
+    : 'REVERSED'
+        -> ^(NODE_REVERSED)
     ;
 
 columnName
@@ -613,7 +621,9 @@ IntegerNegativeLiteral
    ;
    
 DoubleLiteral
-   : Digit+ '.' Digit+;
+   : Digit+ ('.' Digit+)?
+   | ' ' '.' Digit+
+   ;
 
 Identifier
     : (Letter | Alnum) (Alnum | '_' | '-' )*

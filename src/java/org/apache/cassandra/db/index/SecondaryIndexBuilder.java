@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -37,7 +37,7 @@ public class SecondaryIndexBuilder extends CompactionInfo.Holder
     private final ColumnFamilyStore cfs;
     private final SortedSet<ByteBuffer> columns;
     private final ReducingKeyIterator iter;
-    
+
     public SecondaryIndexBuilder(ColumnFamilyStore cfs, SortedSet<ByteBuffer> columns, ReducingKeyIterator iter)
     {
         this.cfs = cfs;
@@ -47,10 +47,7 @@ public class SecondaryIndexBuilder extends CompactionInfo.Holder
 
     public CompactionInfo getCompactionInfo()
     {
-        return new CompactionInfo(this.hashCode(),
-                                  cfs.table.name,
-                                  cfs.columnFamily,
-                                  OperationType.INDEX_BUILD,
+        return new CompactionInfo(OperationType.INDEX_BUILD,
                                   iter.getBytesRead(),
                                   iter.getTotalBytes());
     }
@@ -59,9 +56,9 @@ public class SecondaryIndexBuilder extends CompactionInfo.Holder
     {
         while (iter.hasNext())
         {
-            if (isStopped())
+            if (isStopRequested())
                 throw new CompactionInterruptedException(getCompactionInfo());
-            DecoratedKey<?> key = iter.next();
+            DecoratedKey key = iter.next();
             Table.indexRow(key, cfs, columns);
         }
 

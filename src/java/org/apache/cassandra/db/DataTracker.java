@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -7,20 +7,17 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-
 package org.apache.cassandra.db;
 
 import java.io.File;
-import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
@@ -31,27 +28,24 @@ import com.google.common.collect.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.cache.AutoSavingCache;
-import org.apache.cassandra.cache.KeyCacheKey;
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.notifications.INotification;
 import org.apache.cassandra.notifications.INotificationConsumer;
 import org.apache.cassandra.notifications.SSTableAddedNotification;
 import org.apache.cassandra.notifications.SSTableListChangedNotification;
 import org.apache.cassandra.service.StorageService;
-import org.apache.cassandra.utils.IntervalTree.Interval;
-import org.apache.cassandra.utils.IntervalTree.IntervalTree;
+import org.apache.cassandra.utils.Interval;
+import org.apache.cassandra.utils.IntervalTree;
 import org.apache.cassandra.utils.WrappedRunnable;
 
 public class DataTracker
 {
     private static final Logger logger = LoggerFactory.getLogger(DataTracker.class);
 
-    public Collection<INotificationConsumer> subscribers = new CopyOnWriteArrayList<INotificationConsumer>();
-
+    public final Collection<INotificationConsumer> subscribers = new CopyOnWriteArrayList<INotificationConsumer>();
     public final ColumnFamilyStore cfstore;
-
     private final AtomicReference<View> view;
 
     // On disk live and total size
@@ -169,10 +163,7 @@ public class DataTracker
         {
             protected void runMayThrow() throws Exception
             {
-                File keyspaceDir = new File(sstable.getFilename()).getParentFile();
-                File backupsDir = new File(keyspaceDir, "backups");
-                if (!backupsDir.exists() && !backupsDir.mkdirs())
-                    throw new IOException("Unable to create " + backupsDir);
+                File backupsDir = Directories.getBackupsDirectory(sstable.descriptor);
                 sstable.createLinks(backupsDir.getCanonicalPath());
             }
         };
@@ -247,16 +238,16 @@ public class DataTracker
         while (!view.compareAndSet(currentView, newView));
     }
 
-    public void markCompacted(Collection<SSTableReader> sstables)
+    public void markCompacted(Collection<SSTableReader> sstables, OperationType compactionType)
     {
         replace(sstables, Collections.<SSTableReader>emptyList());
-        notifySSTablesChanged(sstables, Collections.<SSTableReader>emptyList());
+        notifySSTablesChanged(sstables, Collections.<SSTableReader>emptyList(), compactionType);
     }
 
-    public void replaceCompactedSSTables(Collection<SSTableReader> sstables, Iterable<SSTableReader> replacements)
+    public void replaceCompactedSSTables(Collection<SSTableReader> sstables, Iterable<SSTableReader> replacements, OperationType compactionType)
     {
         replace(sstables, replacements);
-        notifySSTablesChanged(sstables, replacements);
+        notifySSTablesChanged(sstables, replacements, compactionType);
     }
 
     public void addInitialSSTables(Collection<SSTableReader> sstables)
@@ -296,7 +287,7 @@ public class DataTracker
             // notifySSTablesChanged -> LeveledManifest.promote doesn't like a no-op "promotion"
             return;
         }
-        notifySSTablesChanged(notCompacting, Collections.<SSTableReader>emptySet());
+        notifySSTablesChanged(notCompacting, Collections.<SSTableReader>emptySet(), OperationType.UNKNOWN);
         postReplace(notCompacting, Collections.<SSTableReader>emptySet());
     }
 
@@ -307,7 +298,7 @@ public class DataTracker
                           Collections.<Memtable>emptySet(),
                           Collections.<SSTableReader>emptyList(),
                           Collections.<SSTableReader>emptySet(),
-                          new IntervalTree()));
+                          SSTableIntervalTree.empty()));
     }
 
     private void replace(Collection<SSTableReader> oldSSTables, Iterable<SSTableReader> replacements)
@@ -528,11 +519,11 @@ public class DataTracker
         return (double) falseCount / (trueCount + falseCount);
     }
 
-    public void notifySSTablesChanged(Iterable<SSTableReader> removed, Iterable<SSTableReader> added)
+    public void notifySSTablesChanged(Iterable<SSTableReader> removed, Iterable<SSTableReader> added, OperationType compactionType)
     {
         for (INotificationConsumer subscriber : subscribers)
         {
-            INotification notification = new SSTableListChangedNotification(added, removed);
+            INotification notification = new SSTableListChangedNotification(added, removed, compactionType);
             subscriber.handleNotification(notification, this);
         }
     }
@@ -557,6 +548,29 @@ public class DataTracker
         assert found : consumer + " not subscribed";
     }
 
+    public static SSTableIntervalTree buildIntervalTree(Iterable<SSTableReader> sstables)
+    {
+        List<Interval<RowPosition, SSTableReader>> intervals = new ArrayList<Interval<RowPosition, SSTableReader>>(Iterables.size(sstables));
+        for (SSTableReader sstable : sstables)
+            intervals.add(Interval.<RowPosition, SSTableReader>create(sstable.first, sstable.last, sstable));
+        return new SSTableIntervalTree(intervals);
+    }
+
+    public static class SSTableIntervalTree extends IntervalTree<RowPosition, SSTableReader, Interval<RowPosition, SSTableReader>>
+    {
+        private static final SSTableIntervalTree EMPTY = new SSTableIntervalTree(null);
+
+        private SSTableIntervalTree(Collection<Interval<RowPosition, SSTableReader>> intervals)
+        {
+            super(intervals, null);
+        }
+
+        public static SSTableIntervalTree empty()
+        {
+            return EMPTY;
+        }
+    };
+
     /**
      * An immutable structure holding the current memtable, the memtables pending
      * flush, the sstables for a column family, and the sstables that are active
@@ -573,9 +587,9 @@ public class DataTracker
         // Obviously, dropping sstables whose max column timestamp happens to be equal to another's
         // is not acceptable for us.  So, we use a List instead.
         public final List<SSTableReader> sstables;
-        public final IntervalTree<SSTableReader> intervalTree;
+        public final SSTableIntervalTree intervalTree;
 
-        View(Memtable memtable, Set<Memtable> pendingFlush, List<SSTableReader> sstables, Set<SSTableReader> compacting, IntervalTree<SSTableReader> intervalTree)
+        View(Memtable memtable, Set<Memtable> pendingFlush, List<SSTableReader> sstables, Set<SSTableReader> compacting, SSTableIntervalTree intervalTree)
         {
             this.memtable = memtable;
             this.memtablesPendingFlush = pendingFlush;
@@ -587,14 +601,6 @@ public class DataTracker
         public Sets.SetView<SSTableReader> nonCompactingSStables()
         {
             return Sets.difference(ImmutableSet.copyOf(sstables), compacting);
-        }
-
-        private IntervalTree buildIntervalTree(List<SSTableReader> sstables)
-        {
-            List<Interval> intervals = new ArrayList<Interval>(sstables.size());
-            for (SSTableReader sstable : sstables)
-                intervals.add(new Interval<SSTableReader>(sstable.first, sstable.last, sstable));
-            return new IntervalTree<SSTableReader>(intervals);
         }
 
         public View switchMemtable(Memtable newMemtable)
@@ -612,14 +618,14 @@ public class DataTracker
         {
             Set<Memtable> newPending = ImmutableSet.copyOf(Sets.difference(memtablesPendingFlush, Collections.singleton(flushedMemtable)));
             List<SSTableReader> newSSTables = newSSTables(newSSTable);
-            IntervalTree intervalTree = buildIntervalTree(newSSTables);
+            SSTableIntervalTree intervalTree = buildIntervalTree(newSSTables);
             return new View(memtable, newPending, Collections.unmodifiableList(newSSTables), compacting, intervalTree);
         }
 
         public View replace(Collection<SSTableReader> oldSSTables, Iterable<SSTableReader> replacements)
         {
             List<SSTableReader> newSSTables = newSSTables(oldSSTables, replacements);
-            IntervalTree intervalTree = buildIntervalTree(newSSTables);
+            SSTableIntervalTree intervalTree = buildIntervalTree(newSSTables);
             return new View(memtable, memtablesPendingFlush, Collections.unmodifiableList(newSSTables), compacting, intervalTree);
         }
 

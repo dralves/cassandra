@@ -1,6 +1,6 @@
 package org.apache.cassandra.stress.operations;
 /*
- * 
+ *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -8,16 +8,16 @@ package org.apache.cassandra.stress.operations;
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * 
+ *
  *   http://www.apache.org/licenses/LICENSE-2.0
- * 
+ *
  * Unless required by applicable law or agreed to in writing,
  * software distributed under the License is distributed on an
  * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
  * KIND, either express or implied.  See the License for the
  * specific language governing permissions and limitations
  * under the License.
- * 
+ *
  */
 
 
@@ -68,21 +68,21 @@ public class CqlInserter extends Operation
             cqlQuery = query.toString();
         }
 
-        List<String> queryParms = new ArrayList<String>();
+        List<ByteBuffer> queryParms = new ArrayList<ByteBuffer>();
         for (int i = 0; i < session.getColumnsPerKey(); i++)
         {
             // Column name
             if (session.timeUUIDComparator)
-                queryParms.add(UUIDGen.makeType1UUIDFromHost(Session.getLocalAddress()).toString());
+                queryParms.add(ByteBuffer.wrap(UUIDGen.makeType1UUIDFromHost(Session.getLocalAddress()).toString().getBytes()));
             else
-                queryParms.add("C" + i);
+                queryParms.add(ByteBuffer.wrap(new String("C" + i).getBytes()));
 
             // Column value
-            queryParms.add(getUnQuotedCqlBlob(values.get(i % values.size()).array()));
+            queryParms.add(ByteBuffer.wrap(new String(getUnQuotedCqlBlob(values.get(i % values.size()).array())).getBytes()));
         }
 
         String key = String.format("%0" + session.getTotalKeysLength() + "d", index);
-        queryParms.add(getUnQuotedCqlBlob(key));
+        queryParms.add(ByteBuffer.wrap(new String(getUnQuotedCqlBlob(key)).getBytes()));
 
         String formattedQuery = null;
 

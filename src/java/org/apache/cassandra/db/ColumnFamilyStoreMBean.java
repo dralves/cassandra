@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,11 +15,10 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.cassandra.db;
 
-import java.io.IOException;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.ExecutionException;
 
 import org.apache.cassandra.config.ConfigurationException;
@@ -143,20 +142,17 @@ public interface ColumnFamilyStoreMBean
     public void forceMajorCompaction() throws ExecutionException, InterruptedException;
 
     /**
-     * return the size of the smallest compacted row
-     * @return
+     * @return the size of the smallest compacted row
      */
     public long getMinRowSize();
 
     /**
-     * return the size of the largest compacted row
-     * @return
+     * @return the size of the largest compacted row
      */
     public long getMaxRowSize();
 
     /**
-     * return the mean size of the rows compacted
-     * @return
+     * @return the size of the smallest compacted row
      */
     public long getMeanRowSize();
 
@@ -202,6 +198,17 @@ public interface ColumnFamilyStoreMBean
     public String getCompactionStrategyClass();
 
     /**
+     * Get the compression parameters
+     */
+    public Map<String,String> getCompressionParameters();
+
+    /**
+     * Set the compression parameters
+     * @param opts map of string names to values
+     */
+    public void setCompressionParameters(Map<String,String> opts) throws ConfigurationException;
+
+    /**
      * Disable automatic compaction.
      */
     public void disableAutoCompaction();
@@ -217,6 +224,13 @@ public interface ColumnFamilyStoreMBean
      * @return list of the index names
      */
     public List<String> getBuiltIndexes();
+
+    /**
+     * Returns a list of filenames that contain the given key on this node
+     * @param key
+     * @return list of filenames containing the key
+     */
+    public List<String> getSSTablesForKey(String key);
 
     /**
      * Scan through Keyspace/ColumnFamily's data directory

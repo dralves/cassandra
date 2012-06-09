@@ -23,14 +23,14 @@ import java.util.Collection;
 import org.junit.AfterClass;
 import org.junit.Test;
 
-import org.apache.cassandra.CleanupHelper;
+import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.db.filter.QueryPath;
 
-public class RowCacheTest extends CleanupHelper
+public class RowCacheTest extends SchemaLoader
 {
     private String KEYSPACE = "RowCacheSpace";
     private String COLUMN_FAMILY = "CachedCF";
@@ -66,7 +66,7 @@ public class RowCacheTest extends CleanupHelper
 
             cachedStore.getColumnFamily(key, path, ByteBufferUtil.EMPTY_BYTE_BUFFER, ByteBufferUtil.EMPTY_BYTE_BUFFER, false, 1);
             assert CacheService.instance.rowCache.size() == i + 1;
-            assert cachedStore.getRawCachedRow(key) != null; // current key should be stored in the cache
+            assert cachedStore.containsCachedRow(key); // current key should be stored in the cache
 
             // checking if column is read correctly after cache
             ColumnFamily cf = cachedStore.getColumnFamily(key, path, ByteBufferUtil.EMPTY_BYTE_BUFFER, ByteBufferUtil.EMPTY_BYTE_BUFFER, false, 1);
@@ -88,7 +88,7 @@ public class RowCacheTest extends CleanupHelper
             QueryPath path = new QueryPath(COLUMN_FAMILY, null, ByteBufferUtil.bytes("col" + i));
 
             cachedStore.getColumnFamily(key, path, ByteBufferUtil.EMPTY_BYTE_BUFFER, ByteBufferUtil.EMPTY_BYTE_BUFFER, false, 1);
-            assert cachedStore.getRawCachedRow(key) != null; // cache should be populated with the latest rows read (old ones should be popped)
+            assert cachedStore.containsCachedRow(key); // cache should be populated with the latest rows read (old ones should be popped)
 
             // checking if column is read correctly after cache
             ColumnFamily cf = cachedStore.getColumnFamily(key, path, ByteBufferUtil.EMPTY_BYTE_BUFFER, ByteBufferUtil.EMPTY_BYTE_BUFFER, false, 1);
@@ -153,6 +153,6 @@ public class RowCacheTest extends CleanupHelper
         // empty the cache again to make sure values came from disk
         CacheService.instance.invalidateRowCache();
         assert CacheService.instance.rowCache.size() == 0;
-        assert CacheService.instance.rowCache.readSaved(KEYSPACE, COLUMN_FAMILY).size() == (keysToSave == Integer.MAX_VALUE ? totalKeys : keysToSave);
+        assert CacheService.instance.rowCache.loadSaved(store) == (keysToSave == Integer.MAX_VALUE ? totalKeys : keysToSave);
     }
 }

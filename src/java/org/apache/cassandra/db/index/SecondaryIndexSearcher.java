@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -22,17 +22,15 @@ import java.util.*;
 
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.filter.IFilter;
-import org.apache.cassandra.db.filter.NamesQueryFilter;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.thrift.IndexExpression;
-import org.apache.cassandra.thrift.IndexOperator;
 
 public abstract class SecondaryIndexSearcher
 {
-    protected SecondaryIndexManager    indexManager;
-    protected Set<ByteBuffer> columns;
-    protected ColumnFamilyStore baseCfs;
-    
+    protected final SecondaryIndexManager    indexManager;
+    protected final Set<ByteBuffer> columns;
+    protected final ColumnFamilyStore baseCfs;
+
     public SecondaryIndexSearcher(SecondaryIndexManager indexManager, Set<ByteBuffer> columns)
     {
         this.indexManager = indexManager;
@@ -40,7 +38,7 @@ public abstract class SecondaryIndexSearcher
         this.baseCfs = indexManager.baseCfs;
     }
 
-    public abstract List<Row> search(List<IndexExpression> clause, AbstractBounds<RowPosition> range, int maxResults, IFilter dataFilter);
+    public abstract List<Row> search(List<IndexExpression> clause, AbstractBounds<RowPosition> range, int maxResults, IFilter dataFilter, boolean maxIsColumns);
 
     /**
      * @return true this index is able to handle given clauses.
