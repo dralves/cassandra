@@ -739,16 +739,31 @@ public class StorageProxy implements StorageProxyMBean
         List<AbstractBounds> ranges = getRestrictedRanges(new Bounds(leftToken, p.getMinimumToken()));
         logger.debug("scan ranges are " + StringUtils.join(ranges, ","));
 
+        //get the cardinality of this index based on row count
+        //use this info to decide how many scans to do in parallel
+        long estimatedKeys   = Table.open(keyspace).getColumnFamilyStore(column_family).estimateKeys();
+        int  concurrencyFactor = (int) index_clause.count / ((int)estimatedKeys + 1);
+
+        if (concurrencyFactor <= 0)
+            concurrencyFactor = 1;
+        
+        if (concurrencyFactor > ranges.size())
+            concurrencyFactor = ranges.size();
+              
         // now scan until we have enough results
         List<Row> rows = new ArrayList<Row>(index_clause.count);
+        
+        List<ReadCallback<List<Row>>> scanHandlers = new ArrayList<ReadCallback<List<Row>>>(concurrencyFactor);
+        
         for (AbstractBounds range : ranges)
         {
+                   
             List<InetAddress> liveEndpoints = StorageService.instance.getLiveNaturalEndpoints(keyspace, range.right);
             DatabaseDescriptor.getEndpointSnitch().sortByProximity(FBUtilities.getLocalAddress(), liveEndpoints);
 
             // collect replies and resolve according to consistency level
             RangeSliceResponseResolver resolver = new RangeSliceResponseResolver(keyspace, liveEndpoints);
-            AbstractReplicationStrategy rs = Table.open(keyspace).getReplicationStrategy();
+            AbstractReplicationStrategy  rs = Table.open(keyspace).getReplicationStrategy();
             ReadCallback<List<Row>> handler = getReadCallback(resolver, keyspace, consistency_level);
             
             // bail early if live endpoints can't satisfy requested consistency level
@@ -764,25 +779,38 @@ public class StorageProxy implements StorageProxyMBean
                     logger.debug("reading " + command + " from " + message.getMessageId() + "@" + endpoint);
             }
 
-            List<Row> theseRows;
-            try
+            scanHandlers.add(handler);
+        
+            if (scanHandlers.size() >= concurrencyFactor)
             {
-                theseRows = handler.get();
+                for (ReadCallback<List<Row>> scanHandler : scanHandlers)
+                {
+                
+                    List<Row> theseRows;
+                    try
+                    {
+                        theseRows = handler.get();
+                    }
+                    catch (DigestMismatchException e)
+                    {
+                        throw new RuntimeException(e);
+                    }
+                    rows.addAll(theseRows);
+                    if (logger.isDebugEnabled())
+                    {
+                        for (Row row : theseRows)
+                            logger.debug("read " + row);
+                    }
+                    
+                    //met our goal
+                    if (rows.size() >= index_clause.count)
+                        return rows.subList(0, index_clause.count);
+                }
+                     
+                scanHandlers.clear(); //go back for more
             }
-            catch (DigestMismatchException e)
-            {
-                throw new RuntimeException(e);
-            }
-            rows.addAll(theseRows);
-            if (logger.isDebugEnabled())
-            {
-                for (Row row : theseRows)
-                    logger.debug("read " + row);
-            }
-            if (rows.size() >= index_clause.count)
-                return rows.subList(0, index_clause.count);
         }
-
+        
         return rows;
     }
 
