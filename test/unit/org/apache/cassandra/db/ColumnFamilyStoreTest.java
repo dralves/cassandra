@@ -34,6 +34,8 @@ import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
+import java.text.DecimalFormat;
+import java.text.NumberFormat;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
@@ -51,6 +53,7 @@ import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.config.ConfigurationException;
+import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.columniterator.ColumnSlice;
 import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
 import org.apache.cassandra.db.filter.IFilter;
@@ -1039,10 +1042,12 @@ public class ColumnFamilyStoreTest extends SchemaLoader
         return k;
     }
     
-    @SuppressWarnings("unchecked")
     @Test
     public void testMultiRangeIndexed() throws Throwable
     {
+        
+        assert DatabaseDescriptor.getColumnIndexSize() == 4096 : "Unexpected column index size, block boundaries won't be where tests expect them.";
+        
         // in order not to change thrift interfaces at this stage we build SliceQueryFilter
         // directly instead of using QueryFilter to build it for us
         ColumnSlice[] ranges = new ColumnSlice[] {
@@ -1098,7 +1103,6 @@ public class ColumnFamilyStoreTest extends SchemaLoader
         findRowGetSlicesAndAssertColsFound(cfs, multiRangeForwardWithCounting, "a", "colA", "colC", "colD");
         findRowGetSlicesAndAssertColsFound(cfs, multiRangeReverse, "a", "colI", "colG", "colE", "colD", "colC", "colA");
         findRowGetSlicesAndAssertColsFound(cfs, multiRangeReverseWithCounting, "a", "colI", "colG", "colE");
-
     }
 
     @Test
@@ -1117,6 +1121,8 @@ public class ColumnFamilyStoreTest extends SchemaLoader
 
     private ColumnFamilyStore prepareMultiRangeSlicesTest(int valueSize) throws Throwable
     {
+        assert DatabaseDescriptor.getColumnIndexSize() == 4096 : "Unexpected column index size, block boundaries won't be where tests expect them.";
+        
         String tableName = "Keyspace1";
         String cfName = "Standard1";
         Table table = Table.open(tableName);
