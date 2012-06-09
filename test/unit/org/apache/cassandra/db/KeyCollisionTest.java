@@ -19,15 +19,13 @@
 package org.apache.cassandra.db;
 
 import java.io.IOException;
-import java.math.BigDecimal;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
-import java.nio.charset.CharacterCodingException;
 import java.util.*;
 
 import org.junit.Test;
 
-import org.apache.cassandra.CleanupHelper;
+import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
 import org.apache.cassandra.db.filter.QueryPath;
 import org.apache.cassandra.dht.*;
@@ -44,7 +42,7 @@ import static org.apache.cassandra.Util.dk;
  * length partitioner that takes the length of the key as token, making
  * collision easy and predictable.
  */
-public class KeyCollisionTest extends CleanupHelper
+public class KeyCollisionTest extends SchemaLoader
 {
     IPartitioner oldPartitioner;
     private static final String KEYSPACE = "Keyspace1";
@@ -101,12 +99,12 @@ public class KeyCollisionTest extends CleanupHelper
 
         private static final byte DELIMITER_BYTE = ":".getBytes()[0];
 
-        public DecoratedKey<BigIntegerToken> decorateKey(ByteBuffer key)
+        public DecoratedKey decorateKey(ByteBuffer key)
         {
-            return new DecoratedKey<BigIntegerToken>(getToken(key), key);
+            return new DecoratedKey(getToken(key), key);
         }
 
-        public DecoratedKey<BigIntegerToken> convertFromDiskFormat(ByteBuffer fromdisk)
+        public DecoratedKey convertFromDiskFormat(ByteBuffer fromdisk)
         {
             throw new UnsupportedOperationException();
         }

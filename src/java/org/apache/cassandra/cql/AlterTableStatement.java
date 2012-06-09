@@ -1,5 +1,4 @@
 /*
- *
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -8,23 +7,21 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package org.apache.cassandra.cql;
 
-import org.apache.avro.util.Utf8;
 import org.apache.cassandra.config.*;
 import org.apache.cassandra.db.marshal.TypeParser;
-import org.apache.cassandra.db.migration.avro.CfDef;
-import org.apache.cassandra.db.migration.avro.ColumnDef;
+import org.apache.cassandra.io.compress.CompressionParameters;
+import org.apache.cassandra.thrift.CfDef;
+import org.apache.cassandra.thrift.ColumnDef;
 import org.apache.cassandra.thrift.InvalidRequestException;
 
 import java.nio.ByteBuffer;
@@ -68,11 +65,10 @@ public class AlterTableStatement
         }
     }
 
-    public CfDef getCfDef(String keyspace) throws ConfigurationException, InvalidRequestException
+    public CFMetaData getCFMetaData(String keyspace) throws ConfigurationException, InvalidRequestException
     {
         CFMetaData meta = Schema.instance.getCFMetaData(keyspace, columnFamily);
-
-        CfDef cfDef = meta.toAvro();
+        CFMetaData cfm = meta.clone();
 
         ByteBuffer columnName = this.oType == OperationType.OPTS ? null
                                                                  : meta.comparator.fromString(this.columnName);
@@ -80,35 +76,50 @@ public class AlterTableStatement
         switch (oType)
         {
             case ADD:
-                if (cfDef.key_alias != null && cfDef.key_alias.equals(columnName))
+                if (cfm.getKeyAlias() != null && cfm.getKeyAlias().equals(columnName))
                     throw new InvalidRequestException("Invalid column name: "
                                                       + this.columnName
                                                       + ", because it equals to key_alias.");
 
-                cfDef.column_metadata.add(new ColumnDefinition(columnName,
-                                                               TypeParser.parse(validator),
-                                                               null,
-                                                               null,
-                                                               null).toAvro());
+                cfm.addColumnDefinition(new ColumnDefinition(columnName,
+                                                             TypeParser.parse(validator),
+                                                             null,
+                                                             null,
+                                                             null,
+                                                             null));
                 break;
 
             case ALTER:
-                ColumnDefinition column = meta.getColumnDefinition(columnName);
+                if (cfm.getKeyAlias() != null && cfm.getKeyAlias().equals(columnName))
+                {
+                    cfm.keyValidator(TypeParser.parse(validator));
+                }
+                else
+                {
+                    ColumnDefinition toUpdate = null;
 
-                if (column == null)
-                    throw new InvalidRequestException(String.format("Column '%s' was not found in CF '%s'",
-                                                                    this.columnName,
-                                                                    columnFamily));
+                    for (ColumnDefinition columnDef : cfm.getColumn_metadata().values())
+                    {
+                        if (columnDef.name.equals(columnName))
+                        {
+                            toUpdate = columnDef;
+                            break;
+                        }
+                    }
 
-                column.setValidator(TypeParser.parse(validator));
+                    if (toUpdate == null)
+                        throw new InvalidRequestException(String.format("Column '%s' was not found in CF '%s'",
+                                    this.columnName,
+                                    columnFamily));
 
-                cfDef.column_metadata.add(column.toAvro());
+                    toUpdate.setValidator(TypeParser.parse(validator));
+                }
                 break;
 
             case DROP:
-                ColumnDef toDelete = null;
+                ColumnDefinition toDelete = null;
 
-                for (ColumnDef columnDef : cfDef.column_metadata)
+                for (ColumnDefinition columnDef : cfm.getColumn_metadata().values())
                 {
                     if (columnDef.name.equals(columnName))
                     {
@@ -121,10 +132,7 @@ public class AlterTableStatement
                                                                     this.columnName,
                                                                     columnFamily));
 
-                // it is impossible to use ColumnDefinition.deflate() in remove() method
-                // it will throw java.lang.ClassCastException: java.lang.String cannot be cast to org.apache.avro.util.Utf8
-                // some where deep inside of Avro
-                cfDef.column_metadata.remove(toDelete);
+                cfm.removeColumnDefinition(toDelete);
                 break;
 
             case OPTS:
@@ -132,11 +140,11 @@ public class AlterTableStatement
                     throw new InvalidRequestException(String.format("ALTER COLUMNFAMILY WITH invoked, but no parameters found"));
 
                 cfProps.validate();
-                applyPropertiesToCfDef(cfDef, cfProps);
+                applyPropertiesToCFMetadata(cfm, cfProps);
                 break;
         }
 
-        return cfDef;
+        return cfm;
     }
 
     public String toString()
@@ -148,7 +156,7 @@ public class AlterTableStatement
                              validator);
     }
 
-    public static void applyPropertiesToCfDef(CfDef cfDef, CFPropDefs cfProps) throws InvalidRequestException
+    public static void applyPropertiesToCFMetadata(CFMetaData cfm, CFPropDefs cfProps) throws InvalidRequestException, ConfigurationException
     {
         if (cfProps.hasProperty(CFPropDefs.KW_COMPARATOR))
         {
@@ -156,13 +164,13 @@ public class AlterTableStatement
         }
         if (cfProps.hasProperty(CFPropDefs.KW_COMMENT))
         {
-            cfDef.comment = new Utf8(cfProps.getProperty(CFPropDefs.KW_COMMENT));
+            cfm.comment(cfProps.getProperty(CFPropDefs.KW_COMMENT));
         }
         if (cfProps.hasProperty(CFPropDefs.KW_DEFAULTVALIDATION))
         {
             try
             {
-                cfDef.default_validation_class = new Utf8(cfProps.getValidator().toString());
+                cfm.defaultValidator(cfProps.getValidator());
             }
             catch (ConfigurationException e)
             {
@@ -171,28 +179,25 @@ public class AlterTableStatement
             }
         }
 
-        cfDef.read_repair_chance = cfProps.getPropertyDouble(CFPropDefs.KW_READREPAIRCHANCE, cfDef.read_repair_chance);
-        cfDef.gc_grace_seconds = cfProps.getPropertyInt(CFPropDefs.KW_GCGRACESECONDS, cfDef.gc_grace_seconds);
-        cfDef.replicate_on_write = cfProps.getPropertyBoolean(CFPropDefs.KW_REPLICATEONWRITE, cfDef.replicate_on_write);
-        cfDef.min_compaction_threshold = cfProps.getPropertyInt(CFPropDefs.KW_MINCOMPACTIONTHRESHOLD, cfDef.min_compaction_threshold);
-        cfDef.max_compaction_threshold = cfProps.getPropertyInt(CFPropDefs.KW_MAXCOMPACTIONTHRESHOLD, cfDef.max_compaction_threshold);
+        cfm.readRepairChance(cfProps.getPropertyDouble(CFPropDefs.KW_READREPAIRCHANCE, cfm.getReadRepairChance()));
+        cfm.dcLocalReadRepairChance(cfProps.getPropertyDouble(CFPropDefs.KW_DCLOCALREADREPAIRCHANCE, cfm.getDcLocalReadRepair()));
+        cfm.gcGraceSeconds(cfProps.getPropertyInt(CFPropDefs.KW_GCGRACESECONDS, cfm.getGcGraceSeconds()));
+        cfm.replicateOnWrite(cfProps.getPropertyBoolean(CFPropDefs.KW_REPLICATEONWRITE, cfm.getReplicateOnWrite()));
+        cfm.minCompactionThreshold(cfProps.getPropertyInt(CFPropDefs.KW_MINCOMPACTIONTHRESHOLD, cfm.getMinCompactionThreshold()));
+        cfm.maxCompactionThreshold(cfProps.getPropertyInt(CFPropDefs.KW_MAXCOMPACTIONTHRESHOLD, cfm.getMaxCompactionThreshold()));
+        cfm.caching(CFMetaData.Caching.fromString(cfProps.getPropertyString(CFPropDefs.KW_CACHING, cfm.getCaching().toString())));
+        cfm.bloomFilterFpChance(cfProps.getPropertyDouble(CFPropDefs.KW_BF_FP_CHANCE, cfm.getBloomFilterFpChance()));
 
         if (!cfProps.compactionStrategyOptions.isEmpty())
         {
-            cfDef.compaction_strategy_options = new HashMap<CharSequence, CharSequence>();
+            cfm.compactionStrategyOptions(new HashMap<String, String>());
             for (Map.Entry<String, String> entry : cfProps.compactionStrategyOptions.entrySet())
-            {
-                cfDef.compaction_strategy_options.put(new Utf8(entry.getKey()), new Utf8(entry.getValue()));
-            }
+                cfm.compactionStrategyOptions.put(entry.getKey(), entry.getValue());
         }
 
         if (!cfProps.compressionParameters.isEmpty())
         {
-            cfDef.compression_options = new HashMap<CharSequence, CharSequence>();
-            for (Map.Entry<String, String> entry : cfProps.compressionParameters.entrySet())
-            {
-                cfDef.compression_options.put(new Utf8(entry.getKey()), new Utf8(entry.getValue()));
-            }
+            cfm.compressionParameters(CompressionParameters.create(cfProps.compressionParameters));
         }
     }
 }

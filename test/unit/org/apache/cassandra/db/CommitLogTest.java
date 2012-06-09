@@ -21,19 +21,19 @@ package org.apache.cassandra.db;
 
 import java.io.*;
 import java.nio.ByteBuffer;
+import java.util.UUID;
 import java.util.zip.CRC32;
 import java.util.zip.Checksum;
 
 import org.junit.Test;
 
-import org.apache.cassandra.CleanupHelper;
+import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.db.commitlog.CommitLog;
-import org.apache.cassandra.db.commitlog.CommitLogSegment;
 import org.apache.cassandra.db.filter.QueryPath;
 
 import static org.apache.cassandra.utils.ByteBufferUtil.bytes;
 
-public class CommitLogTest extends CleanupHelper
+public class CommitLogTest extends SchemaLoader
 {
     @Test
     public void testRecoveryWithEmptyLog() throws Exception
@@ -75,7 +75,7 @@ public class CommitLogTest extends CleanupHelper
         checksum.update(100);
         testRecoveryWithBadSizeArgument(100, 100, ~checksum.getValue());
     }
-    
+
     @Test
     public void testRecoveryWithZeroSegmentSizeArgument() throws Exception
     {
@@ -112,8 +112,8 @@ public class CommitLogTest extends CleanupHelper
 
         assert CommitLog.instance.activeSegments() == 2 : "Expecting 2 segments, got " + CommitLog.instance.activeSegments();
 
-        int cfid2 = rm2.getColumnFamilyIds().iterator().next();
-        CommitLog.instance.discardCompletedSegments(cfid2, CommitLog.instance.getContext());
+        UUID cfid2 = rm2.getColumnFamilyIds().iterator().next();
+        CommitLog.instance.discardCompletedSegments(cfid2, CommitLog.instance.getContext().get());
 
         // Assert we still have both our segment
         assert CommitLog.instance.activeSegments() == 2 : "Expecting 2 segments, got " + CommitLog.instance.activeSegments();
@@ -134,8 +134,8 @@ public class CommitLogTest extends CleanupHelper
         assert CommitLog.instance.activeSegments() == 1 : "Expecting 1 segment, got " + CommitLog.instance.activeSegments();
 
         // "Flush": this won't delete anything
-        int cfid1 = rm.getColumnFamilyIds().iterator().next();
-        CommitLog.instance.discardCompletedSegments(cfid1, CommitLog.instance.getContext());
+        UUID cfid1 = rm.getColumnFamilyIds().iterator().next();
+        CommitLog.instance.discardCompletedSegments(cfid1, CommitLog.instance.getContext().get());
 
         assert CommitLog.instance.activeSegments() == 1 : "Expecting 1 segment, got " + CommitLog.instance.activeSegments();
 
@@ -152,8 +152,8 @@ public class CommitLogTest extends CleanupHelper
         // "Flush" second cf: The first segment should be deleted since we
         // didn't write anything on cf1 since last flush (and we flush cf2)
 
-        int cfid2 = rm2.getColumnFamilyIds().iterator().next();
-        CommitLog.instance.discardCompletedSegments(cfid2, CommitLog.instance.getContext());
+        UUID cfid2 = rm2.getColumnFamilyIds().iterator().next();
+        CommitLog.instance.discardCompletedSegments(cfid2, CommitLog.instance.getContext().get());
 
         // Assert we still have both our segment
         assert CommitLog.instance.activeSegments() == 1 : "Expecting 1 segment, got " + CommitLog.instance.activeSegments();
@@ -164,7 +164,7 @@ public class CommitLogTest extends CleanupHelper
     public void testExceedSegmentSizeWithOverhead() throws Exception
     {
         CommitLog.instance.resetUnsafe();
-        
+
         RowMutation rm = new RowMutation("Keyspace1", bytes("k"));
         rm.add(new QueryPath("Standard1", null, bytes("c1")), ByteBuffer.allocate((128 * 1024 * 1024) - 83), 0);
         CommitLog.instance.add(rm);

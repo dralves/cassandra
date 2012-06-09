@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.cassandra.streaming;
 
 import java.io.*;
@@ -56,6 +55,7 @@ public class IncomingStreamReader
 
     public IncomingStreamReader(StreamHeader header, Socket socket) throws IOException
     {
+        socket.setSoTimeout(DatabaseDescriptor.getStreamingSocketTimeout());
         this.socket = socket;
         InetAddress host = header.broadcastAddress != null ? header.broadcastAddress
                            : ((InetSocketAddress)socket.getRemoteSocketAddress()).getAddress();
@@ -123,8 +123,7 @@ public class IncomingStreamReader
                     key = SSTableReader.decodeKey(StorageService.getPartitioner(), localFile.desc, ByteBufferUtil.readWithShortLength(in));
                     long dataSize = SSTableReader.readRowSize(in, localFile.desc);
 
-                    ColumnFamily cached = cfs.getRawCachedRow(key);
-                    if (cached != null && remoteFile.type == OperationType.AES && dataSize <= DatabaseDescriptor.getInMemoryCompactionLimit())
+                    if (cfs.containsCachedRow(key) && remoteFile.type == OperationType.AES && dataSize <= DatabaseDescriptor.getInMemoryCompactionLimit())
                     {
                         // need to update row cache
                         // Note: Because we won't just echo the columns, there is no need to use the PRESERVE_SIZE flag, contrarily to what appendFromStream does below
@@ -133,8 +132,6 @@ public class IncomingStreamReader
                         // We don't expire anything so the row shouldn't be empty
                         assert !row.isEmpty();
                         writer.append(row);
-                        // row append does not update the max timestamp on its own
-                        writer.updateMaxTimestamp(row.maxTimestamp());
 
                         // update cache
                         ColumnFamily cf = row.getFullColumnFamily();

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.cassandra.tools;
 
 import java.io.File;
@@ -56,18 +55,16 @@ public class SSTableImport
     private static final String KEY_COUNT_OPTION = "n";
     private static final String IS_SORTED_OPTION = "s";
 
-    private static Options options;
+    private static final Options options = new Options();
     private static CommandLine cmd;
 
     private static Integer keyCountToImport = null;
     private static boolean isSorted = false;
 
-    private static JsonFactory factory = new MappingJsonFactory().configure(JsonParser.Feature.INTERN_FIELD_NAMES, false);
+    private static final JsonFactory factory = new MappingJsonFactory().configure(JsonParser.Feature.INTERN_FIELD_NAMES, false);
 
     static
     {
-        options = new Options();
-
         Option optKeyspace = new Option(KEYSPACE_OPTION, true, "Keyspace name.");
         optKeyspace.setRequired(true);
         options.addOption(optKeyspace);
@@ -98,7 +95,7 @@ public class SSTableImport
         {
             if (json instanceof List)
             {
-                AbstractType comparator = (isSubColumn) ? meta.subcolumnComparator : meta.comparator;
+                AbstractType<?> comparator = (isSubColumn) ? meta.subcolumnComparator : meta.comparator;
                 List fields = (List<?>) json;
 
                 assert fields.size() >= 3 : "Column definition should have at least 3";
@@ -116,7 +113,7 @@ public class SSTableImport
                         {
                             kind = "e";
                             ttl = (Integer) fields.get(4);
-                            localExpirationTime = (int) (long) ((Long) fields.get(5));
+                            localExpirationTime = (Integer) fields.get(5);
                         }
                         else
                         {
@@ -129,11 +126,15 @@ public class SSTableImport
                         if (isExpiring())
                         {
                             ttl = (Integer) fields.get(4);
-                            localExpirationTime = (int) (long) ((Long) fields.get(5));
+                            localExpirationTime = (Integer) fields.get(5);
                         }
                         else if (isCounter())
                         {
                             timestampOfLastDelete = (long) ((Integer) fields.get(4));
+                        }
+                        else if (isRangeTombstone())
+                        {
+                            localExpirationTime = (Integer) fields.get(4);
                         }
                     }
                 }
@@ -158,6 +159,11 @@ public class SSTableImport
             return kind.equals("c");
         }
 
+        public boolean isRangeTombstone()
+        {
+            return kind.equals("t");
+        }
+
         public ByteBuffer getName()
         {
             return name.duplicate();
@@ -176,7 +182,7 @@ public class SSTableImport
 
     /**
      * Add columns to a column family.
-     * 
+     *
      * @param row the columns associated with a row
      * @param superName name of the super column if any
      * @param cfamily the column family to add columns to
@@ -203,16 +209,20 @@ public class SSTableImport
             {
                 cfamily.addTombstone(path, col.getValue(), col.timestamp);
             }
+            else if (col.isRangeTombstone())
+            {
+                cfamily.addAtom(new RangeTombstone(col.getName(), col.getValue(), col.timestamp, col.localExpirationTime));
+            }
             else
             {
                 cfamily.addColumn(path, col.getValue(), col.timestamp);
             }
         }
     }
-    
+
     /**
      * Add super columns to a column family.
-     * 
+     *
      * @param row the super columns associated with a row
      * @param cfamily the column family to add columns to
      */
@@ -221,7 +231,7 @@ public class SSTableImport
         CFMetaData metaData = cfamily.metadata();
         assert metaData != null;
 
-        AbstractType comparator = metaData.comparator;
+        AbstractType<?> comparator = metaData.comparator;
 
         // Super columns
         for (Map.Entry<?, ?> entry : row.entrySet())
@@ -239,7 +249,7 @@ public class SSTableImport
 
     /**
      * Convert a JSON formatted file to an SSTable.
-     * 
+     *
      * @param jsonFile the file containing JSON formatted data
      * @param keyspace keyspace the data belongs to
      * @param cf column family the data belongs to
@@ -424,7 +434,7 @@ public class SSTableImport
     /**
      * Converts JSON to an SSTable file. JSON input can either be a file specified
      * using an optional command line argument, or supplied on standard in.
-     * 
+     *
      * @param args command line arguments
      * @throws IOException on failure to open/read/write files or output streams
      * @throws ParseException on failure to parse JSON input
@@ -516,7 +526,7 @@ public class SSTableImport
      * @param type type to use for conversion
      * @return byte buffer representation of the given string
      */
-    private static ByteBuffer stringAsType(String content, AbstractType type)
+    private static ByteBuffer stringAsType(String content, AbstractType<?> type)
     {
         try
         {

@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,13 +15,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.cassandra.db.compaction;
 
 import java.io.File;
 import java.io.IOException;
 import java.util.*;
-import java.util.Map.Entry;
 
 import com.google.common.base.Predicates;
 import com.google.common.collect.Iterators;
@@ -32,6 +30,7 @@ import org.apache.commons.lang.StringUtils;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.RowIndexEntry;
 import org.apache.cassandra.db.compaction.CompactionManager.CompactionExecutorStatsCollector;
 import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.SSTableReader;
@@ -43,14 +42,12 @@ public class CompactionTask extends AbstractCompactionTask
 {
     protected static final Logger logger = LoggerFactory.getLogger(CompactionTask.class);
     protected final int gcBefore;
-    protected boolean isUserDefined;
     protected static long totalBytesCompacted = 0;
 
     public CompactionTask(ColumnFamilyStore cfs, Collection<SSTableReader> sstables, final int gcBefore)
     {
         super(cfs, sstables);
         this.gcBefore = gcBefore;
-        this.isUserDefined = false;
     }
 
     public static synchronized long addToTotalBytesCompacted(long bytesCompacted)
@@ -73,36 +70,29 @@ public class CompactionTask extends AbstractCompactionTask
         if (!isCompactionInteresting(toCompact))
             return 0;
 
-        // If use defined, we don't want to "trust" our space estimation. If
-        // there isn't enough room, it's the user problem
-        long expectedSize = isUserDefined ? 0 : cfs.getExpectedCompactedFileSize(toCompact);
-        File compactionFileLocation = cfs.directories.getDirectoryForNewSSTables(expectedSize);
-        if (partialCompactionsAcceptable())
+        File compactionFileLocation = cfs.directories.getDirectoryForNewSSTables(cfs.getExpectedCompactedFileSize(toCompact, compactionType));
+        if (compactionFileLocation == null && partialCompactionsAcceptable())
         {
             // If the compaction file path is null that means we have no space left for this compaction.
             // Try again w/o the largest one.
-            if (compactionFileLocation == null)
+            while (compactionFileLocation == null && toCompact.size() > 1)
             {
-                while (compactionFileLocation == null && toCompact.size() > 1)
-                {
-                    logger.warn("insufficient space to compact all requested files " + StringUtils.join(toCompact, ", "));
-                    // Note that we have removed files that are still marked as compacting. This suboptimal but ok since the caller will unmark all
-                    // the sstables at the end.
-                    toCompact.remove(cfs.getMaxSizeFile(toCompact));
-                    compactionFileLocation = cfs.directories.getDirectoryForNewSSTables(cfs.getExpectedCompactedFileSize(toCompact));
-                }
+                logger.warn("insufficient space to compact all requested files " + StringUtils.join(toCompact, ", "));
+                // Note that we have removed files that are still marked as compacting.
+                // This suboptimal but ok since the caller will unmark all the sstables at the end.
+                toCompact.remove(cfs.getMaxSizeFile(toCompact));
+                compactionFileLocation = cfs.directories.getDirectoryForNewSSTables(cfs.getExpectedCompactedFileSize(toCompact, compactionType));
             }
-
         }
 
         if (compactionFileLocation == null)
         {
-            logger.warn("insufficient space to compact even the two smallest files, aborting");
+            logger.warn("insufficient space to compact; aborting compaction");
             return 0;
         }
 
         if (DatabaseDescriptor.isSnapshotBeforeCompaction())
-            cfs.table.snapshot(System.currentTimeMillis() + "-" + "compact-" + cfs.columnFamily);
+            cfs.snapshotWithoutFlush(System.currentTimeMillis() + "-" + "compact-" + cfs.columnFamily);
 
         // sanity check: all sstables must belong to the same cfs
         for (SSTableReader sstable : toCompact)
@@ -117,22 +107,23 @@ public class CompactionTask extends AbstractCompactionTask
         long startTime = System.currentTimeMillis();
         long totalkeysWritten = 0;
 
+        AbstractCompactionStrategy strategy = cfs.getCompactionStrategy();
         long estimatedTotalKeys = Math.max(DatabaseDescriptor.getIndexInterval(), SSTableReader.getApproximateKeyCount(toCompact));
-        long estimatedSSTables = Math.max(1, SSTable.getTotalBytes(toCompact) / cfs.getCompactionStrategy().getMaxSSTableSize());
+        long estimatedSSTables = Math.max(1, SSTable.getTotalBytes(toCompact) / strategy.getMaxSSTableSize());
         long keysPerSSTable = (long) Math.ceil((double) estimatedTotalKeys / estimatedSSTables);
         if (logger.isDebugEnabled())
             logger.debug("Expected bloom filter size : " + keysPerSSTable);
 
         AbstractCompactionIterable ci = DatabaseDescriptor.isMultithreadedCompaction()
-                                      ? new ParallelCompactionIterable(OperationType.COMPACTION, toCompact, controller)
-                                      : new CompactionIterable(OperationType.COMPACTION, toCompact, controller);
+                                      ? new ParallelCompactionIterable(compactionType, strategy.getScanners(toCompact), controller)
+                                      : new CompactionIterable(compactionType, strategy.getScanners(toCompact), controller);
         CloseableIterator<AbstractCompactedRow> iter = ci.iterator();
         Iterator<AbstractCompactedRow> nni = Iterators.filter(iter, Predicates.notNull());
-        Map<DecoratedKey, Long> cachedKeys = new HashMap<DecoratedKey, Long>();
+        Map<DecoratedKey, RowIndexEntry> cachedKeys = new HashMap<DecoratedKey, RowIndexEntry>();
 
         // we can't preheat until the tracker has been set. This doesn't happen until we tell the cfs to
         // replace the old entries.  Track entries to preheat here until then.
-        Map<SSTableReader, Map<DecoratedKey, Long>> cachedKeyMap =  new HashMap<SSTableReader, Map<DecoratedKey, Long>>();
+        Map<SSTableReader, Map<DecoratedKey, RowIndexEntry>> cachedKeyMap =  new HashMap<SSTableReader, Map<DecoratedKey, RowIndexEntry>>();
 
         Collection<SSTableReader> sstables = new ArrayList<SSTableReader>();
         Collection<SSTableWriter> writers = new ArrayList<SSTableWriter>();
@@ -146,7 +137,7 @@ public class CompactionTask extends AbstractCompactionTask
                 // don't mark compacted in the finally block, since if there _is_ nondeleted data,
                 // we need to sync it (via closeAndOpen) first, so there is no period during which
                 // a crash could cause data loss.
-                cfs.markCompacted(toCompact);
+                cfs.markCompacted(toCompact, compactionType);
                 return 0;
             }
 
@@ -154,14 +145,14 @@ public class CompactionTask extends AbstractCompactionTask
             writers.add(writer);
             while (nni.hasNext())
             {
-                if (ci.isStopped())
+                if (ci.isStopRequested())
                     throw new CompactionInterruptedException(ci.getCompactionInfo());
 
                 AbstractCompactedRow row = nni.next();
                 if (row.isEmpty())
                     continue;
 
-                long position = writer.append(row);
+                RowIndexEntry indexEntry = writer.append(row);
                 totalkeysWritten++;
 
                 if (DatabaseDescriptor.getPreheatKeyCache())
@@ -170,12 +161,12 @@ public class CompactionTask extends AbstractCompactionTask
                     {
                         if (sstable.getCachedPosition(row.key, false) != null)
                         {
-                            cachedKeys.put(row.key, position);
+                            cachedKeys.put(row.key, indexEntry);
                             break;
                         }
                     }
                 }
-                if (!nni.hasNext() || newSSTableSegmentThresholdReached(writer, position))
+                if (!nni.hasNext() || newSSTableSegmentThresholdReached(writer, indexEntry.position))
                 {
                     SSTableReader toIndex = writer.closeAndOpenReader(getMaxDataAge(toCompact));
                     cachedKeyMap.put(toIndex, cachedKeys);
@@ -184,7 +175,7 @@ public class CompactionTask extends AbstractCompactionTask
                     {
                         writer = cfs.createCompactionWriter(keysPerSSTable, compactionFileLocation, toCompact);
                         writers.add(writer);
-                        cachedKeys = new HashMap<DecoratedKey, Long>();
+                        cachedKeys = new HashMap<DecoratedKey, RowIndexEntry>();
                     }
                 }
             }
@@ -202,12 +193,12 @@ public class CompactionTask extends AbstractCompactionTask
                 collector.finishCompaction(ci);
         }
 
-        cfs.replaceCompactedSSTables(toCompact, sstables);
+        cfs.replaceCompactedSSTables(toCompact, sstables, compactionType);
         // TODO: this doesn't belong here, it should be part of the reader to load when the tracker is wired up
-        for (Entry<SSTableReader, Map<DecoratedKey, Long>> ssTableReaderMapEntry : cachedKeyMap.entrySet())
+        for (Map.Entry<SSTableReader, Map<DecoratedKey, RowIndexEntry>> ssTableReaderMapEntry : cachedKeyMap.entrySet())
         {
             SSTableReader key = ssTableReaderMapEntry.getKey();
-            for (Entry<DecoratedKey, Long> entry : ssTableReaderMapEntry.getValue().entrySet())
+            for (Map.Entry<DecoratedKey, RowIndexEntry> entry : ssTableReaderMapEntry.getValue().entrySet())
                key.cacheKey(entry.getKey(), entry.getValue());
         }
 
@@ -262,11 +253,5 @@ public class CompactionTask extends AbstractCompactionTask
                 max = sstable.maxDataAge;
         }
         return max;
-    }
-
-    public CompactionTask isUserDefined(boolean isUserDefined)
-    {
-        this.isUserDefined = isUserDefined;
-        return this;
     }
 }

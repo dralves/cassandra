@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.cassandra.db;
 
 import java.io.IOException;
@@ -75,32 +74,20 @@ public class ExpiringColumn extends Column
     }
 
     @Override
-    public boolean isMarkedForDelete()
+    public int dataSize()
     {
-        /*
-         * For compaction, we need to ensure that at all time if
-         * localExpirationTime < gcbefore, then isMarkedForDelete() == true
-         * (otherwise LCR may expire columns between it's two phases compaction -- see #3579).
-         *
-         * Since during compaction we know that at all time, gcbefore <= now
-         * (the = is important in case where gc_grace=0), it follows that to
-         * ensure the propery above we need for isMarkedForDelete to be
-         * now > localExpirationTime (*not* now >= localExpiration). For the
-         * same reason, compaction should consider a column tomstoned if
-         * getLocalDeletionTime() < gcbefore, *not* if getLocalDeletionTime() <= gcbefore.
-         */
-        return (int) (System.currentTimeMillis() / 1000 ) > localExpirationTime;
+        return super.dataSize() + TypeSizes.NATIVE.sizeof(localExpirationTime) + TypeSizes.NATIVE.sizeof(timeToLive);
     }
 
     @Override
-    public int size()
+    public int serializedSize(TypeSizes typeSizes)
     {
         /*
-         * An expired column adds to a Column : 
+         * An expired column adds to a Column :
          *    4 bytes for the localExpirationTime
          *  + 4 bytes for the timeToLive
         */
-        return super.size() + DBConstants.intSize + DBConstants.intSize;
+        return super.serializedSize(typeSizes) + typeSizes.sizeof(localExpirationTime) + typeSizes.sizeof(timeToLive);
     }
 
     @Override
@@ -143,9 +130,9 @@ public class ExpiringColumn extends Column
             clonedName = allocator.clone(name);
         return new ExpiringColumn(clonedName, allocator.clone(value), timestamp, timeToLive, localExpirationTime);
     }
-    
+
     @Override
-    public String getString(AbstractType comparator)
+    public String getString(AbstractType<?> comparator)
     {
         StringBuilder sb = new StringBuilder();
         sb.append(super.getString(comparator));

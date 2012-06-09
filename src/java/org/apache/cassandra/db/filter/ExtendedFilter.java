@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one
+ * or more contributor license agreements.  See the NOTICE file
+ * distributed with this work for additional information
+ * regarding copyright ownership.  The ASF licenses this file
+ * to you under the Apache License, Version 2.0 (the
+ * "License"); you may not use this file except in compliance
+ * with the License.  You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package org.apache.cassandra.db.filter;
 
 import java.nio.ByteBuffer;
@@ -10,7 +27,7 @@ import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.*;
-import org.apache.cassandra.db.columniterator.IColumnIterator;
+import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
 import org.apache.cassandra.thrift.IndexExpression;
 import org.apache.cassandra.thrift.IndexOperator;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -20,22 +37,29 @@ import org.apache.cassandra.utils.ByteBufferUtil;
  */
 public abstract class ExtendedFilter
 {
-    private static Logger logger = LoggerFactory.getLogger(ExtendedFilter.class);
+    private static final Logger logger = LoggerFactory.getLogger(ExtendedFilter.class);
 
     public final ColumnFamilyStore cfs;
     protected final IFilter originalFilter;
     private final int maxResults;
     private final boolean maxIsColumns;
+    private final boolean isPaging;
 
-    public static ExtendedFilter create(ColumnFamilyStore cfs, IFilter filter, List<IndexExpression> clause, int maxResults, boolean maxIsColumns)
+    public static ExtendedFilter create(ColumnFamilyStore cfs, IFilter filter, List<IndexExpression> clause, int maxResults, boolean maxIsColumns, boolean isPaging)
     {
         if (clause == null || clause.isEmpty())
-            return new EmptyClauseFilter(cfs, filter, maxResults, maxIsColumns);
+        {
+            return new EmptyClauseFilter(cfs, filter, maxResults, maxIsColumns, isPaging);
+        }
         else
+        {
+            if (isPaging)
+                throw new IllegalArgumentException("Cross-row paging is not supported along with index clauses");
             return new FilterWithClauses(cfs, filter, clause, maxResults, maxIsColumns);
+        }
     }
 
-    protected ExtendedFilter(ColumnFamilyStore cfs, IFilter filter, int maxResults, boolean maxIsColumns)
+    protected ExtendedFilter(ColumnFamilyStore cfs, IFilter filter, int maxResults, boolean maxIsColumns, boolean isPaging)
     {
         assert cfs != null;
         assert filter != null;
@@ -43,8 +67,11 @@ public abstract class ExtendedFilter
         this.originalFilter = filter;
         this.maxResults = maxResults;
         this.maxIsColumns = maxIsColumns;
+        this.isPaging = isPaging;
         if (maxIsColumns)
             originalFilter.updateColumnsLimit(maxResults);
+        if (isPaging && (!(originalFilter instanceof SliceQueryFilter) || ((SliceQueryFilter)originalFilter).finish.remaining() != 0))
+            throw new IllegalArgumentException("Cross-row paging is only supported for SliceQueryFilter having an empty finish column");
     }
 
     public int maxRows()
@@ -61,12 +88,16 @@ public abstract class ExtendedFilter
      * Update the filter if necessary given the number of column already
      * fetched.
      */
-    public void updateColumnsLimit(int columnsCount)
+    public void updateFilter(int currentColumnsCount)
     {
+        // As soon as we'd done our first call, we want to reset the start column if we're paging
+        if (isPaging)
+            ((SliceQueryFilter)initialFilter()).start = ByteBufferUtil.EMPTY_BYTE_BUFFER;
+
         if (!maxIsColumns)
             return;
 
-        int remaining = maxResults - columnsCount;
+        int remaining = maxResults - currentColumnsCount;
         initialFilter().updateColumnsLimit(remaining);
     }
 
@@ -119,7 +150,7 @@ public abstract class ExtendedFilter
 
         public FilterWithClauses(ColumnFamilyStore cfs, IFilter filter, List<IndexExpression> clause, int maxResults, boolean maxIsColumns)
         {
-            super(cfs, filter, maxResults, maxIsColumns);
+            super(cfs, filter, maxResults, maxIsColumns, false);
             assert clause != null;
             this.clause = clause;
             this.initialFilter = computeInitialFilter();
@@ -219,8 +250,8 @@ public abstract class ExtendedFilter
             if (initialFilter == originalFilter)
                 return data;
             ColumnFamily pruned = data.cloneMeShallow();
-            IColumnIterator iter = originalFilter.getMemtableColumnIterator(data, null);
-            originalFilter.collectReducedColumns(pruned, iter, cfs.gcBefore());
+            OnDiskAtomIterator iter = originalFilter.getMemtableColumnIterator(data, null);
+            originalFilter.collectReducedColumns(pruned, QueryFilter.gatherTombstones(pruned, iter), cfs.gcBefore());
             return pruned;
         }
 
@@ -244,9 +275,9 @@ public abstract class ExtendedFilter
 
     private static class EmptyClauseFilter extends ExtendedFilter
     {
-        public EmptyClauseFilter(ColumnFamilyStore cfs, IFilter filter, int maxResults, boolean maxIsColumns)
+        public EmptyClauseFilter(ColumnFamilyStore cfs, IFilter filter, int maxResults, boolean maxIsColumns, boolean isPaging)
         {
-            super(cfs, filter, maxResults, maxIsColumns);
+            super(cfs, filter, maxResults, maxIsColumns, isPaging);
         }
 
         public IFilter initialFilter()

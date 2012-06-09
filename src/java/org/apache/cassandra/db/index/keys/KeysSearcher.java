@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -21,9 +21,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
 
-import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.*;
-import org.apache.cassandra.db.columniterator.IColumnIterator;
 import org.apache.cassandra.db.filter.*;
 import org.apache.cassandra.db.index.SecondaryIndex;
 import org.apache.cassandra.db.index.SecondaryIndexManager;
@@ -33,19 +31,18 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.thrift.IndexExpression;
 import org.apache.cassandra.thrift.IndexOperator;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.HeapAllocator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class KeysSearcher extends SecondaryIndexSearcher
 {
     private static final Logger logger = LoggerFactory.getLogger(KeysSearcher.class);
-    
+
     public KeysSearcher(SecondaryIndexManager indexManager, Set<ByteBuffer> columns)
     {
         super(indexManager, columns);
     }
-    
+
     private IndexExpression highestSelectivityPredicate(List<IndexExpression> clause)
     {
         IndexExpression best = null;
@@ -55,7 +52,7 @@ public class KeysSearcher extends SecondaryIndexSearcher
             //skip columns belonging to a different index type
             if(!columns.contains(expression.column_name))
                 continue;
-            
+
             SecondaryIndex index = indexManager.getIndexForColumn(expression.column_name);
             if (index == null || (expression.op != IndexOperator.EQ))
                 continue;
@@ -87,7 +84,7 @@ public class KeysSearcher extends SecondaryIndexSearcher
     public List<Row> search(List<IndexExpression> clause, AbstractBounds<RowPosition> range, int maxResults, IFilter dataFilter, boolean maxIsColumns)
     {
         assert clause != null && !clause.isEmpty();
-        ExtendedFilter filter = ExtendedFilter.create(baseCfs, dataFilter, clause, maxResults, maxIsColumns);
+        ExtendedFilter filter = ExtendedFilter.create(baseCfs, dataFilter, clause, maxResults, maxIsColumns, false);
         return baseCfs.filter(getIndexedIterator(range, filter), filter);
     }
 
@@ -162,14 +159,12 @@ public class KeysSearcher extends SecondaryIndexSearcher
                         {
                             // skip the row we already saw w/ the last page of results
                             indexColumns.next();
-                            columnsRead--;
-                            logger.debug("Skipping {}", baseCfs.getComparator().getString(firstColumn.name()));
+                            logger.debug("Skipping {}", baseCfs.metadata.getKeyValidator().getString(firstColumn.name()));
                         }
-                        else if (range instanceof Range && indexColumns.hasNext() && firstColumn.equals(startKey))
+                        else if (range instanceof Range && indexColumns.hasNext() && firstColumn.name().equals(startKey))
                         {
                             // skip key excluded by range
                             indexColumns.next();
-                            columnsRead--;
                             logger.debug("Skipping first key as range excludes it");
                         }
                     }

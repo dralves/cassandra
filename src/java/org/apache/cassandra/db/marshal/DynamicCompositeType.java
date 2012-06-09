@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -7,28 +7,23 @@
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
  *
- *   http://www.apache.org/licenses/LICENSE-2.0
+ *     http://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
 package org.apache.cassandra.db.marshal;
 
 import java.nio.charset.CharacterCodingException;
 import java.nio.ByteBuffer;
-import java.util.Iterator;
-import java.util.ArrayList;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 
 import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.FBUtilities;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -56,17 +51,17 @@ public class DynamicCompositeType extends AbstractCompositeType
 {
     private static final Logger logger = LoggerFactory.getLogger(DynamicCompositeType.class);
 
-    private final Map<Byte, AbstractType> aliases;
+    private final Map<Byte, AbstractType<?>> aliases;
 
     // interning instances
-    private static final Map<Map<Byte, AbstractType>, DynamicCompositeType> instances = new HashMap<Map<Byte, AbstractType>, DynamicCompositeType>();
+    private static final Map<Map<Byte, AbstractType<?>>, DynamicCompositeType> instances = new HashMap<Map<Byte, AbstractType<?>>, DynamicCompositeType>();
 
     public static synchronized DynamicCompositeType getInstance(TypeParser parser) throws ConfigurationException
     {
         return getInstance(parser.getAliasParameters());
     }
 
-    public static synchronized DynamicCompositeType getInstance(Map<Byte, AbstractType> aliases)
+    public static synchronized DynamicCompositeType getInstance(Map<Byte, AbstractType<?>> aliases)
     {
         DynamicCompositeType dct = instances.get(aliases);
         if (dct == null)
@@ -77,12 +72,12 @@ public class DynamicCompositeType extends AbstractCompositeType
         return dct;
     }
 
-    private DynamicCompositeType(Map<Byte, AbstractType> aliases)
+    private DynamicCompositeType(Map<Byte, AbstractType<?>> aliases)
     {
         this.aliases = aliases;
     }
 
-    private AbstractType getComparator(ByteBuffer bb)
+    private AbstractType<?> getComparator(ByteBuffer bb)
     {
         try
         {
@@ -107,15 +102,15 @@ public class DynamicCompositeType extends AbstractCompositeType
         }
     }
 
-    protected AbstractType getNextComparator(int i, ByteBuffer bb)
+    protected AbstractType<?> getComparator(int i, ByteBuffer bb)
     {
         return getComparator(bb);
     }
 
-    protected AbstractType getNextComparator(int i, ByteBuffer bb1, ByteBuffer bb2)
+    protected AbstractType<?> getComparator(int i, ByteBuffer bb1, ByteBuffer bb2)
     {
-        AbstractType comp1 = getComparator(bb1);
-        AbstractType comp2 = getComparator(bb2);
+        AbstractType<?> comp1 = getComparator(bb1);
+        AbstractType<?> comp2 = getComparator(bb2);
 
         // Fast test if the comparator uses singleton instances
         if (comp1 != comp2)
@@ -140,7 +135,7 @@ public class DynamicCompositeType extends AbstractCompositeType
         return comp1;
     }
 
-    protected AbstractType getAndAppendNextComparator(int i, ByteBuffer bb, StringBuilder sb)
+    protected AbstractType<?> getAndAppendComparator(int i, ByteBuffer bb, StringBuilder sb)
     {
         try
         {
@@ -167,14 +162,14 @@ public class DynamicCompositeType extends AbstractCompositeType
         }
     }
 
-    protected ParsedComparator parseNextComparator(int i, String part)
+    protected ParsedComparator parseComparator(int i, String part)
     {
         return new DynamicParsedComparator(part);
     }
 
-    protected AbstractType validateNextComparator(int i, ByteBuffer bb) throws MarshalException
+    protected AbstractType<?> validateComparator(int i, ByteBuffer bb) throws MarshalException
     {
-        AbstractType comparator = null;
+        AbstractType<?> comparator = null;
         if (bb.remaining() < 2)
             throw new MarshalException("Not enough bytes to header of the comparator part of component " + i);
         int header = getShortLength(bb);
@@ -204,9 +199,36 @@ public class DynamicCompositeType extends AbstractCompositeType
             return comparator;
     }
 
+    @Override
+    public boolean isCompatibleWith(AbstractType<?> previous)
+    {
+        if (this == previous)
+            return true;
+
+        if (!(previous instanceof DynamicCompositeType))
+            return false;
+
+        // Adding new aliases is fine (but removing is not)
+        // Note that modifying the type for an alias to a compatible type is
+        // *not* fine since this would deal correctly with mixed aliased/not
+        // aliased component.
+        DynamicCompositeType cp = (DynamicCompositeType)previous;
+        if (aliases.size() < cp.aliases.size())
+            return false;
+
+        for (Map.Entry<Byte, AbstractType<?>> entry : cp.aliases.entrySet())
+        {
+            AbstractType<?> tprev = entry.getValue();
+            AbstractType<?> tnew = aliases.get(entry.getKey());
+            if (tnew == null || tnew != tprev)
+                return false;
+        }
+        return true;
+    }
+
     private class DynamicParsedComparator implements ParsedComparator
     {
-        final AbstractType type;
+        final AbstractType<?> type;
         final boolean isAlias;
         final String comparatorName;
         final String remainingPart;
@@ -222,7 +244,7 @@ public class DynamicCompositeType extends AbstractCompositeType
 
             try
             {
-                AbstractType t = null;
+                AbstractType<?> t = null;
                 if (comparatorName.length() == 1)
                 {
                     // try for an alias
@@ -243,7 +265,7 @@ public class DynamicCompositeType extends AbstractCompositeType
             }
         }
 
-        public AbstractType getAbstractType()
+        public AbstractType<?> getAbstractType()
         {
             return type;
         }
@@ -302,6 +324,11 @@ public class DynamicCompositeType extends AbstractCompositeType
         }
 
         public String getString(ByteBuffer bytes)
+        {
+            throw new UnsupportedOperationException();
+        }
+
+        public ByteBuffer fromString(String str)
         {
             throw new UnsupportedOperationException();
         }

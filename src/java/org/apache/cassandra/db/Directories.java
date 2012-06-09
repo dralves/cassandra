@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -59,7 +59,7 @@ import org.apache.cassandra.utils.Pair;
  */
 public class Directories
 {
-    private static Logger logger = LoggerFactory.getLogger(Directories.class);
+    private static final Logger logger = LoggerFactory.getLogger(Directories.class);
 
     public static final String BACKUPS_SUBDIR = "backups";
     public static final String SNAPSHOT_SUBDIR = "snapshots";
@@ -113,11 +113,13 @@ public class Directories
     public File getDirectoryForNewSSTables(long estimatedSize)
     {
         File path = getLocationWithMaximumAvailableSpace(estimatedSize);
+
         // Requesting GC has a chance to free space only if we're using mmap and a non SUN jvm
         if (path == null
-         && (DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap || DatabaseDescriptor.getIndexAccessMode() == Config.DiskAccessMode.mmap)
-         && !MmappedSegmentedFile.isCleanerAvailable())
+            && (DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap || DatabaseDescriptor.getIndexAccessMode() == Config.DiskAccessMode.mmap)
+            && !MmappedSegmentedFile.isCleanerAvailable())
         {
+            logger.info("Forcing GC to free up disk space.  Upgrade to the Oracle JVM to avoid this");
             StorageService.instance.requestGC();
             // retry after GCing has forced unmap of compacted SSTables so they can be deleted
             // Note: GCInspector will do this already, but only sun JVM supports GCInspector so far
@@ -132,6 +134,7 @@ public class Directories
             }
             path = getLocationWithMaximumAvailableSpace(estimatedSize);
         }
+
         return path;
     }
 
@@ -154,11 +157,15 @@ public class Directories
                 maxLocation = dir;
             }
         }
-        logger.debug("expected data files size is {}; largest free partition has {} bytes free", estimatedSize, maxFreeDisk);
-
         // Load factor of 0.9 we do not want to use the entire disk that is too risky.
-        maxFreeDisk = (long)(0.9 * maxFreeDisk);
-        return estimatedSize < maxFreeDisk ? maxLocation : null;
+        maxFreeDisk = (long) (0.9 * maxFreeDisk);
+        logger.debug(String.format("expected data files size is %d; largest free partition (%s) has %d bytes free",
+                                   estimatedSize, maxLocation, maxFreeDisk));
+
+
+        if (estimatedSize < maxFreeDisk)
+            return maxLocation;
+        return null;
     }
 
     public static File getSnapshotDirectory(Descriptor desc, String snapshotName)
@@ -181,9 +188,11 @@ public class Directories
         private boolean skipCompacted;
         private boolean skipTemporary;
         private boolean includeBackups;
+        private boolean onlyBackups;
         private int nbFiles;
         private final Map<Descriptor, Set<Component>> components = new HashMap<Descriptor, Set<Component>>();
         private boolean filtered;
+        private String snapshotName;
 
         public SSTableLister skipCompacted(boolean b)
         {
@@ -206,6 +215,23 @@ public class Directories
             if (filtered)
                 throw new IllegalStateException("list() has already been called");
             includeBackups = b;
+            return this;
+        }
+
+        public SSTableLister onlyBackups(boolean b)
+        {
+            if (filtered)
+                throw new IllegalStateException("list() has already been called");
+            onlyBackups = b;
+            includeBackups = b;
+            return this;
+        }
+
+        public SSTableLister snapshots(String sn)
+        {
+            if (filtered)
+                throw new IllegalStateException("list() has already been called");
+            snapshotName = sn;
             return this;
         }
 
@@ -236,7 +262,14 @@ public class Directories
 
             for (File location : sstableDirectories)
             {
-                location.listFiles(getFilter());
+                if (snapshotName != null)
+                {
+                    new File(location, join(SNAPSHOT_SUBDIR, snapshotName)).listFiles(getFilter());
+                    continue;
+                }
+
+                if (!onlyBackups)
+                    location.listFiles(getFilter());
 
                 if (includeBackups)
                     new File(location, BACKUPS_SUBDIR).listFiles(getFilter());
@@ -385,7 +418,7 @@ public class Directories
             // This is a brand new node.
             return false;
 
-        // Check whether the migration migth create too long a filename
+        // Check whether the migration might create too long a filename
         int longestLocation = -1;
         try
         {
@@ -397,18 +430,35 @@ public class Directories
             throw new IOError(e);
         }
 
+        // Check that migration won't error out halfway through from too-long paths.  For Windows, we need to check
+        // total path length <= 255 (see http://msdn.microsoft.com/en-us/library/aa365247.aspx and discussion on CASSANDRA-2749);
+        // elsewhere, we just need to make sure filename is <= 255.
         for (KSMetaData ksm : Schema.instance.getTableDefinitions())
         {
             String ksname = ksm.name;
             for (Map.Entry<String, CFMetaData> entry : ksm.cfMetaData().entrySet())
             {
                 String cfname = entry.getKey();
-                // max path is roughly (guess-estimate) <location>/ksname/cfname/snapshots/1324314347102-somename/ksname-cfname-tmp-hb-1024-Statistics.db
-                if (longestLocation + (ksname.length() + cfname.length()) * 2 + 62 > 256)
-                    throw new RuntimeException("Starting with 1.1, keyspace names and column family names must be less than 32 characters long. "
-                        + ksname + "/" + cfname + " doesn't respect that restriction. Please rename your keyspace/column families to respect that restriction before updating.");
+
+                // max path is roughly (guess-estimate) <location>/ksname/cfname/snapshots/1324314347102-somename/ksname-cfname-tmp-hb-65536-Statistics.db
+                if (System.getProperty("os.name").startsWith("Windows")
+                    && longestLocation + (ksname.length() + cfname.length()) * 2 + 63 > 255)
+                {
+                    throw new RuntimeException(String.format("Starting with 1.1, keyspace names and column family " +
+                                                             "names must be less than %s characters long. %s/%s doesn't" +
+                                                             " respect that restriction. Please rename your " +
+                                                             "keyspace/column families to respect that restriction " +
+                                                             "before updating.", Schema.NAME_LENGTH, ksname, cfname));
+                }
+
+                if (ksm.name.length() + cfname.length() + 28 > 255)
+                {
+                    throw new RuntimeException("Starting with 1.1, the keyspace name is included in data filenames.  For "
+                                               + ksm.name + "/" + cfname + ", this puts you over the largest possible filename of 255 characters");
+                }
             }
         }
+
         return true;
     }
 

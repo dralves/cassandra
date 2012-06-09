@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,22 +15,12 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.cassandra.db;
 
-import java.io.File;
 import java.io.IOError;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.Collections;
-import java.util.Comparator;
-import java.util.Iterator;
-import java.util.List;
-import java.util.Map;
-import java.util.SortedSet;
-import java.util.TreeSet;
+import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -40,13 +30,11 @@ import org.apache.cassandra.config.*;
 import org.apache.cassandra.db.commitlog.CommitLog;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.db.filter.QueryPath;
-import org.apache.cassandra.io.sstable.SSTableDeletingTask;
 import org.apache.cassandra.io.sstable.SSTableReader;
-import org.apache.cassandra.io.util.FileUtils;
-import org.apache.cassandra.io.util.MmappedSegmentedFile;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.NodeId;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -65,17 +53,17 @@ public class Table
 
     /**
      * accesses to CFS.memtable should acquire this for thread safety.
-     * Table.maybeSwitchMemtable should aquire the writeLock; see that method for the full explanation.
+     * CFS.maybeSwitchMemtable should aquire the writeLock; see that method for the full explanation.
      *
      * (Enabling fairness in the RRWL is observed to decrease throughput, so we leave it off.)
      */
-    static final ReentrantReadWriteLock switchLock = new ReentrantReadWriteLock();
+    public static final ReentrantReadWriteLock switchLock = new ReentrantReadWriteLock();
 
     // It is possible to call Table.open without a running daemon, so it makes sense to ensure
     // proper directories here as well as in CassandraDaemon.
-    static 
+    static
     {
-        if (!StorageService.instance.isClientMode()) 
+        if (!StorageService.instance.isClientMode())
         {
             try
             {
@@ -91,7 +79,7 @@ public class Table
     /* Table name. */
     public final String name;
     /* ColumnFamilyStore per column family */
-    private final Map<Integer, ColumnFamilyStore> columnFamilyStores = new ConcurrentHashMap<Integer, ColumnFamilyStore>();
+    private final Map<UUID, ColumnFamilyStore> columnFamilyStores = new ConcurrentHashMap<UUID, ColumnFamilyStore>();
     private final Object[] indexLocks;
     private volatile AbstractReplicationStrategy replicationStrategy;
 
@@ -144,7 +132,7 @@ public class Table
             return t;
         }
     }
-    
+
     public Collection<ColumnFamilyStore> getColumnFamilyStores()
     {
         return Collections.unmodifiableCollection(columnFamilyStores.values());
@@ -152,13 +140,13 @@ public class Table
 
     public ColumnFamilyStore getColumnFamilyStore(String cfName)
     {
-        Integer id = Schema.instance.getId(name, cfName);
+        UUID id = Schema.instance.getId(name, cfName);
         if (id == null)
             throw new IllegalArgumentException(String.format("Unknown table/cf pair (%s.%s)", name, cfName));
         return getColumnFamilyStore(id);
     }
 
-    public ColumnFamilyStore getColumnFamilyStore(Integer id)
+    public ColumnFamilyStore getColumnFamilyStore(UUID id)
     {
         ColumnFamilyStore cfs = columnFamilyStores.get(id);
         if (cfs == null)
@@ -197,20 +185,34 @@ public class Table
     }
 
     /**
-     * Take a snapshot of the entire set of column families with a given timestamp
-     * 
+     * Take a snapshot of the specific column family, or the entire set of column families
+     * if columnFamily is null with a given timestamp
+     *
      * @param snapshotName the tag associated with the name of the snapshot.  This value may not be null
+     * @param columnFamilyName the column family to snapshot or all on null
+     *
+     * @throws IOException if the column family doesn't exist
      */
-    public void snapshot(String snapshotName)
+    public void snapshot(String snapshotName, String columnFamilyName) throws IOException
     {
         assert snapshotName != null;
+        boolean tookSnapShot = false;
         for (ColumnFamilyStore cfStore : columnFamilyStores.values())
-            cfStore.snapshot(snapshotName);
+        {
+            if (columnFamilyName == null || cfStore.columnFamily.equals(columnFamilyName))
+            {
+                tookSnapShot = true;
+                cfStore.snapshot(snapshotName);
+            }
+        }
+
+        if ((columnFamilyName != null) && !tookSnapShot)
+            throw new IOException("Failed taking snapshot. Column family " + columnFamilyName + " does not exist.");
     }
 
     /**
      * @param clientSuppliedName may be null.
-     * @return
+     * @return the name of the snapshot
      */
     public static String getTimestampedSnapshotName(String clientSuppliedName)
     {
@@ -252,13 +254,13 @@ public class Table
             cfStore.clearSnapshot(snapshotName);
         }
     }
-    
+
     /**
      * @return A list of open SSTableReaders
      */
     public List<SSTableReader> getAllSSTables()
     {
-        List<SSTableReader> list = new ArrayList<SSTableReader>();
+        List<SSTableReader> list = new ArrayList<SSTableReader>(columnFamilyStores.size());
         for (ColumnFamilyStore cfStore : columnFamilyStores.values())
             list.addAll(cfStore.getSSTables());
         return list;
@@ -294,7 +296,7 @@ public class Table
     {
         if (replicationStrategy != null)
             StorageService.instance.getTokenMetadata().unregister(replicationStrategy);
-            
+
         replicationStrategy = AbstractReplicationStrategy.createReplicationStrategy(ksm.name,
                                                                                     ksm.strategyClass,
                                                                                     StorageService.instance.getTokenMetadata(),
@@ -303,16 +305,16 @@ public class Table
     }
 
     // best invoked on the compaction mananger.
-    public void dropCf(Integer cfId) throws IOException
+    public void dropCf(UUID cfId) throws IOException
     {
         assert columnFamilyStores.containsKey(cfId);
         ColumnFamilyStore cfs = columnFamilyStores.remove(cfId);
         if (cfs == null)
             return;
-        
+
         unloadCf(cfs);
     }
-    
+
     // disassociate a cfs from this table instance.
     private void unloadCf(ColumnFamilyStore cfs) throws IOException
     {
@@ -330,13 +332,31 @@ public class Table
         }
         cfs.invalidate();
     }
-    
+
     /** adds a cf to internal structures, ends up creating disk files). */
-    public void initCf(Integer cfId, String cfName)
+    public void initCf(UUID cfId, String cfName)
     {
-        assert !columnFamilyStores.containsKey(cfId) : String.format("tried to init %s as %s, but already used by %s",
-                                                                     cfName, cfId, columnFamilyStores.get(cfId));
-        columnFamilyStores.put(cfId, ColumnFamilyStore.createColumnFamilyStore(this, cfName));
+        if (columnFamilyStores.containsKey(cfId))
+        {
+            // this is the case when you reset local schema
+            // just reload metadata
+            ColumnFamilyStore cfs = columnFamilyStores.get(cfId);
+            assert cfs.getColumnFamilyName().equals(cfName);
+
+            try
+            {
+                cfs.metadata.reload();
+                cfs.reload();
+            }
+            catch (IOException e)
+            {
+                throw FBUtilities.unchecked(e);
+            }
+        }
+        else
+        {
+            columnFamilyStores.put(cfId, ColumnFamilyStore.createColumnFamilyStore(this, cfName));
+        }
     }
 
     public Row getRow(QueryFilter filter) throws IOException
@@ -367,8 +387,8 @@ public class Table
         {
             if (writeCommitLog)
                 CommitLog.instance.add(mutation);
-        
-            DecoratedKey<?> key = StorageService.getPartitioner().decorateKey(mutation.key());
+
+            DecoratedKey key = StorageService.getPartitioner().decorateKey(mutation.key());
             for (ColumnFamily cf : mutation.getColumnFamilies())
             {
                 ColumnFamilyStore cfs = columnFamilyStores.get(cf.id());
@@ -449,7 +469,7 @@ public class Table
                 // row is marked for delete, but column was also updated.  if column is timestamped less than
                 // the row tombstone, treat it as if it didn't exist.  Otherwise we don't care about row
                 // tombstone for the purpose of the index update and we can proceed as usual.
-                if (newColumn.timestamp() <= cf.getMarkedForDeleteAt())
+                if (cf.deletionInfo().isDeleted(newColumn))
                 {
                     // don't remove from the cf object; that can race w/ CommitLog write.  Leaving it is harmless.
                     newColumn = null;
@@ -462,9 +482,10 @@ public class Table
             boolean bothDeleted = (newColumn == null || newColumn.isMarkedForDelete())
                                   && (oldColumn == null || oldColumn.isMarkedForDelete());
             // obsolete means either the row or the column timestamp we're applying is older than existing data
-            boolean obsoleteRowTombstone = newColumn == null && oldColumn != null && cf.getMarkedForDeleteAt() < oldColumn.timestamp();
-            boolean obsoleteColumn = newColumn != null && (newColumn.timestamp() <= oldIndexedColumns.getMarkedForDeleteAt()
+            boolean obsoleteRowTombstone = newColumn == null && oldColumn != null && !cf.deletionInfo().isDeleted(oldColumn);
+            boolean obsoleteColumn = newColumn != null && (oldIndexedColumns.deletionInfo().isDeleted(newColumn)
                                                            || (oldColumn != null && oldColumn.reconcile(newColumn) == oldColumn));
+
             if (bothDeleted || obsoleteRowTombstone || obsoleteColumn)
             {
                 if (logger.isDebugEnabled())
@@ -475,7 +496,7 @@ public class Table
         }
     }
 
-    private static ColumnFamily readCurrentIndexedColumns(DecoratedKey<?> key, ColumnFamilyStore cfs, SortedSet<ByteBuffer> mutatedIndexedColumns)
+    private static ColumnFamily readCurrentIndexedColumns(DecoratedKey key, ColumnFamilyStore cfs, SortedSet<ByteBuffer> mutatedIndexedColumns)
     {
         QueryFilter filter = QueryFilter.getNamesFilter(key, new QueryPath(cfs.getColumnFamilyName()), mutatedIndexedColumns);
         return cfs.getColumnFamily(filter);
@@ -486,7 +507,12 @@ public class Table
         return replicationStrategy;
     }
 
-    public static void indexRow(DecoratedKey<?> key, ColumnFamilyStore cfs, SortedSet<ByteBuffer> indexedColumns)
+    /**
+     * @param key row to index
+     * @param cfs ColumnFamily to index row in
+     * @param indexedColumns columns to index, in comparator order
+     */
+    public static void indexRow(DecoratedKey key, ColumnFamilyStore cfs, SortedSet<ByteBuffer> indexedColumns)
     {
         if (logger.isDebugEnabled())
             logger.debug("Indexing row {} ", cfs.metadata.getKeyValidator().getString(key.key));
@@ -522,7 +548,7 @@ public class Table
     public List<Future<?>> flush() throws IOException
     {
         List<Future<?>> futures = new ArrayList<Future<?>>();
-        for (Integer cfId : columnFamilyStores.keySet())
+        for (UUID cfId : columnFamilyStores.keySet())
         {
             Future<?> future = columnFamilyStores.get(cfId).forceFlush();
             if (future != null)

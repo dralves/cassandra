@@ -1,6 +1,4 @@
-package org.apache.cassandra.cache;
 /*
- * 
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -8,17 +6,16 @@ package org.apache.cassandra.cache;
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * 
- *   http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- * 
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
+package org.apache.cassandra.cache;
 
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
@@ -45,6 +42,16 @@ public class InstrumentingCache<K, V>
         map.put(key, value);
     }
 
+    public boolean putIfAbsent(K key, V value)
+    {
+        return map.putIfAbsent(key, value);
+    }
+
+    public boolean replace(K key, V old, V value)
+    {
+        return map.replace(key, old, value);
+    }
+
     public V get(K key)
     {
         V v = map.get(key);
@@ -64,7 +71,7 @@ public class InstrumentingCache<K, V>
         map.remove(key);
     }
 
-    public int getCapacity()
+    public long getCapacity()
     {
         return map.capacity();
     }
@@ -74,12 +81,12 @@ public class InstrumentingCache<K, V>
         return capacitySetManually;
     }
 
-    public void updateCapacity(int capacity)
+    public void updateCapacity(long capacity)
     {
         map.setCapacity(capacity);
     }
 
-    public void setCapacity(int capacity)
+    public void setCapacity(long capacity)
     {
         updateCapacity(capacity);
         capacitySetManually = true;
@@ -90,7 +97,7 @@ public class InstrumentingCache<K, V>
         return map.size();
     }
 
-    public int weightedSize()
+    public long weightedSize()
     {
         return map.weightedSize();
     }

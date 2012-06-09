@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -49,6 +49,8 @@ public interface ISortedColumns extends IIterableColumns
     public Factory getFactory();
 
     public DeletionInfo getDeletionInfo();
+    public void setDeletionInfo(DeletionInfo info);
+
     public void delete(DeletionInfo info);
     public void maybeResetDeletionTimes(int gcBefore);
     public void retainAll(ISortedColumns columns);
@@ -168,22 +170,4 @@ public interface ISortedColumns extends IIterableColumns
          */
         public ISortedColumns fromSorted(SortedMap<ByteBuffer, IColumn> sm, boolean insertReversed);
     }
-
-    public static class DeletionInfo
-    {
-        public final long markedForDeleteAt;
-        public final int localDeletionTime;
-
-        public DeletionInfo()
-        {
-            this(Long.MIN_VALUE, Integer.MIN_VALUE);
-        }
-
-        public DeletionInfo(long markedForDeleteAt, int localDeletionTime)
-        {
-            this.markedForDeleteAt = markedForDeleteAt;
-            this.localDeletionTime = localDeletionTime;
-        }
-    }
-
 }

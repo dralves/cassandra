@@ -27,22 +27,21 @@ import java.util.UUID;
 import org.junit.Test;
 import static org.junit.Assert.fail;
 
-import org.apache.cassandra.CleanupHelper;
+import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.db.*;
-import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.db.filter.QueryPath;
 import org.apache.cassandra.utils.*;
 
-public class DynamicCompositeTypeTest extends CleanupHelper
+public class DynamicCompositeTypeTest extends SchemaLoader
 {
     private static final String cfName = "StandardDynamicComposite";
 
     private static final DynamicCompositeType comparator;
     static
     {
-        Map<Byte, AbstractType> aliases = new HashMap<Byte, AbstractType>();
+        Map<Byte, AbstractType<?>> aliases = new HashMap<Byte, AbstractType<?>>();
         aliases.put((byte)'b', BytesType.instance);
         aliases.put((byte)'t', TimeUUIDType.instance);
         comparator = DynamicCompositeType.getInstance(aliases);
@@ -218,6 +217,16 @@ public class DynamicCompositeTypeTest extends CleanupHelper
         {
             fail("Shouldn't throw exception");
         }
+    }
+
+    public void testCompatibility() throws Exception
+    {
+        assert TypeParser.parse("DynamicCompositeType()").isCompatibleWith(TypeParser.parse("DynamicCompositeType()"));
+        assert TypeParser.parse("DynamicCompositeType(a => IntegerType)").isCompatibleWith(TypeParser.parse("DynamicCompositeType()"));
+        assert TypeParser.parse("DynamicCompositeType(b => BytesType, a => IntegerType)").isCompatibleWith(TypeParser.parse("DynamicCompositeType(a => IntegerType)"));
+
+        assert !TypeParser.parse("DynamicCompositeType(a => BytesType)").isCompatibleWith(TypeParser.parse("DynamicCompositeType(a => AsciiType)"));
+        assert !TypeParser.parse("DynamicCompositeType(a => BytesType)").isCompatibleWith(TypeParser.parse("DynamicCompositeType(a => BytesType, b => AsciiType)"));
     }
 
     private void addColumn(RowMutation rm, ByteBuffer cname)

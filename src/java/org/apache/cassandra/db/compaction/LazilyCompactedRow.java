@@ -1,6 +1,4 @@
-package org.apache.cassandra.db.compaction;
 /*
- * 
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -8,38 +6,37 @@ package org.apache.cassandra.db.compaction;
  * to you under the Apache License, Version 2.0 (the
  * "License"); you may not use this file except in compliance
  * with the License.  You may obtain a copy of the License at
- * 
- *   http://www.apache.org/licenses/LICENSE-2.0
- * 
- * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an
- * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
- * KIND, either express or implied.  See the License for the
- * specific language governing permissions and limitations
- * under the License.
- * 
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
  */
-
+package org.apache.cassandra.db.compaction;
 
 import java.io.DataOutput;
 import java.io.IOError;
 import java.io.IOException;
-import java.nio.channels.ClosedByInterruptException;
 import java.security.MessageDigest;
 import java.util.Iterator;
 import java.util.List;
 
 import com.google.common.base.Predicates;
 import com.google.common.collect.Iterators;
+import org.apache.cassandra.io.sstable.ColumnStats;
+import org.apache.cassandra.io.sstable.SSTable;
+import org.apache.cassandra.utils.StreamingHistogram;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.*;
-import org.apache.cassandra.db.columniterator.IColumnIterator;
+import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
 import org.apache.cassandra.db.columniterator.ICountableColumnIterator;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.io.util.DataOutputBuffer;
-import org.apache.cassandra.io.util.IIterableColumns;
 import org.apache.cassandra.utils.MergeIterator;
 
 /**
@@ -53,20 +50,20 @@ import org.apache.cassandra.utils.MergeIterator;
  * rows to write the merged columns or update the hash, again with at most one column
  * from each row deserialized at a time.
  */
-public class LazilyCompactedRow extends AbstractCompactedRow implements IIterableColumns
+public class LazilyCompactedRow extends AbstractCompactedRow implements Iterable<OnDiskAtom>
 {
     private static Logger logger = LoggerFactory.getLogger(LazilyCompactedRow.class);
 
     private final List<? extends ICountableColumnIterator> rows;
     private final CompactionController controller;
     private final boolean shouldPurge;
-    private final DataOutputBuffer headerBuffer;
     private ColumnFamily emptyColumnFamily;
     private Reducer reducer;
-    private int columnCount;
-    private long maxTimestamp;
+    private final ColumnStats columnStats;
     private long columnSerializedSize;
     private boolean closed;
+    private ColumnIndex.Builder indexBuilder;
+    private ColumnIndex columnsIndex;
 
     public LazilyCompactedRow(CompactionController controller, List<? extends ICountableColumnIterator> rows)
     {
@@ -75,7 +72,7 @@ public class LazilyCompactedRow extends AbstractCompactedRow implements IIterabl
         this.controller = controller;
         this.shouldPurge = controller.shouldPurge(key);
 
-        for (IColumnIterator row : rows)
+        for (OnDiskAtomIterator row : rows)
         {
             ColumnFamily cf = row.getColumnFamily();
 
@@ -85,15 +82,28 @@ public class LazilyCompactedRow extends AbstractCompactedRow implements IIterabl
                 emptyColumnFamily.delete(cf);
         }
 
-        // initialize row header so isEmpty can be called
-        headerBuffer = new DataOutputBuffer();
-        ColumnIndexer.serialize(this, headerBuffer);
+        try
+        {
+            indexAndWrite(null);
+        }
+        catch (IOException e)
+        {
+            // Since we don't write on disk this time, we should get this
+            throw new AssertionError();
+        }
         // reach into the reducer used during iteration to get column count, size, max column timestamp
         // (however, if there are zero columns, iterator() will not be called by ColumnIndexer and reducer will be null)
-        columnCount = reducer == null ? 0 : reducer.size;
+        columnStats = new ColumnStats(reducer == null ? 0 : reducer.columns, reducer == null ? Long.MIN_VALUE : reducer.maxTimestampSeen,
+                                      reducer == null ? new StreamingHistogram(SSTable.TOMBSTONE_HISTOGRAM_BIN_SIZE) : reducer.tombstones
+        );
         columnSerializedSize = reducer == null ? 0 : reducer.serializedSize;
-        maxTimestamp = reducer == null ? Long.MIN_VALUE : reducer.maxTimestampSeen;
         reducer = null;
+    }
+
+    private void indexAndWrite(DataOutput out) throws IOException
+    {
+        this.indexBuilder = new ColumnIndex.Builder(emptyColumnFamily, key.key, getEstimatedColumnCount(), out);
+        this.columnsIndex = indexBuilder.build(this);
     }
 
     public long write(DataOutput out) throws IOException
@@ -101,24 +111,20 @@ public class LazilyCompactedRow extends AbstractCompactedRow implements IIterabl
         assert !closed;
 
         DataOutputBuffer clockOut = new DataOutputBuffer();
-        ColumnFamily.serializer().serializeCFInfo(emptyColumnFamily, clockOut);
+        DeletionInfo.serializer().serializeForSSTable(emptyColumnFamily.deletionInfo(), clockOut);
 
-        long dataSize = headerBuffer.getLength() + clockOut.getLength() + columnSerializedSize;
+        long dataSize = clockOut.getLength() + columnSerializedSize;
         if (logger.isDebugEnabled())
-            logger.debug(String.format("header / clock / column sizes are %s / %s / %s",
-                         headerBuffer.getLength(), clockOut.getLength(), columnSerializedSize));
+            logger.debug(String.format("clock / column sizes are %s / %s", clockOut.getLength(), columnSerializedSize));
         assert dataSize > 0;
         out.writeLong(dataSize);
-        out.write(headerBuffer.getData(), 0, headerBuffer.getLength());
         out.write(clockOut.getData(), 0, clockOut.getLength());
-        out.writeInt(columnCount);
+        out.writeInt(indexBuilder.writtenAtomCount());
 
-        Iterator<IColumn> iter = iterator();
-        while (iter.hasNext())
-        {
-            IColumn column = iter.next();
-            emptyColumnFamily.getColumnSerializer().serialize(column, out);
-        }
+        // We rebuild the column index uselessly, but we need to do that because range tombstone markers depend
+        // on indexing. If we're able to remove the two-phase compaction, we'll avoid that.
+        indexAndWrite(out);
+
         long secondPassColumnSize = reducer == null ? 0 : reducer.serializedSize;
         assert secondPassColumnSize == columnSerializedSize
                : "originally calculated column size of " + columnSerializedSize + " but now it is " + secondPassColumnSize;
@@ -137,8 +143,8 @@ public class LazilyCompactedRow extends AbstractCompactedRow implements IIterabl
 
         try
         {
-            ColumnFamily.serializer().serializeCFInfo(emptyColumnFamily, out);
-            out.writeInt(columnCount);
+            DeletionInfo.serializer().serializeForSSTable(emptyColumnFamily.deletionInfo(), out);
+            out.writeInt(columnStats.columnCount);
             digest.update(out.getData(), 0, out.getLength());
         }
         catch (IOException e)
@@ -146,7 +152,7 @@ public class LazilyCompactedRow extends AbstractCompactedRow implements IIterabl
             throw new IOError(e);
         }
 
-        Iterator<IColumn> iter = iterator();
+        Iterator<OnDiskAtom> iter = iterator();
         while (iter.hasNext())
         {
             iter.next().updateDigest(digest);
@@ -159,7 +165,7 @@ public class LazilyCompactedRow extends AbstractCompactedRow implements IIterabl
         boolean cfIrrelevant = shouldPurge
                              ? ColumnFamilyStore.removeDeletedCF(emptyColumnFamily, controller.gcBefore) == null
                              : !emptyColumnFamily.isMarkedForDelete(); // tombstones are relevant
-        return cfIrrelevant && columnCount == 0;
+        return cfIrrelevant && columnStats.columnCount == 0;
     }
 
     public int getEstimatedColumnCount()
@@ -170,33 +176,28 @@ public class LazilyCompactedRow extends AbstractCompactedRow implements IIterabl
         return n;
     }
 
-    public AbstractType getComparator()
+    public AbstractType<?> getComparator()
     {
         return emptyColumnFamily.getComparator();
     }
 
-    public Iterator<IColumn> iterator()
+    public Iterator<OnDiskAtom> iterator()
     {
         for (ICountableColumnIterator row : rows)
             row.reset();
         reducer = new Reducer();
-        Iterator<IColumn> iter = MergeIterator.get(rows, getComparator().columnComparator, reducer);
+        Iterator<OnDiskAtom> iter = MergeIterator.get(rows, getComparator().onDiskAtomComparator, reducer);
         return Iterators.filter(iter, Predicates.notNull());
     }
 
-    public int columnCount()
+    public ColumnStats columnStats()
     {
-        return columnCount;
-    }
-
-    public long maxTimestamp()
-    {
-        return maxTimestamp;
+        return columnStats;
     }
 
     private void close()
     {
-        for (IColumnIterator row : rows)
+        for (OnDiskAtomIterator row : rows)
         {
             try
             {
@@ -210,32 +211,80 @@ public class LazilyCompactedRow extends AbstractCompactedRow implements IIterabl
         closed = true;
     }
 
-    private class Reducer extends MergeIterator.Reducer<IColumn, IColumn>
+    public DeletionInfo deletionInfo()
+    {
+        return emptyColumnFamily.deletionInfo();
+    }
+
+    /**
+     * @return the column index for this row.
+     */
+    public ColumnIndex index()
+    {
+        return columnsIndex;
+    }
+
+    private class Reducer extends MergeIterator.Reducer<OnDiskAtom, OnDiskAtom>
     {
         ColumnFamily container = emptyColumnFamily.cloneMeShallow();
+        RangeTombstone tombstone;
         long serializedSize = 4; // int for column count
-        int size = 0;
+        int columns = 0;
         long maxTimestampSeen = Long.MIN_VALUE;
+        StreamingHistogram tombstones = new StreamingHistogram(SSTable.TOMBSTONE_HISTOGRAM_BIN_SIZE);
 
-        public void reduce(IColumn current)
+        public void reduce(OnDiskAtom current)
         {
-            container.addColumn(current);
+            if (current instanceof RangeTombstone)
+                tombstone = (RangeTombstone)current;
+            else
+                container.addColumn((IColumn)current);
         }
 
-        protected IColumn getReduced()
+        protected OnDiskAtom getReduced()
         {
-            ColumnFamily purged = PrecompactedRow.removeDeletedAndOldShards(key, shouldPurge, controller, container);
-            if (purged == null || !purged.iterator().hasNext())
+            if (tombstone != null)
             {
-                container.clear();
-                return null;
+                RangeTombstone t = tombstone;
+                tombstone = null;
+
+                if (t.data.isGcAble(controller.gcBefore))
+                {
+                    return null;
+                }
+                else
+                {
+                    serializedSize += t.serializedSizeForSSTable();
+                    return t;
+                }
             }
-            IColumn reduced = purged.iterator().next();
-            container.clear();
-            serializedSize += reduced.serializedSize();
-            size++;
-            maxTimestampSeen = Math.max(maxTimestampSeen, reduced.maxTimestamp());
-            return reduced;
+            else
+            {
+                ColumnFamily purged = PrecompactedRow.removeDeletedAndOldShards(key, shouldPurge, controller, container);
+                if (purged == null || !purged.iterator().hasNext())
+                {
+                    container.clear();
+                    return null;
+                }
+                IColumn reduced = purged.iterator().next();
+                container.clear();
+
+                // PrecompactedRow.removeDeletedAndOldShards have only checked the top-level CF deletion times,
+                // not the range tombstone. For that we use the columnIndexer tombstone tracker.
+                // Note that this doesn't work for super columns.
+                if (indexBuilder.tombstoneTracker().isDeleted(reduced))
+                    return null;
+
+                serializedSize += reduced.serializedSizeForSSTable();
+                columns++;
+                maxTimestampSeen = Math.max(maxTimestampSeen, reduced.maxTimestamp());
+                int deletionTime = reduced.getLocalDeletionTime();
+                if (deletionTime < Integer.MAX_VALUE)
+                {
+                    tombstones.update(deletionTime);
+                }
+                return reduced;
+            }
         }
     }
 }

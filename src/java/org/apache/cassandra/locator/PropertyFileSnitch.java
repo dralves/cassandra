@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.cassandra.locator;
 
 import java.io.IOException;
@@ -50,7 +49,7 @@ public class PropertyFileSnitch extends AbstractNetworkTopologySnitch
 {
     private static final Logger logger = LoggerFactory.getLogger(PropertyFileSnitch.class);
 
-    private static final String RACK_PROPERTY_FILENAME = "cassandra-topology.properties";
+    public static final String RACK_PROPERTY_FILENAME = "cassandra-topology.properties";
 
     private static volatile Map<InetAddress, String[]> endpointMap;
     private static volatile String[] defaultDCRack;
@@ -126,7 +125,7 @@ public class PropertyFileSnitch extends AbstractNetworkTopologySnitch
             stream = getClass().getClassLoader().getResourceAsStream(RACK_PROPERTY_FILENAME);
             properties.load(stream);
         }
-        catch (IOException e)
+        catch (Exception e)
         {
             throw new ConfigurationException("Unable to read " + RACK_PROPERTY_FILENAME, e);
         }
@@ -168,6 +167,7 @@ public class PropertyFileSnitch extends AbstractNetworkTopologySnitch
 
         logger.debug("loaded network topology {}", FBUtilities.toString(reloadedMap));
         endpointMap = reloadedMap;
-        StorageService.instance.getTokenMetadata().invalidateCaches();
+        if (StorageService.instance != null) // null check tolerates circular dependency; see CASSANDRA-4145
+            StorageService.instance.getTokenMetadata().invalidateCaches();
     }
 }

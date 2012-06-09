@@ -1,4 +1,4 @@
-/**
+/*
  * Licensed to the Apache Software Foundation (ASF) under one
  * or more contributor license agreements.  See the NOTICE file
  * distributed with this work for additional information
@@ -15,7 +15,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.cassandra.utils;
 
 import java.io.*;
@@ -33,12 +32,10 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.base.Joiner;
 import com.google.common.collect.AbstractIterator;
-import com.google.common.primitives.Ints;
+import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -52,21 +49,24 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.io.util.DataOutputBuffer;
-import org.apache.cassandra.locator.PropertyFileSnitch;
 import org.apache.cassandra.net.IAsyncResult;
 import org.apache.thrift.TBase;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
+import org.codehaus.jackson.JsonFactory;
+import org.codehaus.jackson.map.ObjectMapper;
 
 public class FBUtilities
 {
-    private static Logger logger_ = LoggerFactory.getLogger(FBUtilities.class);
+    private static final Logger logger = LoggerFactory.getLogger(FBUtilities.class);
+
+    private static ObjectMapper jsonMapper = new ObjectMapper(new JsonFactory());
 
     public static final BigInteger TWO = new BigInteger("2");
 
-    private static volatile InetAddress localInetAddress_;
-    private static volatile InetAddress broadcastInetAddress_;
+    private static volatile InetAddress localInetAddress;
+    private static volatile InetAddress broadcastInetAddress;
 
     private static final ThreadLocal<MessageDigest> localMD5Digest = new ThreadLocal<MessageDigest>()
     {
@@ -123,10 +123,10 @@ public class FBUtilities
      */
     public static InetAddress getLocalAddress()
     {
-        if (localInetAddress_ == null)
+        if (localInetAddress == null)
             try
             {
-                localInetAddress_ = DatabaseDescriptor.getListenAddress() == null
+                localInetAddress = DatabaseDescriptor.getListenAddress() == null
                                     ? InetAddress.getLocalHost()
                                     : DatabaseDescriptor.getListenAddress();
             }
@@ -134,16 +134,16 @@ public class FBUtilities
             {
                 throw new RuntimeException(e);
             }
-        return localInetAddress_;
+        return localInetAddress;
     }
 
     public static InetAddress getBroadcastAddress()
     {
-        if (broadcastInetAddress_ == null)
-            broadcastInetAddress_ = DatabaseDescriptor.getBroadcastAddress() == null
-                                ? getLocalAddress()
-                                : DatabaseDescriptor.getBroadcastAddress();
-        return broadcastInetAddress_;
+        if (broadcastInetAddress == null)
+            broadcastInetAddress = DatabaseDescriptor.getBroadcastAddress() == null
+                                 ? getLocalAddress()
+                                 : DatabaseDescriptor.getBroadcastAddress();
+        return broadcastInetAddress;
     }
 
     /**
@@ -181,7 +181,7 @@ public class FBUtilities
     {
         return FastByteComparisons.compareTo(bytes1, offset1, len1, bytes2, offset2, len2);
     }
-  
+
     /**
      * @return The bitwise XOR of the inputs. The output will be the same length as the
      * longer input, but if either input is null, the output will be null.
@@ -210,15 +210,18 @@ public class FBUtilities
     {
         byte[] result = hash(data);
         BigInteger hash = new BigInteger(result);
-        return hash.abs();        
+        return hash.abs();
     }
 
     public static byte[] hash(ByteBuffer... data)
     {
         MessageDigest messageDigest = localMD5Digest.get();
-        for(ByteBuffer block : data)
+        for (ByteBuffer block : data)
         {
-            messageDigest.update(block.duplicate());
+            if (block.hasArray())
+                messageDigest.update(block.array(), block.arrayOffset() + block.position(), block.remaining());
+            else
+                messageDigest.update(block.duplicate());
         }
 
         return messageDigest.digest();
@@ -232,6 +235,12 @@ public class FBUtilities
         }
     }
 
+    public static void renameWithOutConfirm(String tmpFilename, String filename) throws IOException
+    {
+        new File(tmpFilename).renameTo(new File(filename));
+    }
+
+    @Deprecated
     public static void serialize(TSerializer serializer, TBase struct, DataOutput out)
     throws IOException
     {
@@ -251,6 +260,7 @@ public class FBUtilities
         out.write(bytes);
     }
 
+    @Deprecated
     public static void deserialize(TDeserializer deserializer, TBase struct, DataInput in)
     throws IOException
     {
@@ -297,26 +307,9 @@ public class FBUtilities
         }
     }
 
-    public static int encodedUTF8Length(String st)
-    {
-        int strlen = st.length();
-        int utflen = 0;
-        for (int i = 0; i < strlen; i++)
-        {
-            int c = st.charAt(i);
-            if ((c >= 0x0001) && (c <= 0x007F))
-                utflen++;
-            else if (c > 0x07FF)
-                utflen += 3;
-            else
-                utflen += 2;
-        }
-        return utflen;
-    }
-
     public static String resourceToFile(String filename) throws ConfigurationException
     {
-        ClassLoader loader = PropertyFileSnitch.class.getClassLoader();
+        ClassLoader loader = FBUtilities.class.getClassLoader();
         URL scpurl = loader.getResource(filename);
         if (scpurl == null)
             throw new ConfigurationException("unable to locate " + filename);
@@ -339,7 +332,7 @@ public class FBUtilities
         }
         catch (Exception e)
         {
-            logger_.warn("Unable to load version.properties", e);
+            logger.warn("Unable to load version.properties", e);
             return "debug version";
         }
     }
@@ -354,19 +347,22 @@ public class FBUtilities
     public static void waitOnFutures(Iterable<Future<?>> futures)
     {
         for (Future f : futures)
+            waitOnFuture(f);
+    }
+
+    public static void waitOnFuture(Future<?> future)
+    {
+        try
         {
-            try
-            {
-                f.get();
-            }
-            catch (ExecutionException ee)
-            {
-                throw new RuntimeException(ee);
-            }
-            catch (InterruptedException ie)
-            {
-                throw new AssertionError(ie);
-            }
+            future.get();
+        }
+        catch (ExecutionException ee)
+        {
+            throw new RuntimeException(ee);
+        }
+        catch (InterruptedException ie)
+        {
+            throw new AssertionError(ie);
         }
     }
 
@@ -506,6 +502,85 @@ public class FBUtilities
         return new WrappedCloseableIterator<T>(iterator);
     }
 
+    public static Map<String, String> fromJsonMap(String json)
+    {
+        try
+        {
+            return jsonMapper.readValue(json, Map.class);
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static List<String> fromJsonList(String json)
+    {
+        try
+        {
+            return jsonMapper.readValue(json, List.class);
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static String json(Object object)
+    {
+        try
+        {
+            return jsonMapper.writeValueAsString(object);
+        }
+        catch (IOException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    /**
+     * Starts and waits for the given @param pb to finish.
+     * @throws java.io.IOException on non-zero exit code
+     */
+    public static void exec(ProcessBuilder pb) throws IOException
+    {
+        Process p = pb.start();
+        try
+        {
+            int errCode = p.waitFor();
+            if (errCode != 0)
+            {
+                BufferedReader in = new BufferedReader(new InputStreamReader(p.getInputStream()));
+                BufferedReader err = new BufferedReader(new InputStreamReader(p.getErrorStream()));
+                StringBuilder sb = new StringBuilder();
+                String str;
+                while ((str = in.readLine()) != null)
+                    sb.append(str).append(System.getProperty("line.separator"));
+                while ((str = err.readLine()) != null)
+                    sb.append(str).append(System.getProperty("line.separator"));
+                throw new IOException("Exception while executing the command: "+ StringUtils.join(pb.command(), " ") +
+                                      ", command error Code: " + errCode +
+                                      ", command output: "+ sb.toString());
+            }
+        }
+        catch (InterruptedException e)
+        {
+            throw new AssertionError(e);
+        }
+    }
+
+    public static void sleep(int millis)
+    {
+        try
+        {
+            Thread.sleep(millis);
+        }
+        catch (InterruptedException e)
+        {
+            throw new AssertionError();
+        }
+    }
+
     private static final class WrappedCloseableIterator<T>
         extends AbstractIterator<T> implements CloseableIterator<T>
     {
@@ -531,7 +606,7 @@ public class FBUtilities
         DataOutputBuffer buffer = new DataOutputBuffer(size);
         serializer.serialize(object, buffer, version);
         assert buffer.getLength() == size && buffer.getData().length == size
-               : String.format("Final buffer length %s to accomodate data size of %s (predicted %s) for %s",
+               : String.format("Final buffer length %s to accommodate data size of %s (predicted %s) for %s",
                                buffer.getData().length, buffer.getLength(), size, object);
         return buffer.getData();
     }

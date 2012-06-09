@@ -119,8 +119,18 @@ public class Cassandra {
     public List<KeySlice> get_range_slices(ColumnParent column_parent, SlicePredicate predicate, KeyRange range, ConsistencyLevel consistency_level) throws InvalidRequestException, UnavailableException, TimedOutException, TException;
 
     /**
+     * returns a range of columns, wrapping to the next rows if necessary to collect max_results.
+     * 
+     * @param column_family
+     * @param range
+     * @param start_column
+     * @param consistency_level
+     */
+    public List<KeySlice> get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level) throws InvalidRequestException, UnavailableException, TimedOutException, org.apache.thrift.TException;
+
+    /**
      * Returns the subset of columns specified in SlicePredicate for the rows matching the IndexClause
-     * @Deprecated; use get_range_slices instead with row_filter specified
+     * @Deprecated; use get_range_slices instead with range.row_filter specified
      * 
      * @param column_parent
      * @param index_clause
@@ -232,6 +242,13 @@ public class Cassandra {
     public List<TokenRange> describe_ring(String keyspace) throws InvalidRequestException, TException;
 
     /**
+     * get the mapping between token->node ip
+     * without taking replication into consideration
+     * https://issues.apache.org/jira/browse/CASSANDRA-4092
+     */
+    public Map<String,String> describe_token_map() throws InvalidRequestException, org.apache.thrift.TException;
+
+    /**
      * returns the partitioner used by this cluster
      */
     public String describe_partitioner() throws TException;
@@ -331,7 +348,10 @@ public class Cassandra {
      * @param itemId
      * @param values
      */
-    public CqlResult execute_prepared_cql_query(int itemId, List<ByteBuffer> values) throws InvalidRequestException, UnavailableException, TimedOutException, SchemaDisagreementException, TException;
+
+    public CqlResult execute_prepared_cql_query(int itemId, List<ByteBuffer> values) throws InvalidRequestException, UnavailableException, TimedOutException, SchemaDisagreementException, org.apache.thrift.TException;
+
+    public void set_cql_version(String version) throws InvalidRequestException, org.apache.thrift.TException;
 
   }
 
@@ -353,7 +373,9 @@ public class Cassandra {
 
     public void get_range_slices(ColumnParent column_parent, SlicePredicate predicate, KeyRange range, ConsistencyLevel consistency_level, AsyncMethodCallback<AsyncClient.get_range_slices_call> resultHandler) throws TException;
 
-    public void get_indexed_slices(ColumnParent column_parent, IndexClause index_clause, SlicePredicate column_predicate, ConsistencyLevel consistency_level, AsyncMethodCallback<AsyncClient.get_indexed_slices_call> resultHandler) throws TException;
+    public void get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.get_paged_slice_call> resultHandler) throws org.apache.thrift.TException;
+
+    public void get_indexed_slices(ColumnParent column_parent, IndexClause index_clause, SlicePredicate column_predicate, ConsistencyLevel consistency_level, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.get_indexed_slices_call> resultHandler) throws org.apache.thrift.TException;
 
     public void insert(ByteBuffer key, ColumnParent column_parent, Column column, ConsistencyLevel consistency_level, AsyncMethodCallback<AsyncClient.insert_call> resultHandler) throws TException;
 
@@ -377,7 +399,9 @@ public class Cassandra {
 
     public void describe_ring(String keyspace, AsyncMethodCallback<AsyncClient.describe_ring_call> resultHandler) throws TException;
 
-    public void describe_partitioner(AsyncMethodCallback<AsyncClient.describe_partitioner_call> resultHandler) throws TException;
+    public void describe_token_map(org.apache.thrift.async.AsyncMethodCallback<AsyncClient.describe_token_map_call> resultHandler) throws org.apache.thrift.TException;
+
+    public void describe_partitioner(org.apache.thrift.async.AsyncMethodCallback<AsyncClient.describe_partitioner_call> resultHandler) throws org.apache.thrift.TException;
 
     public void describe_snitch(AsyncMethodCallback<AsyncClient.describe_snitch_call> resultHandler) throws TException;
 
@@ -401,7 +425,13 @@ public class Cassandra {
 
     public void prepare_cql_query(ByteBuffer query, Compression compression, AsyncMethodCallback<AsyncClient.prepare_cql_query_call> resultHandler) throws TException;
 
+<<<<<<< .merge_file_gpdNwp
     public void execute_prepared_cql_query(int itemId, List<ByteBuffer> values, AsyncMethodCallback<AsyncClient.execute_prepared_cql_query_call> resultHandler) throws TException;
+=======
+    public void execute_prepared_cql_query(int itemId, List<ByteBuffer> values, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.execute_prepared_cql_query_call> resultHandler) throws org.apache.thrift.TException;
+
+    public void set_cql_version(String version, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.set_cql_version_call> resultHandler) throws org.apache.thrift.TException;
+>>>>>>> .merge_file_UlVTYo
 
   }
 
@@ -807,7 +837,46 @@ public class Cassandra {
       throw new TApplicationException(TApplicationException.MISSING_RESULT, "get_range_slices failed: unknown result");
     }
 
+<<<<<<< .merge_file_gpdNwp
     public List<KeySlice> get_indexed_slices(ColumnParent column_parent, IndexClause index_clause, SlicePredicate column_predicate, ConsistencyLevel consistency_level) throws InvalidRequestException, UnavailableException, TimedOutException, TException
+=======
+    public List<KeySlice> get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level) throws InvalidRequestException, UnavailableException, TimedOutException, org.apache.thrift.TException
+    {
+      send_get_paged_slice(column_family, range, start_column, consistency_level);
+      return recv_get_paged_slice();
+    }
+
+    public void send_get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level) throws org.apache.thrift.TException
+    {
+      get_paged_slice_args args = new get_paged_slice_args();
+      args.setColumn_family(column_family);
+      args.setRange(range);
+      args.setStart_column(start_column);
+      args.setConsistency_level(consistency_level);
+      sendBase("get_paged_slice", args);
+    }
+
+    public List<KeySlice> recv_get_paged_slice() throws InvalidRequestException, UnavailableException, TimedOutException, org.apache.thrift.TException
+    {
+      get_paged_slice_result result = new get_paged_slice_result();
+      receiveBase(result, "get_paged_slice");
+      if (result.isSetSuccess()) {
+        return result.success;
+      }
+      if (result.ire != null) {
+        throw result.ire;
+      }
+      if (result.ue != null) {
+        throw result.ue;
+      }
+      if (result.te != null) {
+        throw result.te;
+      }
+      throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "get_paged_slice failed: unknown result");
+    }
+
+    public List<KeySlice> get_indexed_slices(ColumnParent column_parent, IndexClause index_clause, SlicePredicate column_predicate, ConsistencyLevel consistency_level) throws InvalidRequestException, UnavailableException, TimedOutException, org.apache.thrift.TException
+>>>>>>> .merge_file_UlVTYo
     {
       send_get_indexed_slices(column_parent, index_clause, column_predicate, consistency_level);
       return recv_get_indexed_slices();
@@ -1304,7 +1373,36 @@ public class Cassandra {
       throw new TApplicationException(TApplicationException.MISSING_RESULT, "describe_ring failed: unknown result");
     }
 
+<<<<<<< .merge_file_gpdNwp
     public String describe_partitioner() throws TException
+=======
+    public Map<String,String> describe_token_map() throws InvalidRequestException, org.apache.thrift.TException
+    {
+      send_describe_token_map();
+      return recv_describe_token_map();
+    }
+
+    public void send_describe_token_map() throws org.apache.thrift.TException
+    {
+      describe_token_map_args args = new describe_token_map_args();
+      sendBase("describe_token_map", args);
+    }
+
+    public Map<String,String> recv_describe_token_map() throws InvalidRequestException, org.apache.thrift.TException
+    {
+      describe_token_map_result result = new describe_token_map_result();
+      receiveBase(result, "describe_token_map");
+      if (result.isSetSuccess()) {
+        return result.success;
+      }
+      if (result.ire != null) {
+        throw result.ire;
+      }
+      throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "describe_token_map failed: unknown result");
+    }
+
+    public String describe_partitioner() throws org.apache.thrift.TException
+>>>>>>> .merge_file_UlVTYo
     {
       send_describe_partitioner();
       return recv_describe_partitioner();
@@ -1799,13 +1897,21 @@ public class Cassandra {
       throw new TApplicationException(TApplicationException.MISSING_RESULT, "prepare_cql_query failed: unknown result");
     }
 
+<<<<<<< .merge_file_gpdNwp
     public CqlResult execute_prepared_cql_query(int itemId, List<ByteBuffer> values) throws InvalidRequestException, UnavailableException, TimedOutException, SchemaDisagreementException, TException
+=======
+    public CqlResult execute_prepared_cql_query(int itemId, List<ByteBuffer> values) throws InvalidRequestException, UnavailableException, TimedOutException, SchemaDisagreementException, org.apache.thrift.TException
+>>>>>>> .merge_file_UlVTYo
     {
       send_execute_prepared_cql_query(itemId, values);
       return recv_execute_prepared_cql_query();
     }
 
+<<<<<<< .merge_file_gpdNwp
     public void send_execute_prepared_cql_query(int itemId, List<ByteBuffer> values) throws TException
+=======
+    public void send_execute_prepared_cql_query(int itemId, List<ByteBuffer> values) throws org.apache.thrift.TException
+>>>>>>> .merge_file_UlVTYo
     {
       oprot_.writeMessageBegin(new TMessage("execute_prepared_cql_query", TMessageType.CALL, ++seqid_));
       execute_prepared_cql_query_args args = new execute_prepared_cql_query_args();
@@ -1846,6 +1952,29 @@ public class Cassandra {
         throw result.sde;
       }
       throw new TApplicationException(TApplicationException.MISSING_RESULT, "execute_prepared_cql_query failed: unknown result");
+    }
+
+    public void set_cql_version(String version) throws InvalidRequestException, org.apache.thrift.TException
+    {
+      send_set_cql_version(version);
+      recv_set_cql_version();
+    }
+
+    public void send_set_cql_version(String version) throws org.apache.thrift.TException
+    {
+      set_cql_version_args args = new set_cql_version_args();
+      args.setVersion(version);
+      sendBase("set_cql_version", args);
+    }
+
+    public void recv_set_cql_version() throws InvalidRequestException, org.apache.thrift.TException
+    {
+      set_cql_version_result result = new set_cql_version_result();
+      receiveBase(result, "set_cql_version");
+      if (result.ire != null) {
+        throw result.ire;
+      }
+      return;
     }
 
   }
@@ -2165,7 +2294,52 @@ public class Cassandra {
       }
     }
 
+<<<<<<< .merge_file_gpdNwp
     public void get_indexed_slices(ColumnParent column_parent, IndexClause index_clause, SlicePredicate column_predicate, ConsistencyLevel consistency_level, AsyncMethodCallback<get_indexed_slices_call> resultHandler) throws TException {
+=======
+    public void get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level, org.apache.thrift.async.AsyncMethodCallback<get_paged_slice_call> resultHandler) throws org.apache.thrift.TException {
+      checkReady();
+      get_paged_slice_call method_call = new get_paged_slice_call(column_family, range, start_column, consistency_level, resultHandler, this, ___protocolFactory, ___transport);
+      this.___currentMethod = method_call;
+      ___manager.call(method_call);
+    }
+
+    public static class get_paged_slice_call extends org.apache.thrift.async.TAsyncMethodCall {
+      private String column_family;
+      private KeyRange range;
+      private ByteBuffer start_column;
+      private ConsistencyLevel consistency_level;
+      public get_paged_slice_call(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level, org.apache.thrift.async.AsyncMethodCallback<get_paged_slice_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
+        super(client, protocolFactory, transport, resultHandler, false);
+        this.column_family = column_family;
+        this.range = range;
+        this.start_column = start_column;
+        this.consistency_level = consistency_level;
+      }
+
+      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
+        prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("get_paged_slice", org.apache.thrift.protocol.TMessageType.CALL, 0));
+        get_paged_slice_args args = new get_paged_slice_args();
+        args.setColumn_family(column_family);
+        args.setRange(range);
+        args.setStart_column(start_column);
+        args.setConsistency_level(consistency_level);
+        args.write(prot);
+        prot.writeMessageEnd();
+      }
+
+      public List<KeySlice> getResult() throws InvalidRequestException, UnavailableException, TimedOutException, org.apache.thrift.TException {
+        if (getState() != org.apache.thrift.async.TAsyncMethodCall.State.RESPONSE_READ) {
+          throw new IllegalStateException("Method call not finished!");
+        }
+        org.apache.thrift.transport.TMemoryInputTransport memoryTransport = new org.apache.thrift.transport.TMemoryInputTransport(getFrameBuffer().array());
+        org.apache.thrift.protocol.TProtocol prot = client.getProtocolFactory().getProtocol(memoryTransport);
+        return (new Client(prot)).recv_get_paged_slice();
+      }
+    }
+
+    public void get_indexed_slices(ColumnParent column_parent, IndexClause index_clause, SlicePredicate column_predicate, ConsistencyLevel consistency_level, org.apache.thrift.async.AsyncMethodCallback<get_indexed_slices_call> resultHandler) throws org.apache.thrift.TException {
+>>>>>>> .merge_file_UlVTYo
       checkReady();
       get_indexed_slices_call method_call = new get_indexed_slices_call(column_parent, index_clause, column_predicate, consistency_level, resultHandler, this, protocolFactory, transport);
       manager.call(method_call);
@@ -2570,7 +2744,40 @@ public class Cassandra {
       }
     }
 
+<<<<<<< .merge_file_gpdNwp
     public void describe_partitioner(AsyncMethodCallback<describe_partitioner_call> resultHandler) throws TException {
+=======
+    public void describe_token_map(org.apache.thrift.async.AsyncMethodCallback<describe_token_map_call> resultHandler) throws org.apache.thrift.TException {
+      checkReady();
+      describe_token_map_call method_call = new describe_token_map_call(resultHandler, this, ___protocolFactory, ___transport);
+      this.___currentMethod = method_call;
+      ___manager.call(method_call);
+    }
+
+    public static class describe_token_map_call extends org.apache.thrift.async.TAsyncMethodCall {
+      public describe_token_map_call(org.apache.thrift.async.AsyncMethodCallback<describe_token_map_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
+        super(client, protocolFactory, transport, resultHandler, false);
+      }
+
+      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
+        prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("describe_token_map", org.apache.thrift.protocol.TMessageType.CALL, 0));
+        describe_token_map_args args = new describe_token_map_args();
+        args.write(prot);
+        prot.writeMessageEnd();
+      }
+
+      public Map<String,String> getResult() throws InvalidRequestException, org.apache.thrift.TException {
+        if (getState() != org.apache.thrift.async.TAsyncMethodCall.State.RESPONSE_READ) {
+          throw new IllegalStateException("Method call not finished!");
+        }
+        org.apache.thrift.transport.TMemoryInputTransport memoryTransport = new org.apache.thrift.transport.TMemoryInputTransport(getFrameBuffer().array());
+        org.apache.thrift.protocol.TProtocol prot = client.getProtocolFactory().getProtocol(memoryTransport);
+        return (new Client(prot)).recv_describe_token_map();
+      }
+    }
+
+    public void describe_partitioner(org.apache.thrift.async.AsyncMethodCallback<describe_partitioner_call> resultHandler) throws org.apache.thrift.TException {
+>>>>>>> .merge_file_UlVTYo
       checkReady();
       describe_partitioner_call method_call = new describe_partitioner_call(resultHandler, this, protocolFactory, transport);
       manager.call(method_call);
@@ -2951,7 +3158,11 @@ public class Cassandra {
       }
     }
 
+<<<<<<< .merge_file_gpdNwp
     public void execute_prepared_cql_query(int itemId, List<ByteBuffer> values, AsyncMethodCallback<execute_prepared_cql_query_call> resultHandler) throws TException {
+=======
+    public void execute_prepared_cql_query(int itemId, List<ByteBuffer> values, org.apache.thrift.async.AsyncMethodCallback<execute_prepared_cql_query_call> resultHandler) throws org.apache.thrift.TException {
+>>>>>>> .merge_file_UlVTYo
       checkReady();
       execute_prepared_cql_query_call method_call = new execute_prepared_cql_query_call(itemId, values, resultHandler, this, protocolFactory, transport);
       manager.call(method_call);
@@ -2960,7 +3171,11 @@ public class Cassandra {
     public static class execute_prepared_cql_query_call extends TAsyncMethodCall {
       private int itemId;
       private List<ByteBuffer> values;
+<<<<<<< .merge_file_gpdNwp
       public execute_prepared_cql_query_call(int itemId, List<ByteBuffer> values, AsyncMethodCallback<execute_prepared_cql_query_call> resultHandler, TAsyncClient client, TProtocolFactory protocolFactory, TNonblockingTransport transport) throws TException {
+=======
+      public execute_prepared_cql_query_call(int itemId, List<ByteBuffer> values, org.apache.thrift.async.AsyncMethodCallback<execute_prepared_cql_query_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
+>>>>>>> .merge_file_UlVTYo
         super(client, protocolFactory, transport, resultHandler, false);
         this.itemId = itemId;
         this.values = values;
@@ -2985,10 +3200,43 @@ public class Cassandra {
       }
     }
 
+    public void set_cql_version(String version, org.apache.thrift.async.AsyncMethodCallback<set_cql_version_call> resultHandler) throws org.apache.thrift.TException {
+      checkReady();
+      set_cql_version_call method_call = new set_cql_version_call(version, resultHandler, this, ___protocolFactory, ___transport);
+      this.___currentMethod = method_call;
+      ___manager.call(method_call);
+    }
+
+    public static class set_cql_version_call extends org.apache.thrift.async.TAsyncMethodCall {
+      private String version;
+      public set_cql_version_call(String version, org.apache.thrift.async.AsyncMethodCallback<set_cql_version_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
+        super(client, protocolFactory, transport, resultHandler, false);
+        this.version = version;
+      }
+
+      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
+        prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("set_cql_version", org.apache.thrift.protocol.TMessageType.CALL, 0));
+        set_cql_version_args args = new set_cql_version_args();
+        args.setVersion(version);
+        args.write(prot);
+        prot.writeMessageEnd();
+      }
+
+      public void getResult() throws InvalidRequestException, org.apache.thrift.TException {
+        if (getState() != org.apache.thrift.async.TAsyncMethodCall.State.RESPONSE_READ) {
+          throw new IllegalStateException("Method call not finished!");
+        }
+        org.apache.thrift.transport.TMemoryInputTransport memoryTransport = new org.apache.thrift.transport.TMemoryInputTransport(getFrameBuffer().array());
+        org.apache.thrift.protocol.TProtocol prot = client.getProtocolFactory().getProtocol(memoryTransport);
+        (new Client(prot)).recv_set_cql_version();
+      }
+    }
+
   }
 
   public static class Processor implements TProcessor {
     private static final Logger LOGGER = LoggerFactory.getLogger(Processor.class.getName());
+<<<<<<< .merge_file_gpdNwp
     public Processor(Iface iface)
     {
       iface_ = iface;
@@ -3068,6 +3316,66 @@ public class Cassandra {
           return;
         }
         iprot.readMessageEnd();
+=======
+    public Processor(I iface) {
+      super(iface, getProcessMap(new HashMap<String, org.apache.thrift.ProcessFunction<I, ? extends org.apache.thrift.TBase>>()));
+    }
+
+    protected Processor(I iface, Map<String,  org.apache.thrift.ProcessFunction<I, ? extends  org.apache.thrift.TBase>> processMap) {
+      super(iface, getProcessMap(processMap));
+    }
+
+    private static <I extends Iface> Map<String,  org.apache.thrift.ProcessFunction<I, ? extends  org.apache.thrift.TBase>> getProcessMap(Map<String,  org.apache.thrift.ProcessFunction<I, ? extends  org.apache.thrift.TBase>> processMap) {
+      processMap.put("login", new login());
+      processMap.put("set_keyspace", new set_keyspace());
+      processMap.put("get", new get());
+      processMap.put("get_slice", new get_slice());
+      processMap.put("get_count", new get_count());
+      processMap.put("multiget_slice", new multiget_slice());
+      processMap.put("multiget_count", new multiget_count());
+      processMap.put("get_range_slices", new get_range_slices());
+      processMap.put("get_paged_slice", new get_paged_slice());
+      processMap.put("get_indexed_slices", new get_indexed_slices());
+      processMap.put("insert", new insert());
+      processMap.put("add", new add());
+      processMap.put("remove", new remove());
+      processMap.put("remove_counter", new remove_counter());
+      processMap.put("batch_mutate", new batch_mutate());
+      processMap.put("truncate", new truncate());
+      processMap.put("describe_schema_versions", new describe_schema_versions());
+      processMap.put("describe_keyspaces", new describe_keyspaces());
+      processMap.put("describe_cluster_name", new describe_cluster_name());
+      processMap.put("describe_version", new describe_version());
+      processMap.put("describe_ring", new describe_ring());
+      processMap.put("describe_token_map", new describe_token_map());
+      processMap.put("describe_partitioner", new describe_partitioner());
+      processMap.put("describe_snitch", new describe_snitch());
+      processMap.put("describe_keyspace", new describe_keyspace());
+      processMap.put("describe_splits", new describe_splits());
+      processMap.put("system_add_column_family", new system_add_column_family());
+      processMap.put("system_drop_column_family", new system_drop_column_family());
+      processMap.put("system_add_keyspace", new system_add_keyspace());
+      processMap.put("system_drop_keyspace", new system_drop_keyspace());
+      processMap.put("system_update_keyspace", new system_update_keyspace());
+      processMap.put("system_update_column_family", new system_update_column_family());
+      processMap.put("execute_cql_query", new execute_cql_query());
+      processMap.put("prepare_cql_query", new prepare_cql_query());
+      processMap.put("execute_prepared_cql_query", new execute_prepared_cql_query());
+      processMap.put("set_cql_version", new set_cql_version());
+      return processMap;
+    }
+
+    private static class login<I extends Iface> extends org.apache.thrift.ProcessFunction<I, login_args> {
+      public login() {
+        super("login");
+      }
+
+      protected login_args getEmptyArgsInstance() {
+        return new login_args();
+      }
+
+      protected login_result getResult(I iface, login_args args) throws org.apache.thrift.TException {
+>>>>>>> .merge_file_UlVTYo
         login_result result = new login_result();
         try {
           iface_.login(args.auth_request);
@@ -3377,10 +3685,44 @@ public class Cassandra {
           oprot.getTransport().flush();
           return;
         }
+<<<<<<< .merge_file_gpdNwp
         oprot.writeMessageBegin(new TMessage("get_range_slices", TMessageType.REPLY, seqid));
         result.write(oprot);
         oprot.writeMessageEnd();
         oprot.getTransport().flush();
+=======
+        return result;
+      }
+    }
+
+    private static class get_paged_slice<I extends Iface> extends org.apache.thrift.ProcessFunction<I, get_paged_slice_args> {
+      public get_paged_slice() {
+        super("get_paged_slice");
+      }
+
+      protected get_paged_slice_args getEmptyArgsInstance() {
+        return new get_paged_slice_args();
+      }
+
+      protected get_paged_slice_result getResult(I iface, get_paged_slice_args args) throws org.apache.thrift.TException {
+        get_paged_slice_result result = new get_paged_slice_result();
+        try {
+          result.success = iface.get_paged_slice(args.column_family, args.range, args.start_column, args.consistency_level);
+        } catch (InvalidRequestException ire) {
+          result.ire = ire;
+        } catch (UnavailableException ue) {
+          result.ue = ue;
+        } catch (TimedOutException te) {
+          result.te = te;
+        }
+        return result;
+      }
+    }
+
+    private static class get_indexed_slices<I extends Iface> extends org.apache.thrift.ProcessFunction<I, get_indexed_slices_args> {
+      public get_indexed_slices() {
+        super("get_indexed_slices");
+>>>>>>> .merge_file_UlVTYo
       }
 
     }
@@ -3837,10 +4179,40 @@ public class Cassandra {
           oprot.getTransport().flush();
           return;
         }
+<<<<<<< .merge_file_gpdNwp
         oprot.writeMessageBegin(new TMessage("describe_ring", TMessageType.REPLY, seqid));
         result.write(oprot);
         oprot.writeMessageEnd();
         oprot.getTransport().flush();
+=======
+        return result;
+      }
+    }
+
+    private static class describe_token_map<I extends Iface> extends org.apache.thrift.ProcessFunction<I, describe_token_map_args> {
+      public describe_token_map() {
+        super("describe_token_map");
+      }
+
+      protected describe_token_map_args getEmptyArgsInstance() {
+        return new describe_token_map_args();
+      }
+
+      protected describe_token_map_result getResult(I iface, describe_token_map_args args) throws org.apache.thrift.TException {
+        describe_token_map_result result = new describe_token_map_result();
+        try {
+          result.success = iface.describe_token_map();
+        } catch (InvalidRequestException ire) {
+          result.ire = ire;
+        }
+        return result;
+      }
+    }
+
+    private static class describe_partitioner<I extends Iface> extends org.apache.thrift.ProcessFunction<I, describe_partitioner_args> {
+      public describe_partitioner() {
+        super("describe_partitioner");
+>>>>>>> .merge_file_UlVTYo
       }
 
     }
@@ -4339,6 +4711,26 @@ public class Cassandra {
         oprot.getTransport().flush();
       }
 
+    }
+
+    private static class set_cql_version<I extends Iface> extends org.apache.thrift.ProcessFunction<I, set_cql_version_args> {
+      public set_cql_version() {
+        super("set_cql_version");
+      }
+
+      protected set_cql_version_args getEmptyArgsInstance() {
+        return new set_cql_version_args();
+      }
+
+      protected set_cql_version_result getResult(I iface, set_cql_version_args args) throws org.apache.thrift.TException {
+        set_cql_version_result result = new set_cql_version_result();
+        try {
+          iface.set_cql_version(args.version);
+        } catch (InvalidRequestException ire) {
+          result.ire = ire;
+        }
+        return result;
+      }
     }
 
   }
@@ -7870,6 +8262,7 @@ public class Cassandra {
           case 0: // SUCCESS
             if (field.type == TType.LIST) {
               {
+<<<<<<< .merge_file_gpdNwp
                 TList _list87 = iprot.readListBegin();
                 this.success = new ArrayList<ColumnOrSuperColumn>(_list87.size);
                 for (int _i88 = 0; _i88 < _list87.size; ++_i88)
@@ -7878,6 +8271,16 @@ public class Cassandra {
                   _elem89 = new ColumnOrSuperColumn();
                   _elem89.read(iprot);
                   this.success.add(_elem89);
+=======
+                org.apache.thrift.protocol.TList _list95 = iprot.readListBegin();
+                this.success = new ArrayList<ColumnOrSuperColumn>(_list95.size);
+                for (int _i96 = 0; _i96 < _list95.size; ++_i96)
+                {
+                  ColumnOrSuperColumn _elem97; // required
+                  _elem97 = new ColumnOrSuperColumn();
+                  _elem97.read(iprot);
+                  this.success.add(_elem97);
+>>>>>>> .merge_file_UlVTYo
                 }
                 iprot.readListEnd();
               }
@@ -7926,10 +8329,15 @@ public class Cassandra {
       if (this.isSetSuccess()) {
         oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
         {
+<<<<<<< .merge_file_gpdNwp
           oprot.writeListBegin(new TList(TType.STRUCT, this.success.size()));
           for (ColumnOrSuperColumn _iter90 : this.success)
+=======
+          oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRUCT, this.success.size()));
+          for (ColumnOrSuperColumn _iter98 : this.success)
+>>>>>>> .merge_file_UlVTYo
           {
-            _iter90.write(oprot);
+            _iter98.write(oprot);
           }
           oprot.writeListEnd();
         }
@@ -9178,6 +9586,25 @@ public class Cassandra {
       // check for required fields
     }
 
+<<<<<<< .merge_file_gpdNwp
+=======
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+>>>>>>> .merge_file_UlVTYo
   }
 
   public static class multiget_slice_args implements TBase<multiget_slice_args, multiget_slice_args._Fields>, java.io.Serializable, Cloneable   {
@@ -9681,6 +10108,7 @@ public class Cassandra {
           case 1: // KEYS
             if (field.type == TType.LIST) {
               {
+<<<<<<< .merge_file_gpdNwp
                 TList _list91 = iprot.readListBegin();
                 this.keys = new ArrayList<ByteBuffer>(_list91.size);
                 for (int _i92 = 0; _i92 < _list91.size; ++_i92)
@@ -9688,6 +10116,15 @@ public class Cassandra {
                   ByteBuffer _elem93;
                   _elem93 = iprot.readBinary();
                   this.keys.add(_elem93);
+=======
+                org.apache.thrift.protocol.TList _list99 = iprot.readListBegin();
+                this.keys = new ArrayList<ByteBuffer>(_list99.size);
+                for (int _i100 = 0; _i100 < _list99.size; ++_i100)
+                {
+                  ByteBuffer _elem101; // required
+                  _elem101 = iprot.readBinary();
+                  this.keys.add(_elem101);
+>>>>>>> .merge_file_UlVTYo
                 }
                 iprot.readListEnd();
               }
@@ -9736,10 +10173,15 @@ public class Cassandra {
       if (this.keys != null) {
         oprot.writeFieldBegin(KEYS_FIELD_DESC);
         {
+<<<<<<< .merge_file_gpdNwp
           oprot.writeListBegin(new TList(TType.STRING, this.keys.size()));
           for (ByteBuffer _iter94 : this.keys)
+=======
+          oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, this.keys.size()));
+          for (ByteBuffer _iter102 : this.keys)
+>>>>>>> .merge_file_UlVTYo
           {
-            oprot.writeBinary(_iter94);
+            oprot.writeBinary(_iter102);
           }
           oprot.writeListEnd();
         }
@@ -10312,6 +10754,7 @@ public class Cassandra {
           case 0: // SUCCESS
             if (field.type == TType.MAP) {
               {
+<<<<<<< .merge_file_gpdNwp
                 TMap _map95 = iprot.readMapBegin();
                 this.success = new HashMap<ByteBuffer,List<ColumnOrSuperColumn>>(2*_map95.size);
                 for (int _i96 = 0; _i96 < _map95.size; ++_i96)
@@ -10328,10 +10771,28 @@ public class Cassandra {
                       _elem101 = new ColumnOrSuperColumn();
                       _elem101.read(iprot);
                       _val98.add(_elem101);
+=======
+                org.apache.thrift.protocol.TMap _map103 = iprot.readMapBegin();
+                this.success = new HashMap<ByteBuffer,List<ColumnOrSuperColumn>>(2*_map103.size);
+                for (int _i104 = 0; _i104 < _map103.size; ++_i104)
+                {
+                  ByteBuffer _key105; // required
+                  List<ColumnOrSuperColumn> _val106; // required
+                  _key105 = iprot.readBinary();
+                  {
+                    org.apache.thrift.protocol.TList _list107 = iprot.readListBegin();
+                    _val106 = new ArrayList<ColumnOrSuperColumn>(_list107.size);
+                    for (int _i108 = 0; _i108 < _list107.size; ++_i108)
+                    {
+                      ColumnOrSuperColumn _elem109; // required
+                      _elem109 = new ColumnOrSuperColumn();
+                      _elem109.read(iprot);
+                      _val106.add(_elem109);
+>>>>>>> .merge_file_UlVTYo
                     }
                     iprot.readListEnd();
                   }
-                  this.success.put(_key97, _val98);
+                  this.success.put(_key105, _val106);
                 }
                 iprot.readMapEnd();
               }
@@ -10380,15 +10841,25 @@ public class Cassandra {
       if (this.isSetSuccess()) {
         oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
         {
+<<<<<<< .merge_file_gpdNwp
           oprot.writeMapBegin(new TMap(TType.STRING, TType.LIST, this.success.size()));
           for (Map.Entry<ByteBuffer, List<ColumnOrSuperColumn>> _iter102 : this.success.entrySet())
+=======
+          oprot.writeMapBegin(new org.apache.thrift.protocol.TMap(org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.LIST, this.success.size()));
+          for (Map.Entry<ByteBuffer, List<ColumnOrSuperColumn>> _iter110 : this.success.entrySet())
+>>>>>>> .merge_file_UlVTYo
           {
-            oprot.writeBinary(_iter102.getKey());
+            oprot.writeBinary(_iter110.getKey());
             {
+<<<<<<< .merge_file_gpdNwp
               oprot.writeListBegin(new TList(TType.STRUCT, _iter102.getValue().size()));
               for (ColumnOrSuperColumn _iter103 : _iter102.getValue())
+=======
+              oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRUCT, _iter110.getValue().size()));
+              for (ColumnOrSuperColumn _iter111 : _iter110.getValue())
+>>>>>>> .merge_file_UlVTYo
               {
-                _iter103.write(oprot);
+                _iter111.write(oprot);
               }
               oprot.writeListEnd();
             }
@@ -10960,6 +11431,7 @@ public class Cassandra {
           case 1: // KEYS
             if (field.type == TType.LIST) {
               {
+<<<<<<< .merge_file_gpdNwp
                 TList _list104 = iprot.readListBegin();
                 this.keys = new ArrayList<ByteBuffer>(_list104.size);
                 for (int _i105 = 0; _i105 < _list104.size; ++_i105)
@@ -10967,6 +11439,15 @@ public class Cassandra {
                   ByteBuffer _elem106;
                   _elem106 = iprot.readBinary();
                   this.keys.add(_elem106);
+=======
+                org.apache.thrift.protocol.TList _list112 = iprot.readListBegin();
+                this.keys = new ArrayList<ByteBuffer>(_list112.size);
+                for (int _i113 = 0; _i113 < _list112.size; ++_i113)
+                {
+                  ByteBuffer _elem114; // required
+                  _elem114 = iprot.readBinary();
+                  this.keys.add(_elem114);
+>>>>>>> .merge_file_UlVTYo
                 }
                 iprot.readListEnd();
               }
@@ -11015,10 +11496,15 @@ public class Cassandra {
       if (this.keys != null) {
         oprot.writeFieldBegin(KEYS_FIELD_DESC);
         {
+<<<<<<< .merge_file_gpdNwp
           oprot.writeListBegin(new TList(TType.STRING, this.keys.size()));
           for (ByteBuffer _iter107 : this.keys)
+=======
+          oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, this.keys.size()));
+          for (ByteBuffer _iter115 : this.keys)
+>>>>>>> .merge_file_UlVTYo
           {
-            oprot.writeBinary(_iter107);
+            oprot.writeBinary(_iter115);
           }
           oprot.writeListEnd();
         }
@@ -11587,6 +12073,7 @@ public class Cassandra {
           case 0: // SUCCESS
             if (field.type == TType.MAP) {
               {
+<<<<<<< .merge_file_gpdNwp
                 TMap _map108 = iprot.readMapBegin();
                 this.success = new HashMap<ByteBuffer,Integer>(2*_map108.size);
                 for (int _i109 = 0; _i109 < _map108.size; ++_i109)
@@ -11596,6 +12083,17 @@ public class Cassandra {
                   _key110 = iprot.readBinary();
                   _val111 = iprot.readI32();
                   this.success.put(_key110, _val111);
+=======
+                org.apache.thrift.protocol.TMap _map116 = iprot.readMapBegin();
+                this.success = new HashMap<ByteBuffer,Integer>(2*_map116.size);
+                for (int _i117 = 0; _i117 < _map116.size; ++_i117)
+                {
+                  ByteBuffer _key118; // required
+                  int _val119; // required
+                  _key118 = iprot.readBinary();
+                  _val119 = iprot.readI32();
+                  this.success.put(_key118, _val119);
+>>>>>>> .merge_file_UlVTYo
                 }
                 iprot.readMapEnd();
               }
@@ -11644,11 +12142,16 @@ public class Cassandra {
       if (this.isSetSuccess()) {
         oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
         {
+<<<<<<< .merge_file_gpdNwp
           oprot.writeMapBegin(new TMap(TType.STRING, TType.I32, this.success.size()));
           for (Map.Entry<ByteBuffer, Integer> _iter112 : this.success.entrySet())
+=======
+          oprot.writeMapBegin(new org.apache.thrift.protocol.TMap(org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.I32, this.success.size()));
+          for (Map.Entry<ByteBuffer, Integer> _iter120 : this.success.entrySet())
+>>>>>>> .merge_file_UlVTYo
           {
-            oprot.writeBinary(_iter112.getKey());
-            oprot.writeI32(_iter112.getValue());
+            oprot.writeBinary(_iter120.getKey());
+            oprot.writeI32(_iter120.getValue());
           }
           oprot.writeMapEnd();
         }
@@ -12800,6 +13303,7 @@ public class Cassandra {
           case 0: // SUCCESS
             if (field.type == TType.LIST) {
               {
+<<<<<<< .merge_file_gpdNwp
                 TList _list113 = iprot.readListBegin();
                 this.success = new ArrayList<KeySlice>(_list113.size);
                 for (int _i114 = 0; _i114 < _list113.size; ++_i114)
@@ -12808,6 +13312,16 @@ public class Cassandra {
                   _elem115 = new KeySlice();
                   _elem115.read(iprot);
                   this.success.add(_elem115);
+=======
+                org.apache.thrift.protocol.TList _list121 = iprot.readListBegin();
+                this.success = new ArrayList<KeySlice>(_list121.size);
+                for (int _i122 = 0; _i122 < _list121.size; ++_i122)
+                {
+                  KeySlice _elem123; // required
+                  _elem123 = new KeySlice();
+                  _elem123.read(iprot);
+                  this.success.add(_elem123);
+>>>>>>> .merge_file_UlVTYo
                 }
                 iprot.readListEnd();
               }
@@ -12856,10 +13370,15 @@ public class Cassandra {
       if (this.isSetSuccess()) {
         oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
         {
+<<<<<<< .merge_file_gpdNwp
           oprot.writeListBegin(new TList(TType.STRUCT, this.success.size()));
           for (KeySlice _iter116 : this.success)
+=======
+          oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRUCT, this.success.size()));
+          for (KeySlice _iter124 : this.success)
+>>>>>>> .merge_file_UlVTYo
           {
-            _iter116.write(oprot);
+            _iter124.write(oprot);
           }
           oprot.writeListEnd();
         }
@@ -12927,6 +13446,7 @@ public class Cassandra {
 
   }
 
+<<<<<<< .merge_file_gpdNwp
   public static class get_indexed_slices_args implements TBase<get_indexed_slices_args, get_indexed_slices_args._Fields>, java.io.Serializable, Cloneable   {
     private static final TStruct STRUCT_DESC = new TStruct("get_indexed_slices_args");
 
@@ -12938,6 +13458,19 @@ public class Cassandra {
     public ColumnParent column_parent;
     public IndexClause index_clause;
     public SlicePredicate column_predicate;
+=======
+  public static class get_paged_slice_args implements org.apache.thrift.TBase<get_paged_slice_args, get_paged_slice_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("get_paged_slice_args");
+
+    private static final org.apache.thrift.protocol.TField COLUMN_FAMILY_FIELD_DESC = new org.apache.thrift.protocol.TField("column_family", org.apache.thrift.protocol.TType.STRING, (short)1);
+    private static final org.apache.thrift.protocol.TField RANGE_FIELD_DESC = new org.apache.thrift.protocol.TField("range", org.apache.thrift.protocol.TType.STRUCT, (short)2);
+    private static final org.apache.thrift.protocol.TField START_COLUMN_FIELD_DESC = new org.apache.thrift.protocol.TField("start_column", org.apache.thrift.protocol.TType.STRING, (short)3);
+    private static final org.apache.thrift.protocol.TField CONSISTENCY_LEVEL_FIELD_DESC = new org.apache.thrift.protocol.TField("consistency_level", org.apache.thrift.protocol.TType.I32, (short)4);
+
+    public String column_family; // required
+    public KeyRange range; // required
+    public ByteBuffer start_column; // required
+>>>>>>> .merge_file_UlVTYo
     /**
      * 
      * @see ConsistencyLevel
@@ -12945,10 +13478,1373 @@ public class Cassandra {
     public ConsistencyLevel consistency_level;
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+<<<<<<< .merge_file_gpdNwp
     public enum _Fields implements TFieldIdEnum {
       COLUMN_PARENT((short)1, "column_parent"),
       INDEX_CLAUSE((short)2, "index_clause"),
       COLUMN_PREDICATE((short)3, "column_predicate"),
+=======
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
+      COLUMN_FAMILY((short)1, "column_family"),
+      RANGE((short)2, "range"),
+      START_COLUMN((short)3, "start_column"),
+>>>>>>> .merge_file_UlVTYo
+      /**
+       * 
+       * @see ConsistencyLevel
+       */
+      CONSISTENCY_LEVEL((short)4, "consistency_level");
+
+      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
+
+      static {
+        for (_Fields field : EnumSet.allOf(_Fields.class)) {
+          byName.put(field.getFieldName(), field);
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, or null if its not found.
+       */
+      public static _Fields findByThriftId(int fieldId) {
+        switch(fieldId) {
+          case 1: // COLUMN_FAMILY
+            return COLUMN_FAMILY;
+          case 2: // RANGE
+            return RANGE;
+          case 3: // START_COLUMN
+            return START_COLUMN;
+          case 4: // CONSISTENCY_LEVEL
+            return CONSISTENCY_LEVEL;
+          default:
+            return null;
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, throwing an exception
+       * if it is not found.
+       */
+      public static _Fields findByThriftIdOrThrow(int fieldId) {
+        _Fields fields = findByThriftId(fieldId);
+        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
+        return fields;
+      }
+
+      /**
+       * Find the _Fields constant that matches name, or null if its not found.
+       */
+      public static _Fields findByName(String name) {
+        return byName.get(name);
+      }
+
+      private final short _thriftId;
+      private final String _fieldName;
+
+      _Fields(short thriftId, String fieldName) {
+        _thriftId = thriftId;
+        _fieldName = fieldName;
+      }
+
+      public short getThriftFieldId() {
+        return _thriftId;
+      }
+
+      public String getFieldName() {
+        return _fieldName;
+      }
+    }
+
+    // isset id assignments
+
+    public static final Map<_Fields, FieldMetaData> metaDataMap;
+    static {
+<<<<<<< .merge_file_gpdNwp
+      Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.COLUMN_PARENT, new FieldMetaData("column_parent", TFieldRequirementType.REQUIRED, 
+          new StructMetaData(TType.STRUCT, ColumnParent.class)));
+      tmpMap.put(_Fields.INDEX_CLAUSE, new FieldMetaData("index_clause", TFieldRequirementType.REQUIRED, 
+          new StructMetaData(TType.STRUCT, IndexClause.class)));
+      tmpMap.put(_Fields.COLUMN_PREDICATE, new FieldMetaData("column_predicate", TFieldRequirementType.REQUIRED, 
+          new StructMetaData(TType.STRUCT, SlicePredicate.class)));
+      tmpMap.put(_Fields.CONSISTENCY_LEVEL, new FieldMetaData("consistency_level", TFieldRequirementType.REQUIRED, 
+          new EnumMetaData(TType.ENUM, ConsistencyLevel.class)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      FieldMetaData.addStructMetaDataMap(get_indexed_slices_args.class, metaDataMap);
+    }
+
+    public get_indexed_slices_args() {
+      this.consistency_level = ConsistencyLevel.ONE;
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.COLUMN_FAMILY, new org.apache.thrift.meta_data.FieldMetaData("column_family", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
+      tmpMap.put(_Fields.RANGE, new org.apache.thrift.meta_data.FieldMetaData("range", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, KeyRange.class)));
+      tmpMap.put(_Fields.START_COLUMN, new org.apache.thrift.meta_data.FieldMetaData("start_column", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING          , true)));
+      tmpMap.put(_Fields.CONSISTENCY_LEVEL, new org.apache.thrift.meta_data.FieldMetaData("consistency_level", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, ConsistencyLevel.class)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(get_paged_slice_args.class, metaDataMap);
+    }
+
+    public get_paged_slice_args() {
+      this.consistency_level = org.apache.cassandra.thrift.ConsistencyLevel.ONE;
+>>>>>>> .merge_file_UlVTYo
+
+    }
+
+    public get_paged_slice_args(
+      String column_family,
+      KeyRange range,
+      ByteBuffer start_column,
+      ConsistencyLevel consistency_level)
+    {
+      this();
+      this.column_family = column_family;
+      this.range = range;
+      this.start_column = start_column;
+      this.consistency_level = consistency_level;
+    }
+
+    /**
+     * Performs a deep copy on <i>other</i>.
+     */
+    public get_paged_slice_args(get_paged_slice_args other) {
+      if (other.isSetColumn_family()) {
+        this.column_family = other.column_family;
+      }
+      if (other.isSetRange()) {
+        this.range = new KeyRange(other.range);
+      }
+      if (other.isSetStart_column()) {
+        this.start_column = org.apache.thrift.TBaseHelper.copyBinary(other.start_column);
+;
+      }
+      if (other.isSetConsistency_level()) {
+        this.consistency_level = other.consistency_level;
+      }
+    }
+
+    public get_paged_slice_args deepCopy() {
+      return new get_paged_slice_args(this);
+    }
+
+    @Override
+    public void clear() {
+<<<<<<< .merge_file_gpdNwp
+      this.column_parent = null;
+      this.index_clause = null;
+      this.column_predicate = null;
+      this.consistency_level = ConsistencyLevel.ONE;
+=======
+      this.column_family = null;
+      this.range = null;
+      this.start_column = null;
+      this.consistency_level = org.apache.cassandra.thrift.ConsistencyLevel.ONE;
+>>>>>>> .merge_file_UlVTYo
+
+    }
+
+    public String getColumn_family() {
+      return this.column_family;
+    }
+
+    public get_paged_slice_args setColumn_family(String column_family) {
+      this.column_family = column_family;
+      return this;
+    }
+
+    public void unsetColumn_family() {
+      this.column_family = null;
+    }
+
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field column_parent is set (has been asigned a value) and false otherwise */
+    public boolean isSetColumn_parent() {
+      return this.column_parent != null;
+=======
+    /** Returns true if field column_family is set (has been assigned a value) and false otherwise */
+    public boolean isSetColumn_family() {
+      return this.column_family != null;
+>>>>>>> .merge_file_UlVTYo
+    }
+
+    public void setColumn_familyIsSet(boolean value) {
+      if (!value) {
+        this.column_family = null;
+      }
+    }
+
+    public KeyRange getRange() {
+      return this.range;
+    }
+
+    public get_paged_slice_args setRange(KeyRange range) {
+      this.range = range;
+      return this;
+    }
+
+    public void unsetRange() {
+      this.range = null;
+    }
+
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field index_clause is set (has been asigned a value) and false otherwise */
+    public boolean isSetIndex_clause() {
+      return this.index_clause != null;
+=======
+    /** Returns true if field range is set (has been assigned a value) and false otherwise */
+    public boolean isSetRange() {
+      return this.range != null;
+>>>>>>> .merge_file_UlVTYo
+    }
+
+    public void setRangeIsSet(boolean value) {
+      if (!value) {
+        this.range = null;
+      }
+    }
+
+    public byte[] getStart_column() {
+      setStart_column(org.apache.thrift.TBaseHelper.rightSize(start_column));
+      return start_column == null ? null : start_column.array();
+    }
+
+    public ByteBuffer bufferForStart_column() {
+      return start_column;
+    }
+
+    public get_paged_slice_args setStart_column(byte[] start_column) {
+      setStart_column(start_column == null ? (ByteBuffer)null : ByteBuffer.wrap(start_column));
+      return this;
+    }
+
+    public get_paged_slice_args setStart_column(ByteBuffer start_column) {
+      this.start_column = start_column;
+      return this;
+    }
+
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field column_predicate is set (has been asigned a value) and false otherwise */
+    public boolean isSetColumn_predicate() {
+      return this.column_predicate != null;
+=======
+    public void unsetStart_column() {
+      this.start_column = null;
+>>>>>>> .merge_file_UlVTYo
+    }
+
+    /** Returns true if field start_column is set (has been assigned a value) and false otherwise */
+    public boolean isSetStart_column() {
+      return this.start_column != null;
+    }
+
+    public void setStart_columnIsSet(boolean value) {
+      if (!value) {
+        this.start_column = null;
+      }
+    }
+
+    /**
+     * 
+     * @see ConsistencyLevel
+     */
+    public ConsistencyLevel getConsistency_level() {
+      return this.consistency_level;
+    }
+
+    /**
+     * 
+     * @see ConsistencyLevel
+     */
+    public get_paged_slice_args setConsistency_level(ConsistencyLevel consistency_level) {
+      this.consistency_level = consistency_level;
+      return this;
+    }
+
+    public void unsetConsistency_level() {
+      this.consistency_level = null;
+    }
+
+    /** Returns true if field consistency_level is set (has been asigned a value) and false otherwise */
+    public boolean isSetConsistency_level() {
+      return this.consistency_level != null;
+    }
+
+    public void setConsistency_levelIsSet(boolean value) {
+      if (!value) {
+        this.consistency_level = null;
+      }
+    }
+
+    public void setFieldValue(_Fields field, Object value) {
+      switch (field) {
+      case COLUMN_FAMILY:
+        if (value == null) {
+          unsetColumn_family();
+        } else {
+          setColumn_family((String)value);
+        }
+        break;
+
+      case RANGE:
+        if (value == null) {
+          unsetRange();
+        } else {
+          setRange((KeyRange)value);
+        }
+        break;
+
+      case START_COLUMN:
+        if (value == null) {
+          unsetStart_column();
+        } else {
+          setStart_column((ByteBuffer)value);
+        }
+        break;
+
+      case CONSISTENCY_LEVEL:
+        if (value == null) {
+          unsetConsistency_level();
+        } else {
+          setConsistency_level((ConsistencyLevel)value);
+        }
+        break;
+
+      }
+    }
+
+    public Object getFieldValue(_Fields field) {
+      switch (field) {
+      case COLUMN_FAMILY:
+        return getColumn_family();
+
+      case RANGE:
+        return getRange();
+
+      case START_COLUMN:
+        return getStart_column();
+
+      case CONSISTENCY_LEVEL:
+        return getConsistency_level();
+
+      }
+      throw new IllegalStateException();
+    }
+
+    /** Returns true if field corresponding to fieldID is set (has been asigned a value) and false otherwise */
+    public boolean isSet(_Fields field) {
+      if (field == null) {
+        throw new IllegalArgumentException();
+      }
+
+      switch (field) {
+      case COLUMN_FAMILY:
+        return isSetColumn_family();
+      case RANGE:
+        return isSetRange();
+      case START_COLUMN:
+        return isSetStart_column();
+      case CONSISTENCY_LEVEL:
+        return isSetConsistency_level();
+      }
+      throw new IllegalStateException();
+    }
+
+    @Override
+    public boolean equals(Object that) {
+      if (that == null)
+        return false;
+      if (that instanceof get_paged_slice_args)
+        return this.equals((get_paged_slice_args)that);
+      return false;
+    }
+
+    public boolean equals(get_paged_slice_args that) {
+      if (that == null)
+        return false;
+
+      boolean this_present_column_family = true && this.isSetColumn_family();
+      boolean that_present_column_family = true && that.isSetColumn_family();
+      if (this_present_column_family || that_present_column_family) {
+        if (!(this_present_column_family && that_present_column_family))
+          return false;
+        if (!this.column_family.equals(that.column_family))
+          return false;
+      }
+
+      boolean this_present_range = true && this.isSetRange();
+      boolean that_present_range = true && that.isSetRange();
+      if (this_present_range || that_present_range) {
+        if (!(this_present_range && that_present_range))
+          return false;
+        if (!this.range.equals(that.range))
+          return false;
+      }
+
+      boolean this_present_start_column = true && this.isSetStart_column();
+      boolean that_present_start_column = true && that.isSetStart_column();
+      if (this_present_start_column || that_present_start_column) {
+        if (!(this_present_start_column && that_present_start_column))
+          return false;
+        if (!this.start_column.equals(that.start_column))
+          return false;
+      }
+
+      boolean this_present_consistency_level = true && this.isSetConsistency_level();
+      boolean that_present_consistency_level = true && that.isSetConsistency_level();
+      if (this_present_consistency_level || that_present_consistency_level) {
+        if (!(this_present_consistency_level && that_present_consistency_level))
+          return false;
+        if (!this.consistency_level.equals(that.consistency_level))
+          return false;
+      }
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      HashCodeBuilder builder = new HashCodeBuilder();
+
+      boolean present_column_family = true && (isSetColumn_family());
+      builder.append(present_column_family);
+      if (present_column_family)
+        builder.append(column_family);
+
+      boolean present_range = true && (isSetRange());
+      builder.append(present_range);
+      if (present_range)
+        builder.append(range);
+
+      boolean present_start_column = true && (isSetStart_column());
+      builder.append(present_start_column);
+      if (present_start_column)
+        builder.append(start_column);
+
+      boolean present_consistency_level = true && (isSetConsistency_level());
+      builder.append(present_consistency_level);
+      if (present_consistency_level)
+        builder.append(consistency_level.getValue());
+
+      return builder.toHashCode();
+    }
+
+    public int compareTo(get_paged_slice_args other) {
+      if (!getClass().equals(other.getClass())) {
+        return getClass().getName().compareTo(other.getClass().getName());
+      }
+
+      int lastComparison = 0;
+      get_paged_slice_args typedOther = (get_paged_slice_args)other;
+
+      lastComparison = Boolean.valueOf(isSetColumn_family()).compareTo(typedOther.isSetColumn_family());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetColumn_parent()) {
+        lastComparison = TBaseHelper.compareTo(this.column_parent, typedOther.column_parent);
+=======
+      if (isSetColumn_family()) {
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.column_family, typedOther.column_family);
+>>>>>>> .merge_file_UlVTYo
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      lastComparison = Boolean.valueOf(isSetRange()).compareTo(typedOther.isSetRange());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetIndex_clause()) {
+        lastComparison = TBaseHelper.compareTo(this.index_clause, typedOther.index_clause);
+=======
+      if (isSetRange()) {
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.range, typedOther.range);
+>>>>>>> .merge_file_UlVTYo
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      lastComparison = Boolean.valueOf(isSetStart_column()).compareTo(typedOther.isSetStart_column());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetColumn_predicate()) {
+        lastComparison = TBaseHelper.compareTo(this.column_predicate, typedOther.column_predicate);
+=======
+      if (isSetStart_column()) {
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.start_column, typedOther.start_column);
+>>>>>>> .merge_file_UlVTYo
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      lastComparison = Boolean.valueOf(isSetConsistency_level()).compareTo(typedOther.isSetConsistency_level());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetConsistency_level()) {
+        lastComparison = TBaseHelper.compareTo(this.consistency_level, typedOther.consistency_level);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      return 0;
+    }
+
+    public _Fields fieldForId(int fieldId) {
+      return _Fields.findByThriftId(fieldId);
+    }
+
+    public void read(TProtocol iprot) throws TException {
+      TField field;
+      iprot.readStructBegin();
+      while (true)
+      {
+        field = iprot.readFieldBegin();
+        if (field.type == TType.STOP) { 
+          break;
+        }
+        switch (field.id) {
+<<<<<<< .merge_file_gpdNwp
+          case 1: // COLUMN_PARENT
+            if (field.type == TType.STRUCT) {
+              this.column_parent = new ColumnParent();
+              this.column_parent.read(iprot);
+=======
+          case 1: // COLUMN_FAMILY
+            if (field.type == org.apache.thrift.protocol.TType.STRING) {
+              this.column_family = iprot.readString();
+>>>>>>> .merge_file_UlVTYo
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+<<<<<<< .merge_file_gpdNwp
+          case 2: // INDEX_CLAUSE
+            if (field.type == TType.STRUCT) {
+              this.index_clause = new IndexClause();
+              this.index_clause.read(iprot);
+=======
+          case 2: // RANGE
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
+              this.range = new KeyRange();
+              this.range.read(iprot);
+>>>>>>> .merge_file_UlVTYo
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+<<<<<<< .merge_file_gpdNwp
+          case 3: // COLUMN_PREDICATE
+            if (field.type == TType.STRUCT) {
+              this.column_predicate = new SlicePredicate();
+              this.column_predicate.read(iprot);
+=======
+          case 3: // START_COLUMN
+            if (field.type == org.apache.thrift.protocol.TType.STRING) {
+              this.start_column = iprot.readBinary();
+>>>>>>> .merge_file_UlVTYo
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          case 4: // CONSISTENCY_LEVEL
+            if (field.type == TType.I32) {
+              this.consistency_level = ConsistencyLevel.findByValue(iprot.readI32());
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          default:
+            TProtocolUtil.skip(iprot, field.type);
+        }
+        iprot.readFieldEnd();
+      }
+      iprot.readStructEnd();
+
+      // check for required fields of primitive type, which can't be checked in the validate method
+      validate();
+    }
+
+    public void write(TProtocol oprot) throws TException {
+      validate();
+
+      oprot.writeStructBegin(STRUCT_DESC);
+      if (this.column_family != null) {
+        oprot.writeFieldBegin(COLUMN_FAMILY_FIELD_DESC);
+        oprot.writeString(this.column_family);
+        oprot.writeFieldEnd();
+      }
+      if (this.range != null) {
+        oprot.writeFieldBegin(RANGE_FIELD_DESC);
+        this.range.write(oprot);
+        oprot.writeFieldEnd();
+      }
+      if (this.start_column != null) {
+        oprot.writeFieldBegin(START_COLUMN_FIELD_DESC);
+        oprot.writeBinary(this.start_column);
+        oprot.writeFieldEnd();
+      }
+      if (this.consistency_level != null) {
+        oprot.writeFieldBegin(CONSISTENCY_LEVEL_FIELD_DESC);
+        oprot.writeI32(this.consistency_level.getValue());
+        oprot.writeFieldEnd();
+      }
+      oprot.writeFieldStop();
+      oprot.writeStructEnd();
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder sb = new StringBuilder("get_paged_slice_args(");
+      boolean first = true;
+
+      sb.append("column_family:");
+      if (this.column_family == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.column_family);
+      }
+      first = false;
+      if (!first) sb.append(", ");
+      sb.append("range:");
+      if (this.range == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.range);
+      }
+      first = false;
+      if (!first) sb.append(", ");
+      sb.append("start_column:");
+      if (this.start_column == null) {
+        sb.append("null");
+      } else {
+        org.apache.thrift.TBaseHelper.toString(this.start_column, sb);
+      }
+      first = false;
+      if (!first) sb.append(", ");
+      sb.append("consistency_level:");
+      if (this.consistency_level == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.consistency_level);
+      }
+      first = false;
+      sb.append(")");
+      return sb.toString();
+    }
+
+    public void validate() throws TException {
+      // check for required fields
+<<<<<<< .merge_file_gpdNwp
+      if (column_parent == null) {
+        throw new TProtocolException("Required field 'column_parent' was not present! Struct: " + toString());
+      }
+      if (index_clause == null) {
+        throw new TProtocolException("Required field 'index_clause' was not present! Struct: " + toString());
+      }
+      if (column_predicate == null) {
+        throw new TProtocolException("Required field 'column_predicate' was not present! Struct: " + toString());
+=======
+      if (column_family == null) {
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'column_family' was not present! Struct: " + toString());
+      }
+      if (range == null) {
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'range' was not present! Struct: " + toString());
+      }
+      if (start_column == null) {
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'start_column' was not present! Struct: " + toString());
+>>>>>>> .merge_file_UlVTYo
+      }
+      if (consistency_level == null) {
+        throw new TProtocolException("Required field 'consistency_level' was not present! Struct: " + toString());
+      }
+    }
+
+  }
+
+<<<<<<< .merge_file_gpdNwp
+  public static class get_indexed_slices_result implements TBase<get_indexed_slices_result, get_indexed_slices_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("get_indexed_slices_result");
+=======
+  public static class get_paged_slice_result implements org.apache.thrift.TBase<get_paged_slice_result, get_paged_slice_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("get_paged_slice_result");
+>>>>>>> .merge_file_UlVTYo
+
+    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.LIST, (short)0);
+    private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
+    private static final TField UE_FIELD_DESC = new TField("ue", TType.STRUCT, (short)2);
+    private static final TField TE_FIELD_DESC = new TField("te", TType.STRUCT, (short)3);
+
+    public List<KeySlice> success;
+    public InvalidRequestException ire;
+    public UnavailableException ue;
+    public TimedOutException te;
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements TFieldIdEnum {
+      SUCCESS((short)0, "success"),
+      IRE((short)1, "ire"),
+      UE((short)2, "ue"),
+      TE((short)3, "te");
+
+      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
+
+      static {
+        for (_Fields field : EnumSet.allOf(_Fields.class)) {
+          byName.put(field.getFieldName(), field);
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, or null if its not found.
+       */
+      public static _Fields findByThriftId(int fieldId) {
+        switch(fieldId) {
+          case 0: // SUCCESS
+            return SUCCESS;
+          case 1: // IRE
+            return IRE;
+          case 2: // UE
+            return UE;
+          case 3: // TE
+            return TE;
+          default:
+            return null;
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, throwing an exception
+       * if it is not found.
+       */
+      public static _Fields findByThriftIdOrThrow(int fieldId) {
+        _Fields fields = findByThriftId(fieldId);
+        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
+        return fields;
+      }
+
+      /**
+       * Find the _Fields constant that matches name, or null if its not found.
+       */
+      public static _Fields findByName(String name) {
+        return byName.get(name);
+      }
+
+      private final short _thriftId;
+      private final String _fieldName;
+
+      _Fields(short thriftId, String fieldName) {
+        _thriftId = thriftId;
+        _fieldName = fieldName;
+      }
+
+      public short getThriftFieldId() {
+        return _thriftId;
+      }
+
+      public String getFieldName() {
+        return _fieldName;
+      }
+    }
+
+    // isset id assignments
+
+    public static final Map<_Fields, FieldMetaData> metaDataMap;
+    static {
+      Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new FieldMetaData("success", TFieldRequirementType.DEFAULT, 
+          new ListMetaData(TType.LIST, 
+              new StructMetaData(TType.STRUCT, KeySlice.class))));
+      tmpMap.put(_Fields.IRE, new FieldMetaData("ire", TFieldRequirementType.DEFAULT, 
+          new FieldValueMetaData(TType.STRUCT)));
+      tmpMap.put(_Fields.UE, new FieldMetaData("ue", TFieldRequirementType.DEFAULT, 
+          new FieldValueMetaData(TType.STRUCT)));
+      tmpMap.put(_Fields.TE, new FieldMetaData("te", TFieldRequirementType.DEFAULT, 
+          new FieldValueMetaData(TType.STRUCT)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+<<<<<<< .merge_file_gpdNwp
+      FieldMetaData.addStructMetaDataMap(get_indexed_slices_result.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(get_paged_slice_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
+    }
+
+    public get_paged_slice_result() {
+    }
+
+    public get_paged_slice_result(
+      List<KeySlice> success,
+      InvalidRequestException ire,
+      UnavailableException ue,
+      TimedOutException te)
+    {
+      this();
+      this.success = success;
+      this.ire = ire;
+      this.ue = ue;
+      this.te = te;
+    }
+
+    /**
+     * Performs a deep copy on <i>other</i>.
+     */
+    public get_paged_slice_result(get_paged_slice_result other) {
+      if (other.isSetSuccess()) {
+        List<KeySlice> __this__success = new ArrayList<KeySlice>();
+        for (KeySlice other_element : other.success) {
+          __this__success.add(new KeySlice(other_element));
+        }
+        this.success = __this__success;
+      }
+      if (other.isSetIre()) {
+        this.ire = new InvalidRequestException(other.ire);
+      }
+      if (other.isSetUe()) {
+        this.ue = new UnavailableException(other.ue);
+      }
+      if (other.isSetTe()) {
+        this.te = new TimedOutException(other.te);
+      }
+    }
+
+    public get_paged_slice_result deepCopy() {
+      return new get_paged_slice_result(this);
+    }
+
+    @Override
+    public void clear() {
+      this.success = null;
+      this.ire = null;
+      this.ue = null;
+      this.te = null;
+    }
+
+    public int getSuccessSize() {
+      return (this.success == null) ? 0 : this.success.size();
+    }
+
+    public java.util.Iterator<KeySlice> getSuccessIterator() {
+      return (this.success == null) ? null : this.success.iterator();
+    }
+
+    public void addToSuccess(KeySlice elem) {
+      if (this.success == null) {
+        this.success = new ArrayList<KeySlice>();
+      }
+      this.success.add(elem);
+    }
+
+    public List<KeySlice> getSuccess() {
+      return this.success;
+    }
+
+    public get_paged_slice_result setSuccess(List<KeySlice> success) {
+      this.success = success;
+      return this;
+    }
+
+    public void unsetSuccess() {
+      this.success = null;
+    }
+
+    /** Returns true if field success is set (has been asigned a value) and false otherwise */
+    public boolean isSetSuccess() {
+      return this.success != null;
+    }
+
+    public void setSuccessIsSet(boolean value) {
+      if (!value) {
+        this.success = null;
+      }
+    }
+
+    public InvalidRequestException getIre() {
+      return this.ire;
+    }
+
+    public get_paged_slice_result setIre(InvalidRequestException ire) {
+      this.ire = ire;
+      return this;
+    }
+
+    public void unsetIre() {
+      this.ire = null;
+    }
+
+    /** Returns true if field ire is set (has been asigned a value) and false otherwise */
+    public boolean isSetIre() {
+      return this.ire != null;
+    }
+
+    public void setIreIsSet(boolean value) {
+      if (!value) {
+        this.ire = null;
+      }
+    }
+
+    public UnavailableException getUe() {
+      return this.ue;
+    }
+
+    public get_paged_slice_result setUe(UnavailableException ue) {
+      this.ue = ue;
+      return this;
+    }
+
+    public void unsetUe() {
+      this.ue = null;
+    }
+
+    /** Returns true if field ue is set (has been asigned a value) and false otherwise */
+    public boolean isSetUe() {
+      return this.ue != null;
+    }
+
+    public void setUeIsSet(boolean value) {
+      if (!value) {
+        this.ue = null;
+      }
+    }
+
+    public TimedOutException getTe() {
+      return this.te;
+    }
+
+    public get_paged_slice_result setTe(TimedOutException te) {
+      this.te = te;
+      return this;
+    }
+
+    public void unsetTe() {
+      this.te = null;
+    }
+
+    /** Returns true if field te is set (has been asigned a value) and false otherwise */
+    public boolean isSetTe() {
+      return this.te != null;
+    }
+
+    public void setTeIsSet(boolean value) {
+      if (!value) {
+        this.te = null;
+      }
+    }
+
+    public void setFieldValue(_Fields field, Object value) {
+      switch (field) {
+      case SUCCESS:
+        if (value == null) {
+          unsetSuccess();
+        } else {
+          setSuccess((List<KeySlice>)value);
+        }
+        break;
+
+      case IRE:
+        if (value == null) {
+          unsetIre();
+        } else {
+          setIre((InvalidRequestException)value);
+        }
+        break;
+
+      case UE:
+        if (value == null) {
+          unsetUe();
+        } else {
+          setUe((UnavailableException)value);
+        }
+        break;
+
+      case TE:
+        if (value == null) {
+          unsetTe();
+        } else {
+          setTe((TimedOutException)value);
+        }
+        break;
+
+      }
+    }
+
+    public Object getFieldValue(_Fields field) {
+      switch (field) {
+      case SUCCESS:
+        return getSuccess();
+
+      case IRE:
+        return getIre();
+
+      case UE:
+        return getUe();
+
+      case TE:
+        return getTe();
+
+      }
+      throw new IllegalStateException();
+    }
+
+    /** Returns true if field corresponding to fieldID is set (has been asigned a value) and false otherwise */
+    public boolean isSet(_Fields field) {
+      if (field == null) {
+        throw new IllegalArgumentException();
+      }
+
+      switch (field) {
+      case SUCCESS:
+        return isSetSuccess();
+      case IRE:
+        return isSetIre();
+      case UE:
+        return isSetUe();
+      case TE:
+        return isSetTe();
+      }
+      throw new IllegalStateException();
+    }
+
+    @Override
+    public boolean equals(Object that) {
+      if (that == null)
+        return false;
+      if (that instanceof get_paged_slice_result)
+        return this.equals((get_paged_slice_result)that);
+      return false;
+    }
+
+    public boolean equals(get_paged_slice_result that) {
+      if (that == null)
+        return false;
+
+      boolean this_present_success = true && this.isSetSuccess();
+      boolean that_present_success = true && that.isSetSuccess();
+      if (this_present_success || that_present_success) {
+        if (!(this_present_success && that_present_success))
+          return false;
+        if (!this.success.equals(that.success))
+          return false;
+      }
+
+      boolean this_present_ire = true && this.isSetIre();
+      boolean that_present_ire = true && that.isSetIre();
+      if (this_present_ire || that_present_ire) {
+        if (!(this_present_ire && that_present_ire))
+          return false;
+        if (!this.ire.equals(that.ire))
+          return false;
+      }
+
+      boolean this_present_ue = true && this.isSetUe();
+      boolean that_present_ue = true && that.isSetUe();
+      if (this_present_ue || that_present_ue) {
+        if (!(this_present_ue && that_present_ue))
+          return false;
+        if (!this.ue.equals(that.ue))
+          return false;
+      }
+
+      boolean this_present_te = true && this.isSetTe();
+      boolean that_present_te = true && that.isSetTe();
+      if (this_present_te || that_present_te) {
+        if (!(this_present_te && that_present_te))
+          return false;
+        if (!this.te.equals(that.te))
+          return false;
+      }
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      HashCodeBuilder builder = new HashCodeBuilder();
+
+      boolean present_success = true && (isSetSuccess());
+      builder.append(present_success);
+      if (present_success)
+        builder.append(success);
+
+      boolean present_ire = true && (isSetIre());
+      builder.append(present_ire);
+      if (present_ire)
+        builder.append(ire);
+
+      boolean present_ue = true && (isSetUe());
+      builder.append(present_ue);
+      if (present_ue)
+        builder.append(ue);
+
+      boolean present_te = true && (isSetTe());
+      builder.append(present_te);
+      if (present_te)
+        builder.append(te);
+
+      return builder.toHashCode();
+    }
+
+    public int compareTo(get_paged_slice_result other) {
+      if (!getClass().equals(other.getClass())) {
+        return getClass().getName().compareTo(other.getClass().getName());
+      }
+
+      int lastComparison = 0;
+      get_paged_slice_result typedOther = (get_paged_slice_result)other;
+
+      lastComparison = Boolean.valueOf(isSetSuccess()).compareTo(typedOther.isSetSuccess());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetSuccess()) {
+        lastComparison = TBaseHelper.compareTo(this.success, typedOther.success);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      lastComparison = Boolean.valueOf(isSetIre()).compareTo(typedOther.isSetIre());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetIre()) {
+        lastComparison = TBaseHelper.compareTo(this.ire, typedOther.ire);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      lastComparison = Boolean.valueOf(isSetUe()).compareTo(typedOther.isSetUe());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetUe()) {
+        lastComparison = TBaseHelper.compareTo(this.ue, typedOther.ue);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      lastComparison = Boolean.valueOf(isSetTe()).compareTo(typedOther.isSetTe());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetTe()) {
+        lastComparison = TBaseHelper.compareTo(this.te, typedOther.te);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      return 0;
+    }
+
+    public _Fields fieldForId(int fieldId) {
+      return _Fields.findByThriftId(fieldId);
+    }
+
+    public void read(TProtocol iprot) throws TException {
+      TField field;
+      iprot.readStructBegin();
+      while (true)
+      {
+        field = iprot.readFieldBegin();
+        if (field.type == TType.STOP) { 
+          break;
+        }
+        switch (field.id) {
+          case 0: // SUCCESS
+            if (field.type == TType.LIST) {
+              {
+<<<<<<< .merge_file_gpdNwp
+                TList _list117 = iprot.readListBegin();
+                this.success = new ArrayList<KeySlice>(_list117.size);
+                for (int _i118 = 0; _i118 < _list117.size; ++_i118)
+                {
+                  KeySlice _elem119;
+                  _elem119 = new KeySlice();
+                  _elem119.read(iprot);
+                  this.success.add(_elem119);
+=======
+                org.apache.thrift.protocol.TList _list125 = iprot.readListBegin();
+                this.success = new ArrayList<KeySlice>(_list125.size);
+                for (int _i126 = 0; _i126 < _list125.size; ++_i126)
+                {
+                  KeySlice _elem127; // required
+                  _elem127 = new KeySlice();
+                  _elem127.read(iprot);
+                  this.success.add(_elem127);
+>>>>>>> .merge_file_UlVTYo
+                }
+                iprot.readListEnd();
+              }
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          case 1: // IRE
+            if (field.type == TType.STRUCT) {
+              this.ire = new InvalidRequestException();
+              this.ire.read(iprot);
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          case 2: // UE
+            if (field.type == TType.STRUCT) {
+              this.ue = new UnavailableException();
+              this.ue.read(iprot);
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          case 3: // TE
+            if (field.type == TType.STRUCT) {
+              this.te = new TimedOutException();
+              this.te.read(iprot);
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          default:
+            TProtocolUtil.skip(iprot, field.type);
+        }
+        iprot.readFieldEnd();
+      }
+      iprot.readStructEnd();
+
+      // check for required fields of primitive type, which can't be checked in the validate method
+      validate();
+    }
+
+    public void write(TProtocol oprot) throws TException {
+      oprot.writeStructBegin(STRUCT_DESC);
+
+      if (this.isSetSuccess()) {
+        oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
+        {
+<<<<<<< .merge_file_gpdNwp
+          oprot.writeListBegin(new TList(TType.STRUCT, this.success.size()));
+          for (KeySlice _iter120 : this.success)
+=======
+          oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRUCT, this.success.size()));
+          for (KeySlice _iter128 : this.success)
+>>>>>>> .merge_file_UlVTYo
+          {
+            _iter128.write(oprot);
+          }
+          oprot.writeListEnd();
+        }
+        oprot.writeFieldEnd();
+      } else if (this.isSetIre()) {
+        oprot.writeFieldBegin(IRE_FIELD_DESC);
+        this.ire.write(oprot);
+        oprot.writeFieldEnd();
+      } else if (this.isSetUe()) {
+        oprot.writeFieldBegin(UE_FIELD_DESC);
+        this.ue.write(oprot);
+        oprot.writeFieldEnd();
+      } else if (this.isSetTe()) {
+        oprot.writeFieldBegin(TE_FIELD_DESC);
+        this.te.write(oprot);
+        oprot.writeFieldEnd();
+      }
+      oprot.writeFieldStop();
+      oprot.writeStructEnd();
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder sb = new StringBuilder("get_paged_slice_result(");
+      boolean first = true;
+
+      sb.append("success:");
+      if (this.success == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.success);
+      }
+      first = false;
+      if (!first) sb.append(", ");
+      sb.append("ire:");
+      if (this.ire == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.ire);
+      }
+      first = false;
+      if (!first) sb.append(", ");
+      sb.append("ue:");
+      if (this.ue == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.ue);
+      }
+      first = false;
+      if (!first) sb.append(", ");
+      sb.append("te:");
+      if (this.te == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.te);
+      }
+      first = false;
+      sb.append(")");
+      return sb.toString();
+    }
+
+    public void validate() throws TException {
+      // check for required fields
+    }
+
+  }
+
+<<<<<<< .merge_file_gpdNwp
+  public static class insert_args implements TBase<insert_args, insert_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("insert_args");
+
+    private static final TField KEY_FIELD_DESC = new TField("key", TType.STRING, (short)1);
+    private static final TField COLUMN_PARENT_FIELD_DESC = new TField("column_parent", TType.STRUCT, (short)2);
+    private static final TField COLUMN_FIELD_DESC = new TField("column", TType.STRUCT, (short)3);
+    private static final TField CONSISTENCY_LEVEL_FIELD_DESC = new TField("consistency_level", TType.I32, (short)4);
+
+    public ByteBuffer key;
+    public ColumnParent column_parent;
+    public Column column;
+=======
+  public static class get_indexed_slices_args implements org.apache.thrift.TBase<get_indexed_slices_args, get_indexed_slices_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("get_indexed_slices_args");
+
+    private static final org.apache.thrift.protocol.TField COLUMN_PARENT_FIELD_DESC = new org.apache.thrift.protocol.TField("column_parent", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+    private static final org.apache.thrift.protocol.TField INDEX_CLAUSE_FIELD_DESC = new org.apache.thrift.protocol.TField("index_clause", org.apache.thrift.protocol.TType.STRUCT, (short)2);
+    private static final org.apache.thrift.protocol.TField COLUMN_PREDICATE_FIELD_DESC = new org.apache.thrift.protocol.TField("column_predicate", org.apache.thrift.protocol.TType.STRUCT, (short)3);
+    private static final org.apache.thrift.protocol.TField CONSISTENCY_LEVEL_FIELD_DESC = new org.apache.thrift.protocol.TField("consistency_level", org.apache.thrift.protocol.TType.I32, (short)4);
+
+    public ColumnParent column_parent; // required
+    public IndexClause index_clause; // required
+    public SlicePredicate column_predicate; // required
+>>>>>>> .merge_file_UlVTYo
+    /**
+     * 
+     * @see ConsistencyLevel
+     */
+    public ConsistencyLevel consistency_level;
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+<<<<<<< .merge_file_gpdNwp
+    public enum _Fields implements TFieldIdEnum {
+      KEY((short)1, "key"),
+      COLUMN_PARENT((short)2, "column_parent"),
+      COLUMN((short)3, "column"),
+=======
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
+      COLUMN_PARENT((short)1, "column_parent"),
+      INDEX_CLAUSE((short)2, "index_clause"),
+      COLUMN_PREDICATE((short)3, "column_predicate"),
+>>>>>>> .merge_file_UlVTYo
       /**
        * 
        * @see ConsistencyLevel
@@ -13019,21 +14915,39 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.KEY, new FieldMetaData("key", TFieldRequirementType.REQUIRED, 
+          new FieldValueMetaData(TType.STRING)));
       tmpMap.put(_Fields.COLUMN_PARENT, new FieldMetaData("column_parent", TFieldRequirementType.REQUIRED, 
           new StructMetaData(TType.STRUCT, ColumnParent.class)));
-      tmpMap.put(_Fields.INDEX_CLAUSE, new FieldMetaData("index_clause", TFieldRequirementType.REQUIRED, 
-          new StructMetaData(TType.STRUCT, IndexClause.class)));
-      tmpMap.put(_Fields.COLUMN_PREDICATE, new FieldMetaData("column_predicate", TFieldRequirementType.REQUIRED, 
-          new StructMetaData(TType.STRUCT, SlicePredicate.class)));
+      tmpMap.put(_Fields.COLUMN, new FieldMetaData("column", TFieldRequirementType.REQUIRED, 
+          new StructMetaData(TType.STRUCT, Column.class)));
       tmpMap.put(_Fields.CONSISTENCY_LEVEL, new FieldMetaData("consistency_level", TFieldRequirementType.REQUIRED, 
           new EnumMetaData(TType.ENUM, ConsistencyLevel.class)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(get_indexed_slices_args.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(insert_args.class, metaDataMap);
+    }
+
+    public insert_args() {
+      this.consistency_level = ConsistencyLevel.ONE;
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.COLUMN_PARENT, new org.apache.thrift.meta_data.FieldMetaData("column_parent", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, ColumnParent.class)));
+      tmpMap.put(_Fields.INDEX_CLAUSE, new org.apache.thrift.meta_data.FieldMetaData("index_clause", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, IndexClause.class)));
+      tmpMap.put(_Fields.COLUMN_PREDICATE, new org.apache.thrift.meta_data.FieldMetaData("column_predicate", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, SlicePredicate.class)));
+      tmpMap.put(_Fields.CONSISTENCY_LEVEL, new org.apache.thrift.meta_data.FieldMetaData("consistency_level", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, ConsistencyLevel.class)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(get_indexed_slices_args.class, metaDataMap);
     }
 
     public get_indexed_slices_args() {
-      this.consistency_level = ConsistencyLevel.ONE;
+      this.consistency_level = org.apache.cassandra.thrift.ConsistencyLevel.ONE;
+>>>>>>> .merge_file_UlVTYo
 
     }
 
@@ -13053,7 +14967,15 @@ public class Cassandra {
     /**
      * Performs a deep copy on <i>other</i>.
      */
+<<<<<<< .merge_file_gpdNwp
+    public insert_args(insert_args other) {
+      if (other.isSetKey()) {
+        this.key = TBaseHelper.copyBinary(other.key);
+;
+      }
+=======
     public get_indexed_slices_args(get_indexed_slices_args other) {
+>>>>>>> .merge_file_UlVTYo
       if (other.isSetColumn_parent()) {
         this.column_parent = new ColumnParent(other.column_parent);
       }
@@ -13075,14 +14997,34 @@ public class Cassandra {
     @Override
     public void clear() {
       this.column_parent = null;
+<<<<<<< .merge_file_gpdNwp
+      this.column = null;
+      this.consistency_level = ConsistencyLevel.ONE;
+
+    }
+
+    public byte[] getKey() {
+      setKey(TBaseHelper.rightSize(key));
+      return key.array();
+    }
+
+    public ByteBuffer BufferForKey() {
+      return key;
+    }
+
+    public insert_args setKey(byte[] key) {
+      setKey(ByteBuffer.wrap(key));
+      return this;
+=======
       this.index_clause = null;
       this.column_predicate = null;
-      this.consistency_level = ConsistencyLevel.ONE;
+      this.consistency_level = org.apache.cassandra.thrift.ConsistencyLevel.ONE;
 
     }
 
     public ColumnParent getColumn_parent() {
       return this.column_parent;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public get_indexed_slices_args setColumn_parent(ColumnParent column_parent) {
@@ -13094,9 +15036,15 @@ public class Cassandra {
       this.column_parent = null;
     }
 
-    /** Returns true if field column_parent is set (has been asigned a value) and false otherwise */
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field key is set (has been asigned a value) and false otherwise */
+    public boolean isSetKey() {
+      return this.key != null;
+=======
+    /** Returns true if field column_parent is set (has been assigned a value) and false otherwise */
     public boolean isSetColumn_parent() {
       return this.column_parent != null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setColumn_parentIsSet(boolean value) {
@@ -13118,9 +15066,15 @@ public class Cassandra {
       this.index_clause = null;
     }
 
-    /** Returns true if field index_clause is set (has been asigned a value) and false otherwise */
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field column_parent is set (has been asigned a value) and false otherwise */
+    public boolean isSetColumn_parent() {
+      return this.column_parent != null;
+=======
+    /** Returns true if field index_clause is set (has been assigned a value) and false otherwise */
     public boolean isSetIndex_clause() {
       return this.index_clause != null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setIndex_clauseIsSet(boolean value) {
@@ -13142,9 +15096,15 @@ public class Cassandra {
       this.column_predicate = null;
     }
 
-    /** Returns true if field column_predicate is set (has been asigned a value) and false otherwise */
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field column is set (has been asigned a value) and false otherwise */
+    public boolean isSetColumn() {
+      return this.column != null;
+=======
+    /** Returns true if field column_predicate is set (has been assigned a value) and false otherwise */
     public boolean isSetColumn_predicate() {
       return this.column_predicate != null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setColumn_predicateIsSet(boolean value) {
@@ -13350,8 +15310,13 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetKey()) {
+        lastComparison = TBaseHelper.compareTo(this.key, typedOther.key);
+=======
       if (isSetColumn_parent()) {
-        lastComparison = TBaseHelper.compareTo(this.column_parent, typedOther.column_parent);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.column_parent, typedOther.column_parent);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -13360,8 +15325,13 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetColumn_parent()) {
+        lastComparison = TBaseHelper.compareTo(this.column_parent, typedOther.column_parent);
+=======
       if (isSetIndex_clause()) {
-        lastComparison = TBaseHelper.compareTo(this.index_clause, typedOther.index_clause);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.index_clause, typedOther.index_clause);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -13370,8 +15340,13 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetColumn()) {
+        lastComparison = TBaseHelper.compareTo(this.column, typedOther.column);
+=======
       if (isSetColumn_predicate()) {
-        lastComparison = TBaseHelper.compareTo(this.column_predicate, typedOther.column_predicate);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.column_predicate, typedOther.column_predicate);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -13403,26 +15378,46 @@ public class Cassandra {
           break;
         }
         switch (field.id) {
+<<<<<<< .merge_file_gpdNwp
+          case 1: // KEY
+            if (field.type == TType.STRING) {
+              this.key = iprot.readBinary();
+=======
           case 1: // COLUMN_PARENT
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
+              this.column_parent = new ColumnParent();
+              this.column_parent.read(iprot);
+>>>>>>> .merge_file_UlVTYo
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+<<<<<<< .merge_file_gpdNwp
+          case 2: // COLUMN_PARENT
             if (field.type == TType.STRUCT) {
               this.column_parent = new ColumnParent();
               this.column_parent.read(iprot);
-            } else { 
-              TProtocolUtil.skip(iprot, field.type);
-            }
-            break;
+=======
           case 2: // INDEX_CLAUSE
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.index_clause = new IndexClause();
               this.index_clause.read(iprot);
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
             break;
-          case 3: // COLUMN_PREDICATE
+<<<<<<< .merge_file_gpdNwp
+          case 3: // COLUMN
             if (field.type == TType.STRUCT) {
+              this.column = new Column();
+              this.column.read(iprot);
+=======
+          case 3: // COLUMN_PREDICATE
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.column_predicate = new SlicePredicate();
               this.column_predicate.read(iprot);
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
@@ -13482,7 +15477,11 @@ public class Cassandra {
       if (this.column_parent == null) {
         sb.append("null");
       } else {
+<<<<<<< .merge_file_gpdNwp
+        TBaseHelper.toString(this.key, sb);
+=======
         sb.append(this.column_parent);
+>>>>>>> .merge_file_UlVTYo
       }
       first = false;
       if (!first) sb.append(", ");
@@ -13515,14 +15514,25 @@ public class Cassandra {
 
     public void validate() throws TException {
       // check for required fields
+<<<<<<< .merge_file_gpdNwp
+      if (key == null) {
+        throw new TProtocolException("Required field 'key' was not present! Struct: " + toString());
+      }
+=======
+>>>>>>> .merge_file_UlVTYo
       if (column_parent == null) {
         throw new TProtocolException("Required field 'column_parent' was not present! Struct: " + toString());
       }
+<<<<<<< .merge_file_gpdNwp
+      if (column == null) {
+        throw new TProtocolException("Required field 'column' was not present! Struct: " + toString());
+=======
       if (index_clause == null) {
-        throw new TProtocolException("Required field 'index_clause' was not present! Struct: " + toString());
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'index_clause' was not present! Struct: " + toString());
       }
       if (column_predicate == null) {
-        throw new TProtocolException("Required field 'column_predicate' was not present! Struct: " + toString());
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'column_predicate' was not present! Struct: " + toString());
+>>>>>>> .merge_file_UlVTYo
       }
       if (consistency_level == null) {
         throw new TProtocolException("Required field 'consistency_level' was not present! Struct: " + toString());
@@ -13531,22 +15541,38 @@ public class Cassandra {
 
   }
 
-  public static class get_indexed_slices_result implements TBase<get_indexed_slices_result, get_indexed_slices_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("get_indexed_slices_result");
+<<<<<<< .merge_file_gpdNwp
+  public static class insert_result implements TBase<insert_result, insert_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("insert_result");
 
-    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.LIST, (short)0);
     private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
     private static final TField UE_FIELD_DESC = new TField("ue", TType.STRUCT, (short)2);
     private static final TField TE_FIELD_DESC = new TField("te", TType.STRUCT, (short)3);
 
-    public List<KeySlice> success;
     public InvalidRequestException ire;
     public UnavailableException ue;
     public TimedOutException te;
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
+=======
+  public static class get_indexed_slices_result implements org.apache.thrift.TBase<get_indexed_slices_result, get_indexed_slices_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("get_indexed_slices_result");
+
+    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.LIST, (short)0);
+    private static final org.apache.thrift.protocol.TField IRE_FIELD_DESC = new org.apache.thrift.protocol.TField("ire", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+    private static final org.apache.thrift.protocol.TField UE_FIELD_DESC = new org.apache.thrift.protocol.TField("ue", org.apache.thrift.protocol.TType.STRUCT, (short)2);
+    private static final org.apache.thrift.protocol.TField TE_FIELD_DESC = new org.apache.thrift.protocol.TField("te", org.apache.thrift.protocol.TType.STRUCT, (short)3);
+
+    public List<KeySlice> success; // required
+    public InvalidRequestException ire; // required
+    public UnavailableException ue; // required
+    public TimedOutException te; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       SUCCESS((short)0, "success"),
+>>>>>>> .merge_file_UlVTYo
       IRE((short)1, "ire"),
       UE((short)2, "ue"),
       TE((short)3, "te");
@@ -13615,10 +15641,8 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.SUCCESS, new FieldMetaData("success", TFieldRequirementType.DEFAULT, 
-          new ListMetaData(TType.LIST, 
-              new StructMetaData(TType.STRUCT, KeySlice.class))));
       tmpMap.put(_Fields.IRE, new FieldMetaData("ire", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
       tmpMap.put(_Fields.UE, new FieldMetaData("ue", TFieldRequirementType.DEFAULT, 
@@ -13626,7 +15650,21 @@ public class Cassandra {
       tmpMap.put(_Fields.TE, new FieldMetaData("te", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(get_indexed_slices_result.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(insert_result.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST, 
+              new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, KeySlice.class))));
+      tmpMap.put(_Fields.IRE, new org.apache.thrift.meta_data.FieldMetaData("ire", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      tmpMap.put(_Fields.UE, new org.apache.thrift.meta_data.FieldMetaData("ue", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      tmpMap.put(_Fields.TE, new org.apache.thrift.meta_data.FieldMetaData("te", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(get_indexed_slices_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public get_indexed_slices_result() {
@@ -13707,7 +15745,7 @@ public class Cassandra {
       this.success = null;
     }
 
-    /** Returns true if field success is set (has been asigned a value) and false otherwise */
+    /** Returns true if field success is set (has been assigned a value) and false otherwise */
     public boolean isSetSuccess() {
       return this.success != null;
     }
@@ -13956,7 +15994,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetSuccess()) {
-        lastComparison = TBaseHelper.compareTo(this.success, typedOther.success);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.success, typedOther.success);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -14009,21 +16047,21 @@ public class Cassandra {
         }
         switch (field.id) {
           case 0: // SUCCESS
-            if (field.type == TType.LIST) {
+            if (field.type == org.apache.thrift.protocol.TType.LIST) {
               {
-                TList _list117 = iprot.readListBegin();
-                this.success = new ArrayList<KeySlice>(_list117.size);
-                for (int _i118 = 0; _i118 < _list117.size; ++_i118)
+                org.apache.thrift.protocol.TList _list129 = iprot.readListBegin();
+                this.success = new ArrayList<KeySlice>(_list129.size);
+                for (int _i130 = 0; _i130 < _list129.size; ++_i130)
                 {
-                  KeySlice _elem119;
-                  _elem119 = new KeySlice();
-                  _elem119.read(iprot);
-                  this.success.add(_elem119);
+                  KeySlice _elem131; // required
+                  _elem131 = new KeySlice();
+                  _elem131.read(iprot);
+                  this.success.add(_elem131);
                 }
                 iprot.readListEnd();
               }
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           case 1: // IRE
@@ -14067,10 +16105,10 @@ public class Cassandra {
       if (this.isSetSuccess()) {
         oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
         {
-          oprot.writeListBegin(new TList(TType.STRUCT, this.success.size()));
-          for (KeySlice _iter120 : this.success)
+          oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRUCT, this.success.size()));
+          for (KeySlice _iter132 : this.success)
           {
-            _iter120.write(oprot);
+            _iter132.write(oprot);
           }
           oprot.writeListEnd();
         }
@@ -14138,17 +16176,28 @@ public class Cassandra {
 
   }
 
-  public static class insert_args implements TBase<insert_args, insert_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("insert_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class add_args implements TBase<add_args, add_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("add_args");
+=======
+  public static class insert_args implements org.apache.thrift.TBase<insert_args, insert_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("insert_args");
+>>>>>>> .merge_file_UlVTYo
 
     private static final TField KEY_FIELD_DESC = new TField("key", TType.STRING, (short)1);
     private static final TField COLUMN_PARENT_FIELD_DESC = new TField("column_parent", TType.STRUCT, (short)2);
     private static final TField COLUMN_FIELD_DESC = new TField("column", TType.STRUCT, (short)3);
     private static final TField CONSISTENCY_LEVEL_FIELD_DESC = new TField("consistency_level", TType.I32, (short)4);
 
+<<<<<<< .merge_file_gpdNwp
     public ByteBuffer key;
     public ColumnParent column_parent;
-    public Column column;
+    public CounterColumn column;
+=======
+    public ByteBuffer key; // required
+    public ColumnParent column_parent; // required
+    public Column column; // required
+>>>>>>> .merge_file_UlVTYo
     /**
      * 
      * @see ConsistencyLevel
@@ -14230,21 +16279,39 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
       tmpMap.put(_Fields.KEY, new FieldMetaData("key", TFieldRequirementType.REQUIRED, 
           new FieldValueMetaData(TType.STRING)));
       tmpMap.put(_Fields.COLUMN_PARENT, new FieldMetaData("column_parent", TFieldRequirementType.REQUIRED, 
           new StructMetaData(TType.STRUCT, ColumnParent.class)));
       tmpMap.put(_Fields.COLUMN, new FieldMetaData("column", TFieldRequirementType.REQUIRED, 
-          new StructMetaData(TType.STRUCT, Column.class)));
+          new StructMetaData(TType.STRUCT, CounterColumn.class)));
       tmpMap.put(_Fields.CONSISTENCY_LEVEL, new FieldMetaData("consistency_level", TFieldRequirementType.REQUIRED, 
           new EnumMetaData(TType.ENUM, ConsistencyLevel.class)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(insert_args.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(add_args.class, metaDataMap);
+    }
+
+    public add_args() {
+      this.consistency_level = ConsistencyLevel.ONE;
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.KEY, new org.apache.thrift.meta_data.FieldMetaData("key", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING          , true)));
+      tmpMap.put(_Fields.COLUMN_PARENT, new org.apache.thrift.meta_data.FieldMetaData("column_parent", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, ColumnParent.class)));
+      tmpMap.put(_Fields.COLUMN, new org.apache.thrift.meta_data.FieldMetaData("column", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, Column.class)));
+      tmpMap.put(_Fields.CONSISTENCY_LEVEL, new org.apache.thrift.meta_data.FieldMetaData("consistency_level", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, ConsistencyLevel.class)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(insert_args.class, metaDataMap);
     }
 
     public insert_args() {
-      this.consistency_level = ConsistencyLevel.ONE;
+      this.consistency_level = org.apache.cassandra.thrift.ConsistencyLevel.ONE;
+>>>>>>> .merge_file_UlVTYo
 
     }
 
@@ -14302,8 +16369,13 @@ public class Cassandra {
       return key;
     }
 
-    public insert_args setKey(byte[] key) {
+<<<<<<< .merge_file_gpdNwp
+    public add_args setKey(byte[] key) {
       setKey(ByteBuffer.wrap(key));
+=======
+    public insert_args setKey(byte[] key) {
+      setKey(key == null ? (ByteBuffer)null : ByteBuffer.wrap(key));
+>>>>>>> .merge_file_UlVTYo
       return this;
     }
 
@@ -14641,8 +16713,13 @@ public class Cassandra {
             }
             break;
           case 3: // COLUMN
+<<<<<<< .merge_file_gpdNwp
             if (field.type == TType.STRUCT) {
+              this.column = new CounterColumn();
+=======
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.column = new Column();
+>>>>>>> .merge_file_UlVTYo
               this.column.read(iprot);
             } else { 
               TProtocolUtil.skip(iprot, field.type);
@@ -14752,8 +16829,13 @@ public class Cassandra {
 
   }
 
-  public static class insert_result implements TBase<insert_result, insert_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("insert_result");
+<<<<<<< .merge_file_gpdNwp
+  public static class add_result implements TBase<add_result, add_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("add_result");
+=======
+  public static class insert_result implements org.apache.thrift.TBase<insert_result, insert_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("insert_result");
+>>>>>>> .merge_file_UlVTYo
 
     private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
     private static final TField UE_FIELD_DESC = new TField("ue", TType.STRUCT, (short)2);
@@ -14839,7 +16921,11 @@ public class Cassandra {
       tmpMap.put(_Fields.TE, new FieldMetaData("te", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(insert_result.class, metaDataMap);
+<<<<<<< .merge_file_gpdNwp
+      FieldMetaData.addStructMetaDataMap(add_result.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(insert_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public insert_result() {
@@ -15228,17 +17314,31 @@ public class Cassandra {
 
   }
 
-  public static class add_args implements TBase<add_args, add_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("add_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class remove_args implements TBase<remove_args, remove_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("remove_args");
 
     private static final TField KEY_FIELD_DESC = new TField("key", TType.STRING, (short)1);
-    private static final TField COLUMN_PARENT_FIELD_DESC = new TField("column_parent", TType.STRUCT, (short)2);
-    private static final TField COLUMN_FIELD_DESC = new TField("column", TType.STRUCT, (short)3);
+    private static final TField COLUMN_PATH_FIELD_DESC = new TField("column_path", TType.STRUCT, (short)2);
+    private static final TField TIMESTAMP_FIELD_DESC = new TField("timestamp", TType.I64, (short)3);
     private static final TField CONSISTENCY_LEVEL_FIELD_DESC = new TField("consistency_level", TType.I32, (short)4);
 
     public ByteBuffer key;
-    public ColumnParent column_parent;
-    public CounterColumn column;
+    public ColumnPath column_path;
+    public long timestamp;
+=======
+  public static class add_args implements org.apache.thrift.TBase<add_args, add_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("add_args");
+
+    private static final org.apache.thrift.protocol.TField KEY_FIELD_DESC = new org.apache.thrift.protocol.TField("key", org.apache.thrift.protocol.TType.STRING, (short)1);
+    private static final org.apache.thrift.protocol.TField COLUMN_PARENT_FIELD_DESC = new org.apache.thrift.protocol.TField("column_parent", org.apache.thrift.protocol.TType.STRUCT, (short)2);
+    private static final org.apache.thrift.protocol.TField COLUMN_FIELD_DESC = new org.apache.thrift.protocol.TField("column", org.apache.thrift.protocol.TType.STRUCT, (short)3);
+    private static final org.apache.thrift.protocol.TField CONSISTENCY_LEVEL_FIELD_DESC = new org.apache.thrift.protocol.TField("consistency_level", org.apache.thrift.protocol.TType.I32, (short)4);
+
+    public ByteBuffer key; // required
+    public ColumnParent column_parent; // required
+    public CounterColumn column; // required
+>>>>>>> .merge_file_UlVTYo
     /**
      * 
      * @see ConsistencyLevel
@@ -15320,21 +17420,39 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
       tmpMap.put(_Fields.KEY, new FieldMetaData("key", TFieldRequirementType.REQUIRED, 
           new FieldValueMetaData(TType.STRING)));
-      tmpMap.put(_Fields.COLUMN_PARENT, new FieldMetaData("column_parent", TFieldRequirementType.REQUIRED, 
-          new StructMetaData(TType.STRUCT, ColumnParent.class)));
-      tmpMap.put(_Fields.COLUMN, new FieldMetaData("column", TFieldRequirementType.REQUIRED, 
-          new StructMetaData(TType.STRUCT, CounterColumn.class)));
-      tmpMap.put(_Fields.CONSISTENCY_LEVEL, new FieldMetaData("consistency_level", TFieldRequirementType.REQUIRED, 
+      tmpMap.put(_Fields.COLUMN_PATH, new FieldMetaData("column_path", TFieldRequirementType.REQUIRED, 
+          new StructMetaData(TType.STRUCT, ColumnPath.class)));
+      tmpMap.put(_Fields.TIMESTAMP, new FieldMetaData("timestamp", TFieldRequirementType.REQUIRED, 
+          new FieldValueMetaData(TType.I64)));
+      tmpMap.put(_Fields.CONSISTENCY_LEVEL, new FieldMetaData("consistency_level", TFieldRequirementType.DEFAULT, 
           new EnumMetaData(TType.ENUM, ConsistencyLevel.class)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(add_args.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(remove_args.class, metaDataMap);
+    }
+
+    public remove_args() {
+      this.consistency_level = ConsistencyLevel.ONE;
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.KEY, new org.apache.thrift.meta_data.FieldMetaData("key", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING          , true)));
+      tmpMap.put(_Fields.COLUMN_PARENT, new org.apache.thrift.meta_data.FieldMetaData("column_parent", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, ColumnParent.class)));
+      tmpMap.put(_Fields.COLUMN, new org.apache.thrift.meta_data.FieldMetaData("column", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, CounterColumn.class)));
+      tmpMap.put(_Fields.CONSISTENCY_LEVEL, new org.apache.thrift.meta_data.FieldMetaData("consistency_level", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, ConsistencyLevel.class)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(add_args.class, metaDataMap);
     }
 
     public add_args() {
-      this.consistency_level = ConsistencyLevel.ONE;
+      this.consistency_level = org.apache.cassandra.thrift.ConsistencyLevel.ONE;
+>>>>>>> .merge_file_UlVTYo
 
     }
 
@@ -15377,9 +17495,16 @@ public class Cassandra {
     @Override
     public void clear() {
       this.key = null;
+<<<<<<< .merge_file_gpdNwp
+      this.column_path = null;
+      setTimestampIsSet(false);
+      this.timestamp = 0;
+      this.consistency_level = ConsistencyLevel.ONE;
+=======
       this.column_parent = null;
       this.column = null;
-      this.consistency_level = ConsistencyLevel.ONE;
+      this.consistency_level = org.apache.cassandra.thrift.ConsistencyLevel.ONE;
+>>>>>>> .merge_file_UlVTYo
 
     }
 
@@ -15392,8 +17517,13 @@ public class Cassandra {
       return key;
     }
 
-    public add_args setKey(byte[] key) {
+<<<<<<< .merge_file_gpdNwp
+    public remove_args setKey(byte[] key) {
       setKey(ByteBuffer.wrap(key));
+=======
+    public add_args setKey(byte[] key) {
+      setKey(key == null ? (ByteBuffer)null : ByteBuffer.wrap(key));
+>>>>>>> .merge_file_UlVTYo
       return this;
     }
 
@@ -15430,9 +17560,15 @@ public class Cassandra {
       this.column_parent = null;
     }
 
-    /** Returns true if field column_parent is set (has been asigned a value) and false otherwise */
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field column_path is set (has been asigned a value) and false otherwise */
+    public boolean isSetColumn_path() {
+      return this.column_path != null;
+=======
+    /** Returns true if field column_parent is set (has been assigned a value) and false otherwise */
     public boolean isSetColumn_parent() {
       return this.column_parent != null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setColumn_parentIsSet(boolean value) {
@@ -15454,9 +17590,15 @@ public class Cassandra {
       this.column = null;
     }
 
-    /** Returns true if field column is set (has been asigned a value) and false otherwise */
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field timestamp is set (has been asigned a value) and false otherwise */
+    public boolean isSetTimestamp() {
+      return __isset_bit_vector.get(__TIMESTAMP_ISSET_ID);
+=======
+    /** Returns true if field column is set (has been assigned a value) and false otherwise */
     public boolean isSetColumn() {
       return this.column != null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setColumnIsSet(boolean value) {
@@ -15542,8 +17684,13 @@ public class Cassandra {
       case COLUMN_PARENT:
         return getColumn_parent();
 
+<<<<<<< .merge_file_gpdNwp
+      case TIMESTAMP:
+        return new Long(getTimestamp());
+=======
       case COLUMN:
         return getColumn();
+>>>>>>> .merge_file_UlVTYo
 
       case CONSISTENCY_LEVEL:
         return getConsistency_level();
@@ -15672,8 +17819,13 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetColumn_path()) {
+        lastComparison = TBaseHelper.compareTo(this.column_path, typedOther.column_path);
+=======
       if (isSetColumn_parent()) {
-        lastComparison = TBaseHelper.compareTo(this.column_parent, typedOther.column_parent);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.column_parent, typedOther.column_parent);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -15682,8 +17834,13 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetTimestamp()) {
+        lastComparison = TBaseHelper.compareTo(this.timestamp, typedOther.timestamp);
+=======
       if (isSetColumn()) {
-        lastComparison = TBaseHelper.compareTo(this.column, typedOther.column);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.column, typedOther.column);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -15722,18 +17879,32 @@ public class Cassandra {
               TProtocolUtil.skip(iprot, field.type);
             }
             break;
-          case 2: // COLUMN_PARENT
+<<<<<<< .merge_file_gpdNwp
+          case 2: // COLUMN_PATH
             if (field.type == TType.STRUCT) {
+              this.column_path = new ColumnPath();
+              this.column_path.read(iprot);
+=======
+          case 2: // COLUMN_PARENT
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.column_parent = new ColumnParent();
               this.column_parent.read(iprot);
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
             break;
+<<<<<<< .merge_file_gpdNwp
+          case 3: // TIMESTAMP
+            if (field.type == TType.I64) {
+              this.timestamp = iprot.readI64();
+              setTimestampIsSet(true);
+=======
           case 3: // COLUMN
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.column = new CounterColumn();
               this.column.read(iprot);
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
@@ -15753,6 +17924,12 @@ public class Cassandra {
       iprot.readStructEnd();
 
       // check for required fields of primitive type, which can't be checked in the validate method
+<<<<<<< .merge_file_gpdNwp
+      if (!isSetTimestamp()) {
+        throw new TProtocolException("Required field 'timestamp' was not found in serialized data! Struct: " + toString());
+      }
+=======
+>>>>>>> .merge_file_UlVTYo
       validate();
     }
 
@@ -15829,21 +18006,49 @@ public class Cassandra {
       if (key == null) {
         throw new TProtocolException("Required field 'key' was not present! Struct: " + toString());
       }
+<<<<<<< .merge_file_gpdNwp
+      if (column_path == null) {
+        throw new TProtocolException("Required field 'column_path' was not present! Struct: " + toString());
+=======
       if (column_parent == null) {
-        throw new TProtocolException("Required field 'column_parent' was not present! Struct: " + toString());
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'column_parent' was not present! Struct: " + toString());
       }
       if (column == null) {
-        throw new TProtocolException("Required field 'column' was not present! Struct: " + toString());
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'column' was not present! Struct: " + toString());
       }
       if (consistency_level == null) {
-        throw new TProtocolException("Required field 'consistency_level' was not present! Struct: " + toString());
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'consistency_level' was not present! Struct: " + toString());
+>>>>>>> .merge_file_UlVTYo
+      }
+    }
+
+<<<<<<< .merge_file_gpdNwp
+  }
+
+  public static class remove_result implements TBase<remove_result, remove_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("remove_result");
+=======
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
       }
     }
 
   }
 
-  public static class add_result implements TBase<add_result, add_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("add_result");
+  public static class add_result implements org.apache.thrift.TBase<add_result, add_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("add_result");
+>>>>>>> .merge_file_UlVTYo
 
     private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
     private static final TField UE_FIELD_DESC = new TField("ue", TType.STRUCT, (short)2);
@@ -15929,7 +18134,11 @@ public class Cassandra {
       tmpMap.put(_Fields.TE, new FieldMetaData("te", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(add_result.class, metaDataMap);
+<<<<<<< .merge_file_gpdNwp
+      FieldMetaData.addStructMetaDataMap(remove_result.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(add_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public add_result() {
@@ -16318,17 +18527,29 @@ public class Cassandra {
 
   }
 
-  public static class remove_args implements TBase<remove_args, remove_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("remove_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class remove_counter_args implements TBase<remove_counter_args, remove_counter_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("remove_counter_args");
 
     private static final TField KEY_FIELD_DESC = new TField("key", TType.STRING, (short)1);
-    private static final TField COLUMN_PATH_FIELD_DESC = new TField("column_path", TType.STRUCT, (short)2);
-    private static final TField TIMESTAMP_FIELD_DESC = new TField("timestamp", TType.I64, (short)3);
-    private static final TField CONSISTENCY_LEVEL_FIELD_DESC = new TField("consistency_level", TType.I32, (short)4);
+    private static final TField PATH_FIELD_DESC = new TField("path", TType.STRUCT, (short)2);
+    private static final TField CONSISTENCY_LEVEL_FIELD_DESC = new TField("consistency_level", TType.I32, (short)3);
 
     public ByteBuffer key;
-    public ColumnPath column_path;
-    public long timestamp;
+    public ColumnPath path;
+=======
+  public static class remove_args implements org.apache.thrift.TBase<remove_args, remove_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("remove_args");
+
+    private static final org.apache.thrift.protocol.TField KEY_FIELD_DESC = new org.apache.thrift.protocol.TField("key", org.apache.thrift.protocol.TType.STRING, (short)1);
+    private static final org.apache.thrift.protocol.TField COLUMN_PATH_FIELD_DESC = new org.apache.thrift.protocol.TField("column_path", org.apache.thrift.protocol.TType.STRUCT, (short)2);
+    private static final org.apache.thrift.protocol.TField TIMESTAMP_FIELD_DESC = new org.apache.thrift.protocol.TField("timestamp", org.apache.thrift.protocol.TType.I64, (short)3);
+    private static final org.apache.thrift.protocol.TField CONSISTENCY_LEVEL_FIELD_DESC = new org.apache.thrift.protocol.TField("consistency_level", org.apache.thrift.protocol.TType.I32, (short)4);
+
+    public ByteBuffer key; // required
+    public ColumnPath column_path; // required
+    public long timestamp; // required
+>>>>>>> .merge_file_UlVTYo
     /**
      * 
      * @see ConsistencyLevel
@@ -16412,21 +18633,37 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
       tmpMap.put(_Fields.KEY, new FieldMetaData("key", TFieldRequirementType.REQUIRED, 
           new FieldValueMetaData(TType.STRING)));
-      tmpMap.put(_Fields.COLUMN_PATH, new FieldMetaData("column_path", TFieldRequirementType.REQUIRED, 
+      tmpMap.put(_Fields.PATH, new FieldMetaData("path", TFieldRequirementType.REQUIRED, 
           new StructMetaData(TType.STRUCT, ColumnPath.class)));
-      tmpMap.put(_Fields.TIMESTAMP, new FieldMetaData("timestamp", TFieldRequirementType.REQUIRED, 
-          new FieldValueMetaData(TType.I64)));
-      tmpMap.put(_Fields.CONSISTENCY_LEVEL, new FieldMetaData("consistency_level", TFieldRequirementType.DEFAULT, 
+      tmpMap.put(_Fields.CONSISTENCY_LEVEL, new FieldMetaData("consistency_level", TFieldRequirementType.REQUIRED, 
           new EnumMetaData(TType.ENUM, ConsistencyLevel.class)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(remove_args.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(remove_counter_args.class, metaDataMap);
+    }
+
+    public remove_counter_args() {
+      this.consistency_level = ConsistencyLevel.ONE;
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.KEY, new org.apache.thrift.meta_data.FieldMetaData("key", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING          , true)));
+      tmpMap.put(_Fields.COLUMN_PATH, new org.apache.thrift.meta_data.FieldMetaData("column_path", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, ColumnPath.class)));
+      tmpMap.put(_Fields.TIMESTAMP, new org.apache.thrift.meta_data.FieldMetaData("timestamp", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I64)));
+      tmpMap.put(_Fields.CONSISTENCY_LEVEL, new org.apache.thrift.meta_data.FieldMetaData("consistency_level", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, ConsistencyLevel.class)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(remove_args.class, metaDataMap);
     }
 
     public remove_args() {
-      this.consistency_level = ConsistencyLevel.ONE;
+      this.consistency_level = org.apache.cassandra.thrift.ConsistencyLevel.ONE;
+>>>>>>> .merge_file_UlVTYo
 
     }
 
@@ -16470,10 +18707,15 @@ public class Cassandra {
     @Override
     public void clear() {
       this.key = null;
+<<<<<<< .merge_file_gpdNwp
+      this.path = null;
+      this.consistency_level = ConsistencyLevel.ONE;
+=======
       this.column_path = null;
       setTimestampIsSet(false);
       this.timestamp = 0;
-      this.consistency_level = ConsistencyLevel.ONE;
+      this.consistency_level = org.apache.cassandra.thrift.ConsistencyLevel.ONE;
+>>>>>>> .merge_file_UlVTYo
 
     }
 
@@ -16486,8 +18728,13 @@ public class Cassandra {
       return key;
     }
 
-    public remove_args setKey(byte[] key) {
+<<<<<<< .merge_file_gpdNwp
+    public remove_counter_args setKey(byte[] key) {
       setKey(ByteBuffer.wrap(key));
+=======
+    public remove_args setKey(byte[] key) {
+      setKey(key == null ? (ByteBuffer)null : ByteBuffer.wrap(key));
+>>>>>>> .merge_file_UlVTYo
       return this;
     }
 
@@ -16524,9 +18771,15 @@ public class Cassandra {
       this.column_path = null;
     }
 
-    /** Returns true if field column_path is set (has been asigned a value) and false otherwise */
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field path is set (has been asigned a value) and false otherwise */
+    public boolean isSetPath() {
+      return this.path != null;
+=======
+    /** Returns true if field column_path is set (has been assigned a value) and false otherwise */
     public boolean isSetColumn_path() {
       return this.column_path != null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setColumn_pathIsSet(boolean value) {
@@ -16549,7 +18802,7 @@ public class Cassandra {
       __isset_bit_vector.clear(__TIMESTAMP_ISSET_ID);
     }
 
-    /** Returns true if field timestamp is set (has been asigned a value) and false otherwise */
+    /** Returns true if field timestamp is set (has been assigned a value) and false otherwise */
     public boolean isSetTimestamp() {
       return __isset_bit_vector.get(__TIMESTAMP_ISSET_ID);
     }
@@ -16636,7 +18889,7 @@ public class Cassandra {
         return getColumn_path();
 
       case TIMESTAMP:
-        return new Long(getTimestamp());
+        return Long.valueOf(getTimestamp());
 
       case CONSISTENCY_LEVEL:
         return getConsistency_level();
@@ -16765,8 +19018,12 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetPath()) {
+        lastComparison = TBaseHelper.compareTo(this.path, typedOther.path);
+=======
       if (isSetColumn_path()) {
-        lastComparison = TBaseHelper.compareTo(this.column_path, typedOther.column_path);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.column_path, typedOther.column_path);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -16776,7 +19033,8 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetTimestamp()) {
-        lastComparison = TBaseHelper.compareTo(this.timestamp, typedOther.timestamp);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.timestamp, typedOther.timestamp);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -16815,24 +19073,36 @@ public class Cassandra {
               TProtocolUtil.skip(iprot, field.type);
             }
             break;
-          case 2: // COLUMN_PATH
+<<<<<<< .merge_file_gpdNwp
+          case 2: // PATH
             if (field.type == TType.STRUCT) {
+              this.path = new ColumnPath();
+              this.path.read(iprot);
+=======
+          case 2: // COLUMN_PATH
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.column_path = new ColumnPath();
               this.column_path.read(iprot);
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
             break;
+<<<<<<< .merge_file_gpdNwp
+          case 3: // CONSISTENCY_LEVEL
+            if (field.type == TType.I32) {
+=======
           case 3: // TIMESTAMP
-            if (field.type == TType.I64) {
+            if (field.type == org.apache.thrift.protocol.TType.I64) {
               this.timestamp = iprot.readI64();
               setTimestampIsSet(true);
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           case 4: // CONSISTENCY_LEVEL
-            if (field.type == TType.I32) {
+            if (field.type == org.apache.thrift.protocol.TType.I32) {
+>>>>>>> .merge_file_UlVTYo
               this.consistency_level = ConsistencyLevel.findByValue(iprot.readI32());
             } else { 
               TProtocolUtil.skip(iprot, field.type);
@@ -16847,7 +19117,7 @@ public class Cassandra {
 
       // check for required fields of primitive type, which can't be checked in the validate method
       if (!isSetTimestamp()) {
-        throw new TProtocolException("Required field 'timestamp' was not found in serialized data! Struct: " + toString());
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'timestamp' was not found in serialized data! Struct: " + toString());
       }
       validate();
     }
@@ -16919,16 +19189,47 @@ public class Cassandra {
       if (key == null) {
         throw new TProtocolException("Required field 'key' was not present! Struct: " + toString());
       }
-      if (column_path == null) {
-        throw new TProtocolException("Required field 'column_path' was not present! Struct: " + toString());
+<<<<<<< .merge_file_gpdNwp
+      if (path == null) {
+        throw new TProtocolException("Required field 'path' was not present! Struct: " + toString());
       }
-      // alas, we cannot check 'timestamp' because it's a primitive and you chose the non-beans generator.
+      if (consistency_level == null) {
+        throw new TProtocolException("Required field 'consistency_level' was not present! Struct: " + toString());
+      }
     }
 
   }
 
-  public static class remove_result implements TBase<remove_result, remove_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("remove_result");
+  public static class remove_counter_result implements TBase<remove_counter_result, remove_counter_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("remove_counter_result");
+=======
+      if (column_path == null) {
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'column_path' was not present! Struct: " + toString());
+      }
+      // alas, we cannot check 'timestamp' because it's a primitive and you chose the non-beans generator.
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+  }
+
+  public static class remove_result implements org.apache.thrift.TBase<remove_result, remove_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("remove_result");
+>>>>>>> .merge_file_UlVTYo
 
     private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
     private static final TField UE_FIELD_DESC = new TField("ue", TType.STRUCT, (short)2);
@@ -17014,7 +19315,11 @@ public class Cassandra {
       tmpMap.put(_Fields.TE, new FieldMetaData("te", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(remove_result.class, metaDataMap);
+<<<<<<< .merge_file_gpdNwp
+      FieldMetaData.addStructMetaDataMap(remove_counter_result.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(remove_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public remove_result() {
@@ -17403,15 +19708,25 @@ public class Cassandra {
 
   }
 
-  public static class remove_counter_args implements TBase<remove_counter_args, remove_counter_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("remove_counter_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class batch_mutate_args implements TBase<batch_mutate_args, batch_mutate_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("batch_mutate_args");
 
-    private static final TField KEY_FIELD_DESC = new TField("key", TType.STRING, (short)1);
-    private static final TField PATH_FIELD_DESC = new TField("path", TType.STRUCT, (short)2);
-    private static final TField CONSISTENCY_LEVEL_FIELD_DESC = new TField("consistency_level", TType.I32, (short)3);
+    private static final TField MUTATION_MAP_FIELD_DESC = new TField("mutation_map", TType.MAP, (short)1);
+    private static final TField CONSISTENCY_LEVEL_FIELD_DESC = new TField("consistency_level", TType.I32, (short)2);
 
-    public ByteBuffer key;
-    public ColumnPath path;
+    public Map<ByteBuffer,Map<String,List<Mutation>>> mutation_map;
+=======
+  public static class remove_counter_args implements org.apache.thrift.TBase<remove_counter_args, remove_counter_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("remove_counter_args");
+
+    private static final org.apache.thrift.protocol.TField KEY_FIELD_DESC = new org.apache.thrift.protocol.TField("key", org.apache.thrift.protocol.TType.STRING, (short)1);
+    private static final org.apache.thrift.protocol.TField PATH_FIELD_DESC = new org.apache.thrift.protocol.TField("path", org.apache.thrift.protocol.TType.STRUCT, (short)2);
+    private static final org.apache.thrift.protocol.TField CONSISTENCY_LEVEL_FIELD_DESC = new org.apache.thrift.protocol.TField("consistency_level", org.apache.thrift.protocol.TType.I32, (short)3);
+
+    public ByteBuffer key; // required
+    public ColumnPath path; // required
+>>>>>>> .merge_file_UlVTYo
     /**
      * 
      * @see ConsistencyLevel
@@ -17419,9 +19734,14 @@ public class Cassandra {
     public ConsistencyLevel consistency_level;
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+<<<<<<< .merge_file_gpdNwp
     public enum _Fields implements TFieldIdEnum {
+      MUTATION_MAP((short)1, "mutation_map"),
+=======
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       KEY((short)1, "key"),
       PATH((short)2, "path"),
+>>>>>>> .merge_file_UlVTYo
       /**
        * 
        * @see ConsistencyLevel
@@ -17490,19 +19810,38 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.KEY, new FieldMetaData("key", TFieldRequirementType.REQUIRED, 
-          new FieldValueMetaData(TType.STRING)));
-      tmpMap.put(_Fields.PATH, new FieldMetaData("path", TFieldRequirementType.REQUIRED, 
-          new StructMetaData(TType.STRUCT, ColumnPath.class)));
+      tmpMap.put(_Fields.MUTATION_MAP, new FieldMetaData("mutation_map", TFieldRequirementType.REQUIRED, 
+          new MapMetaData(TType.MAP, 
+              new FieldValueMetaData(TType.STRING), 
+              new MapMetaData(TType.MAP, 
+                  new FieldValueMetaData(TType.STRING), 
+                  new ListMetaData(TType.LIST, 
+                      new StructMetaData(TType.STRUCT, Mutation.class))))));
       tmpMap.put(_Fields.CONSISTENCY_LEVEL, new FieldMetaData("consistency_level", TFieldRequirementType.REQUIRED, 
           new EnumMetaData(TType.ENUM, ConsistencyLevel.class)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(remove_counter_args.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(batch_mutate_args.class, metaDataMap);
+    }
+
+    public batch_mutate_args() {
+      this.consistency_level = ConsistencyLevel.ONE;
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.KEY, new org.apache.thrift.meta_data.FieldMetaData("key", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING          , true)));
+      tmpMap.put(_Fields.PATH, new org.apache.thrift.meta_data.FieldMetaData("path", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, ColumnPath.class)));
+      tmpMap.put(_Fields.CONSISTENCY_LEVEL, new org.apache.thrift.meta_data.FieldMetaData("consistency_level", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, ConsistencyLevel.class)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(remove_counter_args.class, metaDataMap);
     }
 
     public remove_counter_args() {
-      this.consistency_level = ConsistencyLevel.ONE;
+      this.consistency_level = org.apache.cassandra.thrift.ConsistencyLevel.ONE;
+>>>>>>> .merge_file_UlVTYo
 
     }
 
@@ -17520,9 +19859,21 @@ public class Cassandra {
     /**
      * Performs a deep copy on <i>other</i>.
      */
+<<<<<<< .merge_file_gpdNwp
+    public batch_mutate_args(batch_mutate_args other) {
+      if (other.isSetMutation_map()) {
+        Map<ByteBuffer,Map<String,List<Mutation>>> __this__mutation_map = new HashMap<ByteBuffer,Map<String,List<Mutation>>>();
+        for (Map.Entry<ByteBuffer, Map<String,List<Mutation>>> other_element : other.mutation_map.entrySet()) {
+
+          ByteBuffer other_element_key = other_element.getKey();
+          Map<String,List<Mutation>> other_element_value = other_element.getValue();
+
+          ByteBuffer __this__mutation_map_copy_key = TBaseHelper.copyBinary(other_element_key);
+=======
     public remove_counter_args(remove_counter_args other) {
       if (other.isSetKey()) {
-        this.key = TBaseHelper.copyBinary(other.key);
+        this.key = org.apache.thrift.TBaseHelper.copyBinary(other.key);
+>>>>>>> .merge_file_UlVTYo
 ;
       }
       if (other.isSetPath()) {
@@ -17539,23 +19890,28 @@ public class Cassandra {
 
     @Override
     public void clear() {
+<<<<<<< .merge_file_gpdNwp
+      this.mutation_map = null;
+      this.consistency_level = ConsistencyLevel.ONE;
+=======
       this.key = null;
       this.path = null;
-      this.consistency_level = ConsistencyLevel.ONE;
+      this.consistency_level = org.apache.cassandra.thrift.ConsistencyLevel.ONE;
+>>>>>>> .merge_file_UlVTYo
 
     }
 
     public byte[] getKey() {
-      setKey(TBaseHelper.rightSize(key));
-      return key.array();
+      setKey(org.apache.thrift.TBaseHelper.rightSize(key));
+      return key == null ? null : key.array();
     }
 
-    public ByteBuffer BufferForKey() {
+    public ByteBuffer bufferForKey() {
       return key;
     }
 
     public remove_counter_args setKey(byte[] key) {
-      setKey(ByteBuffer.wrap(key));
+      setKey(key == null ? (ByteBuffer)null : ByteBuffer.wrap(key));
       return this;
     }
 
@@ -17568,7 +19924,7 @@ public class Cassandra {
       this.key = null;
     }
 
-    /** Returns true if field key is set (has been asigned a value) and false otherwise */
+    /** Returns true if field key is set (has been assigned a value) and false otherwise */
     public boolean isSetKey() {
       return this.key != null;
     }
@@ -17592,9 +19948,15 @@ public class Cassandra {
       this.path = null;
     }
 
-    /** Returns true if field path is set (has been asigned a value) and false otherwise */
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field mutation_map is set (has been asigned a value) and false otherwise */
+    public boolean isSetMutation_map() {
+      return this.mutation_map != null;
+=======
+    /** Returns true if field path is set (has been assigned a value) and false otherwise */
     public boolean isSetPath() {
       return this.path != null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setPathIsSet(boolean value) {
@@ -17773,8 +20135,12 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetMutation_map()) {
+        lastComparison = TBaseHelper.compareTo(this.mutation_map, typedOther.mutation_map);
+=======
       if (isSetKey()) {
-        lastComparison = TBaseHelper.compareTo(this.key, typedOther.key);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.key, typedOther.key);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -17784,7 +20150,8 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetPath()) {
-        lastComparison = TBaseHelper.compareTo(this.path, typedOther.path);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.path, typedOther.path);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -17816,23 +20183,69 @@ public class Cassandra {
           break;
         }
         switch (field.id) {
+<<<<<<< .merge_file_gpdNwp
+          case 1: // MUTATION_MAP
+            if (field.type == TType.MAP) {
+              {
+                TMap _map121 = iprot.readMapBegin();
+                this.mutation_map = new HashMap<ByteBuffer,Map<String,List<Mutation>>>(2*_map121.size);
+                for (int _i122 = 0; _i122 < _map121.size; ++_i122)
+                {
+                  ByteBuffer _key123;
+                  Map<String,List<Mutation>> _val124;
+                  _key123 = iprot.readBinary();
+                  {
+                    TMap _map125 = iprot.readMapBegin();
+                    _val124 = new HashMap<String,List<Mutation>>(2*_map125.size);
+                    for (int _i126 = 0; _i126 < _map125.size; ++_i126)
+                    {
+                      String _key127;
+                      List<Mutation> _val128;
+                      _key127 = iprot.readString();
+                      {
+                        TList _list129 = iprot.readListBegin();
+                        _val128 = new ArrayList<Mutation>(_list129.size);
+                        for (int _i130 = 0; _i130 < _list129.size; ++_i130)
+                        {
+                          Mutation _elem131;
+                          _elem131 = new Mutation();
+                          _elem131.read(iprot);
+                          _val128.add(_elem131);
+                        }
+                        iprot.readListEnd();
+                      }
+                      _val124.put(_key127, _val128);
+                    }
+                    iprot.readMapEnd();
+                  }
+                  this.mutation_map.put(_key123, _val124);
+                }
+                iprot.readMapEnd();
+              }
+=======
           case 1: // KEY
-            if (field.type == TType.STRING) {
+            if (field.type == org.apache.thrift.protocol.TType.STRING) {
               this.key = iprot.readBinary();
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
             break;
+<<<<<<< .merge_file_gpdNwp
+          case 2: // CONSISTENCY_LEVEL
+            if (field.type == TType.I32) {
+=======
           case 2: // PATH
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.path = new ColumnPath();
               this.path.read(iprot);
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           case 3: // CONSISTENCY_LEVEL
-            if (field.type == TType.I32) {
+            if (field.type == org.apache.thrift.protocol.TType.I32) {
+>>>>>>> .merge_file_UlVTYo
               this.consistency_level = ConsistencyLevel.findByValue(iprot.readI32());
             } else { 
               TProtocolUtil.skip(iprot, field.type);
@@ -17853,6 +20266,34 @@ public class Cassandra {
       validate();
 
       oprot.writeStructBegin(STRUCT_DESC);
+<<<<<<< .merge_file_gpdNwp
+      if (this.mutation_map != null) {
+        oprot.writeFieldBegin(MUTATION_MAP_FIELD_DESC);
+        {
+          oprot.writeMapBegin(new TMap(TType.STRING, TType.MAP, this.mutation_map.size()));
+          for (Map.Entry<ByteBuffer, Map<String,List<Mutation>>> _iter132 : this.mutation_map.entrySet())
+          {
+            oprot.writeBinary(_iter132.getKey());
+            {
+              oprot.writeMapBegin(new TMap(TType.STRING, TType.LIST, _iter132.getValue().size()));
+              for (Map.Entry<String, List<Mutation>> _iter133 : _iter132.getValue().entrySet())
+              {
+                oprot.writeString(_iter133.getKey());
+                {
+                  oprot.writeListBegin(new TList(TType.STRUCT, _iter133.getValue().size()));
+                  for (Mutation _iter134 : _iter133.getValue())
+                  {
+                    _iter134.write(oprot);
+                  }
+                  oprot.writeListEnd();
+                }
+              }
+              oprot.writeMapEnd();
+            }
+          }
+          oprot.writeMapEnd();
+        }
+=======
       if (this.key != null) {
         oprot.writeFieldBegin(KEY_FIELD_DESC);
         oprot.writeBinary(this.key);
@@ -17861,6 +20302,7 @@ public class Cassandra {
       if (this.path != null) {
         oprot.writeFieldBegin(PATH_FIELD_DESC);
         this.path.write(oprot);
+>>>>>>> .merge_file_UlVTYo
         oprot.writeFieldEnd();
       }
       if (this.consistency_level != null) {
@@ -17881,7 +20323,7 @@ public class Cassandra {
       if (this.key == null) {
         sb.append("null");
       } else {
-        TBaseHelper.toString(this.key, sb);
+        org.apache.thrift.TBaseHelper.toString(this.key, sb);
       }
       first = false;
       if (!first) sb.append(", ");
@@ -17906,11 +20348,16 @@ public class Cassandra {
 
     public void validate() throws TException {
       // check for required fields
+<<<<<<< .merge_file_gpdNwp
+      if (mutation_map == null) {
+        throw new TProtocolException("Required field 'mutation_map' was not present! Struct: " + toString());
+=======
       if (key == null) {
-        throw new TProtocolException("Required field 'key' was not present! Struct: " + toString());
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'key' was not present! Struct: " + toString());
       }
       if (path == null) {
-        throw new TProtocolException("Required field 'path' was not present! Struct: " + toString());
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'path' was not present! Struct: " + toString());
+>>>>>>> .merge_file_UlVTYo
       }
       if (consistency_level == null) {
         throw new TProtocolException("Required field 'consistency_level' was not present! Struct: " + toString());
@@ -17919,8 +20366,13 @@ public class Cassandra {
 
   }
 
-  public static class remove_counter_result implements TBase<remove_counter_result, remove_counter_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("remove_counter_result");
+<<<<<<< .merge_file_gpdNwp
+  public static class batch_mutate_result implements TBase<batch_mutate_result, batch_mutate_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("batch_mutate_result");
+=======
+  public static class remove_counter_result implements org.apache.thrift.TBase<remove_counter_result, remove_counter_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("remove_counter_result");
+>>>>>>> .merge_file_UlVTYo
 
     private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
     private static final TField UE_FIELD_DESC = new TField("ue", TType.STRUCT, (short)2);
@@ -18006,7 +20458,11 @@ public class Cassandra {
       tmpMap.put(_Fields.TE, new FieldMetaData("te", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(remove_counter_result.class, metaDataMap);
+<<<<<<< .merge_file_gpdNwp
+      FieldMetaData.addStructMetaDataMap(batch_mutate_result.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(remove_counter_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public remove_counter_result() {
@@ -18395,27 +20851,40 @@ public class Cassandra {
 
   }
 
-  public static class batch_mutate_args implements TBase<batch_mutate_args, batch_mutate_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("batch_mutate_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class truncate_args implements TBase<truncate_args, truncate_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("truncate_args");
 
-    private static final TField MUTATION_MAP_FIELD_DESC = new TField("mutation_map", TType.MAP, (short)1);
-    private static final TField CONSISTENCY_LEVEL_FIELD_DESC = new TField("consistency_level", TType.I32, (short)2);
+    private static final TField CFNAME_FIELD_DESC = new TField("cfname", TType.STRING, (short)1);
 
-    public Map<ByteBuffer,Map<String,List<Mutation>>> mutation_map;
+    public String cfname;
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements TFieldIdEnum {
+      CFNAME((short)1, "cfname");
+=======
+  public static class batch_mutate_args implements org.apache.thrift.TBase<batch_mutate_args, batch_mutate_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("batch_mutate_args");
+
+    private static final org.apache.thrift.protocol.TField MUTATION_MAP_FIELD_DESC = new org.apache.thrift.protocol.TField("mutation_map", org.apache.thrift.protocol.TType.MAP, (short)1);
+    private static final org.apache.thrift.protocol.TField CONSISTENCY_LEVEL_FIELD_DESC = new org.apache.thrift.protocol.TField("consistency_level", org.apache.thrift.protocol.TType.I32, (short)2);
+
+    public Map<ByteBuffer,Map<String,List<Mutation>>> mutation_map; // required
     /**
      * 
      * @see ConsistencyLevel
      */
-    public ConsistencyLevel consistency_level;
+    public ConsistencyLevel consistency_level; // required
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
-    public enum _Fields implements TFieldIdEnum {
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       MUTATION_MAP((short)1, "mutation_map"),
       /**
        * 
        * @see ConsistencyLevel
        */
       CONSISTENCY_LEVEL((short)2, "consistency_level");
+>>>>>>> .merge_file_UlVTYo
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -18477,22 +20946,30 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.MUTATION_MAP, new FieldMetaData("mutation_map", TFieldRequirementType.REQUIRED, 
-          new MapMetaData(TType.MAP, 
-              new FieldValueMetaData(TType.STRING), 
-              new MapMetaData(TType.MAP, 
-                  new FieldValueMetaData(TType.STRING), 
-                  new ListMetaData(TType.LIST, 
-                      new StructMetaData(TType.STRUCT, Mutation.class))))));
-      tmpMap.put(_Fields.CONSISTENCY_LEVEL, new FieldMetaData("consistency_level", TFieldRequirementType.REQUIRED, 
-          new EnumMetaData(TType.ENUM, ConsistencyLevel.class)));
+      tmpMap.put(_Fields.CFNAME, new FieldMetaData("cfname", TFieldRequirementType.REQUIRED, 
+          new FieldValueMetaData(TType.STRING)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(batch_mutate_args.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(truncate_args.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.MUTATION_MAP, new org.apache.thrift.meta_data.FieldMetaData("mutation_map", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.MapMetaData(org.apache.thrift.protocol.TType.MAP, 
+              new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING              , true), 
+              new org.apache.thrift.meta_data.MapMetaData(org.apache.thrift.protocol.TType.MAP, 
+                  new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING), 
+                  new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST, 
+                      new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, Mutation.class))))));
+      tmpMap.put(_Fields.CONSISTENCY_LEVEL, new org.apache.thrift.meta_data.FieldMetaData("consistency_level", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, ConsistencyLevel.class)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(batch_mutate_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public batch_mutate_args() {
-      this.consistency_level = ConsistencyLevel.ONE;
+      this.consistency_level = org.apache.cassandra.thrift.ConsistencyLevel.ONE;
 
     }
 
@@ -18516,7 +20993,7 @@ public class Cassandra {
           ByteBuffer other_element_key = other_element.getKey();
           Map<String,List<Mutation>> other_element_value = other_element.getValue();
 
-          ByteBuffer __this__mutation_map_copy_key = TBaseHelper.copyBinary(other_element_key);
+          ByteBuffer __this__mutation_map_copy_key = org.apache.thrift.TBaseHelper.copyBinary(other_element_key);
 ;
 
           Map<String,List<Mutation>> __this__mutation_map_copy_value = new HashMap<String,List<Mutation>>();
@@ -18551,7 +21028,7 @@ public class Cassandra {
     @Override
     public void clear() {
       this.mutation_map = null;
-      this.consistency_level = ConsistencyLevel.ONE;
+      this.consistency_level = org.apache.cassandra.thrift.ConsistencyLevel.ONE;
 
     }
 
@@ -18579,9 +21056,15 @@ public class Cassandra {
       this.mutation_map = null;
     }
 
-    /** Returns true if field mutation_map is set (has been asigned a value) and false otherwise */
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field cfname is set (has been asigned a value) and false otherwise */
+    public boolean isSetCfname() {
+      return this.cfname != null;
+=======
+    /** Returns true if field mutation_map is set (has been assigned a value) and false otherwise */
     public boolean isSetMutation_map() {
       return this.mutation_map != null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setMutation_mapIsSet(boolean value) {
@@ -18611,7 +21094,7 @@ public class Cassandra {
       this.consistency_level = null;
     }
 
-    /** Returns true if field consistency_level is set (has been asigned a value) and false otherwise */
+    /** Returns true if field consistency_level is set (has been assigned a value) and false otherwise */
     public boolean isSetConsistency_level() {
       return this.consistency_level != null;
     }
@@ -18733,8 +21216,12 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetCfname()) {
+        lastComparison = TBaseHelper.compareTo(this.cfname, typedOther.cfname);
+=======
       if (isSetMutation_map()) {
-        lastComparison = TBaseHelper.compareTo(this.mutation_map, typedOther.mutation_map);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.mutation_map, typedOther.mutation_map);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -18744,7 +21231,8 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetConsistency_level()) {
-        lastComparison = TBaseHelper.compareTo(this.consistency_level, typedOther.consistency_level);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.consistency_level, typedOther.consistency_level);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -18766,51 +21254,57 @@ public class Cassandra {
           break;
         }
         switch (field.id) {
+<<<<<<< .merge_file_gpdNwp
+          case 1: // CFNAME
+            if (field.type == TType.STRING) {
+              this.cfname = iprot.readString();
+=======
           case 1: // MUTATION_MAP
-            if (field.type == TType.MAP) {
+            if (field.type == org.apache.thrift.protocol.TType.MAP) {
               {
-                TMap _map121 = iprot.readMapBegin();
-                this.mutation_map = new HashMap<ByteBuffer,Map<String,List<Mutation>>>(2*_map121.size);
-                for (int _i122 = 0; _i122 < _map121.size; ++_i122)
+                org.apache.thrift.protocol.TMap _map133 = iprot.readMapBegin();
+                this.mutation_map = new HashMap<ByteBuffer,Map<String,List<Mutation>>>(2*_map133.size);
+                for (int _i134 = 0; _i134 < _map133.size; ++_i134)
                 {
-                  ByteBuffer _key123;
-                  Map<String,List<Mutation>> _val124;
-                  _key123 = iprot.readBinary();
+                  ByteBuffer _key135; // required
+                  Map<String,List<Mutation>> _val136; // required
+                  _key135 = iprot.readBinary();
                   {
-                    TMap _map125 = iprot.readMapBegin();
-                    _val124 = new HashMap<String,List<Mutation>>(2*_map125.size);
-                    for (int _i126 = 0; _i126 < _map125.size; ++_i126)
+                    org.apache.thrift.protocol.TMap _map137 = iprot.readMapBegin();
+                    _val136 = new HashMap<String,List<Mutation>>(2*_map137.size);
+                    for (int _i138 = 0; _i138 < _map137.size; ++_i138)
                     {
-                      String _key127;
-                      List<Mutation> _val128;
-                      _key127 = iprot.readString();
+                      String _key139; // required
+                      List<Mutation> _val140; // required
+                      _key139 = iprot.readString();
                       {
-                        TList _list129 = iprot.readListBegin();
-                        _val128 = new ArrayList<Mutation>(_list129.size);
-                        for (int _i130 = 0; _i130 < _list129.size; ++_i130)
+                        org.apache.thrift.protocol.TList _list141 = iprot.readListBegin();
+                        _val140 = new ArrayList<Mutation>(_list141.size);
+                        for (int _i142 = 0; _i142 < _list141.size; ++_i142)
                         {
-                          Mutation _elem131;
-                          _elem131 = new Mutation();
-                          _elem131.read(iprot);
-                          _val128.add(_elem131);
+                          Mutation _elem143; // required
+                          _elem143 = new Mutation();
+                          _elem143.read(iprot);
+                          _val140.add(_elem143);
                         }
                         iprot.readListEnd();
                       }
-                      _val124.put(_key127, _val128);
+                      _val136.put(_key139, _val140);
                     }
                     iprot.readMapEnd();
                   }
-                  this.mutation_map.put(_key123, _val124);
+                  this.mutation_map.put(_key135, _val136);
                 }
                 iprot.readMapEnd();
               }
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           case 2: // CONSISTENCY_LEVEL
-            if (field.type == TType.I32) {
+            if (field.type == org.apache.thrift.protocol.TType.I32) {
               this.consistency_level = ConsistencyLevel.findByValue(iprot.readI32());
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
@@ -18833,20 +21327,20 @@ public class Cassandra {
       if (this.mutation_map != null) {
         oprot.writeFieldBegin(MUTATION_MAP_FIELD_DESC);
         {
-          oprot.writeMapBegin(new TMap(TType.STRING, TType.MAP, this.mutation_map.size()));
-          for (Map.Entry<ByteBuffer, Map<String,List<Mutation>>> _iter132 : this.mutation_map.entrySet())
+          oprot.writeMapBegin(new org.apache.thrift.protocol.TMap(org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.MAP, this.mutation_map.size()));
+          for (Map.Entry<ByteBuffer, Map<String,List<Mutation>>> _iter144 : this.mutation_map.entrySet())
           {
-            oprot.writeBinary(_iter132.getKey());
+            oprot.writeBinary(_iter144.getKey());
             {
-              oprot.writeMapBegin(new TMap(TType.STRING, TType.LIST, _iter132.getValue().size()));
-              for (Map.Entry<String, List<Mutation>> _iter133 : _iter132.getValue().entrySet())
+              oprot.writeMapBegin(new org.apache.thrift.protocol.TMap(org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.LIST, _iter144.getValue().size()));
+              for (Map.Entry<String, List<Mutation>> _iter145 : _iter144.getValue().entrySet())
               {
-                oprot.writeString(_iter133.getKey());
+                oprot.writeString(_iter145.getKey());
                 {
-                  oprot.writeListBegin(new TList(TType.STRUCT, _iter133.getValue().size()));
-                  for (Mutation _iter134 : _iter133.getValue())
+                  oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRUCT, _iter145.getValue().size()));
+                  for (Mutation _iter146 : _iter145.getValue())
                   {
-                    _iter134.write(oprot);
+                    _iter146.write(oprot);
                   }
                   oprot.writeListEnd();
                 }
@@ -18879,6 +21373,8 @@ public class Cassandra {
         sb.append(this.mutation_map);
       }
       first = false;
+<<<<<<< .merge_file_gpdNwp
+=======
       if (!first) sb.append(", ");
       sb.append("consistency_level:");
       if (this.consistency_level == null) {
@@ -18887,24 +21383,55 @@ public class Cassandra {
         sb.append(this.consistency_level);
       }
       first = false;
+>>>>>>> .merge_file_UlVTYo
       sb.append(")");
       return sb.toString();
     }
 
+<<<<<<< .merge_file_gpdNwp
     public void validate() throws TException {
       // check for required fields
-      if (mutation_map == null) {
-        throw new TProtocolException("Required field 'mutation_map' was not present! Struct: " + toString());
-      }
-      if (consistency_level == null) {
-        throw new TProtocolException("Required field 'consistency_level' was not present! Struct: " + toString());
+      if (cfname == null) {
+        throw new TProtocolException("Required field 'cfname' was not present! Struct: " + toString());
       }
     }
 
   }
 
-  public static class batch_mutate_result implements TBase<batch_mutate_result, batch_mutate_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("batch_mutate_result");
+  public static class truncate_result implements TBase<truncate_result, truncate_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("truncate_result");
+=======
+    public void validate() throws org.apache.thrift.TException {
+      // check for required fields
+      if (mutation_map == null) {
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'mutation_map' was not present! Struct: " + toString());
+      }
+      if (consistency_level == null) {
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'consistency_level' was not present! Struct: " + toString());
+      }
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+  }
+
+  public static class batch_mutate_result implements org.apache.thrift.TBase<batch_mutate_result, batch_mutate_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("batch_mutate_result");
+>>>>>>> .merge_file_UlVTYo
 
     private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
     private static final TField UE_FIELD_DESC = new TField("ue", TType.STRUCT, (short)2);
@@ -18990,7 +21517,11 @@ public class Cassandra {
       tmpMap.put(_Fields.TE, new FieldMetaData("te", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(batch_mutate_result.class, metaDataMap);
+<<<<<<< .merge_file_gpdNwp
+      FieldMetaData.addStructMetaDataMap(truncate_result.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(batch_mutate_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public batch_mutate_result() {
@@ -19379,16 +21910,26 @@ public class Cassandra {
 
   }
 
-  public static class truncate_args implements TBase<truncate_args, truncate_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("truncate_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class describe_schema_versions_args implements TBase<describe_schema_versions_args, describe_schema_versions_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_schema_versions_args");
+=======
+  public static class truncate_args implements org.apache.thrift.TBase<truncate_args, truncate_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("truncate_args");
+>>>>>>> .merge_file_UlVTYo
 
-    private static final TField CFNAME_FIELD_DESC = new TField("cfname", TType.STRING, (short)1);
+    private static final org.apache.thrift.protocol.TField CFNAME_FIELD_DESC = new org.apache.thrift.protocol.TField("cfname", org.apache.thrift.protocol.TType.STRING, (short)1);
 
-    public String cfname;
+    public String cfname; // required
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+<<<<<<< .merge_file_gpdNwp
     public enum _Fields implements TFieldIdEnum {
+;
+=======
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       CFNAME((short)1, "cfname");
+>>>>>>> .merge_file_UlVTYo
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -19443,16 +21984,24 @@ public class Cassandra {
         return _fieldName;
       }
     }
-
-    // isset id assignments
-
+<<<<<<< .merge_file_gpdNwp
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.CFNAME, new FieldMetaData("cfname", TFieldRequirementType.REQUIRED, 
-          new FieldValueMetaData(TType.STRING)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(truncate_args.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(describe_schema_versions_args.class, metaDataMap);
+=======
+
+    // isset id assignments
+
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
+    static {
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.CFNAME, new org.apache.thrift.meta_data.FieldMetaData("cfname", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(truncate_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public truncate_args() {
@@ -19496,7 +22045,7 @@ public class Cassandra {
       this.cfname = null;
     }
 
-    /** Returns true if field cfname is set (has been asigned a value) and false otherwise */
+    /** Returns true if field cfname is set (has been assigned a value) and false otherwise */
     public boolean isSetCfname() {
       return this.cfname != null;
     }
@@ -19592,7 +22141,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetCfname()) {
-        lastComparison = TBaseHelper.compareTo(this.cfname, typedOther.cfname);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.cfname, typedOther.cfname);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -19615,10 +22164,10 @@ public class Cassandra {
         }
         switch (field.id) {
           case 1: // CFNAME
-            if (field.type == TType.STRING) {
+            if (field.type == org.apache.thrift.protocol.TType.STRING) {
               this.cfname = iprot.readString();
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           default:
@@ -19664,28 +22213,44 @@ public class Cassandra {
     public void validate() throws TException {
       // check for required fields
       if (cfname == null) {
-        throw new TProtocolException("Required field 'cfname' was not present! Struct: " + toString());
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'cfname' was not present! Struct: " + toString());
       }
     }
 
   }
 
-  public static class truncate_result implements TBase<truncate_result, truncate_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("truncate_result");
+<<<<<<< .merge_file_gpdNwp
+  public static class describe_schema_versions_result implements TBase<describe_schema_versions_result, describe_schema_versions_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_schema_versions_result");
 
+    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.MAP, (short)0);
     private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
-    private static final TField UE_FIELD_DESC = new TField("ue", TType.STRUCT, (short)2);
-    private static final TField TE_FIELD_DESC = new TField("te", TType.STRUCT, (short)3);
 
+    public Map<String,List<String>> success;
     public InvalidRequestException ire;
-    public UnavailableException ue;
-    public TimedOutException te;
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
+      SUCCESS((short)0, "success"),
+      IRE((short)1, "ire");
+=======
+  public static class truncate_result implements org.apache.thrift.TBase<truncate_result, truncate_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("truncate_result");
+
+    private static final org.apache.thrift.protocol.TField IRE_FIELD_DESC = new org.apache.thrift.protocol.TField("ire", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+    private static final org.apache.thrift.protocol.TField UE_FIELD_DESC = new org.apache.thrift.protocol.TField("ue", org.apache.thrift.protocol.TType.STRUCT, (short)2);
+    private static final org.apache.thrift.protocol.TField TE_FIELD_DESC = new org.apache.thrift.protocol.TField("te", org.apache.thrift.protocol.TType.STRUCT, (short)3);
+
+    public InvalidRequestException ire; // required
+    public UnavailableException ue; // required
+    public TimedOutException te; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       IRE((short)1, "ire"),
       UE((short)2, "ue"),
       TE((short)3, "te");
+>>>>>>> .merge_file_UlVTYo
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -19749,15 +22314,28 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new FieldMetaData("success", TFieldRequirementType.DEFAULT, 
+          new MapMetaData(TType.MAP, 
+              new FieldValueMetaData(TType.STRING), 
+              new ListMetaData(TType.LIST, 
+                  new FieldValueMetaData(TType.STRING)))));
       tmpMap.put(_Fields.IRE, new FieldMetaData("ire", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
-      tmpMap.put(_Fields.UE, new FieldMetaData("ue", TFieldRequirementType.DEFAULT, 
-          new FieldValueMetaData(TType.STRUCT)));
-      tmpMap.put(_Fields.TE, new FieldMetaData("te", TFieldRequirementType.DEFAULT, 
-          new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(truncate_result.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(describe_schema_versions_result.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.IRE, new org.apache.thrift.meta_data.FieldMetaData("ire", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      tmpMap.put(_Fields.UE, new org.apache.thrift.meta_data.FieldMetaData("ue", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      tmpMap.put(_Fields.TE, new org.apache.thrift.meta_data.FieldMetaData("te", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(truncate_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public truncate_result() {
@@ -19813,7 +22391,7 @@ public class Cassandra {
       this.ire = null;
     }
 
-    /** Returns true if field ire is set (has been asigned a value) and false otherwise */
+    /** Returns true if field ire is set (has been assigned a value) and false otherwise */
     public boolean isSetIre() {
       return this.ire != null;
     }
@@ -19837,9 +22415,15 @@ public class Cassandra {
       this.ue = null;
     }
 
-    /** Returns true if field ue is set (has been asigned a value) and false otherwise */
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field success is set (has been asigned a value) and false otherwise */
+    public boolean isSetSuccess() {
+      return this.success != null;
+=======
+    /** Returns true if field ue is set (has been assigned a value) and false otherwise */
     public boolean isSetUe() {
       return this.ue != null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setUeIsSet(boolean value) {
@@ -19861,9 +22445,15 @@ public class Cassandra {
       this.te = null;
     }
 
-    /** Returns true if field te is set (has been asigned a value) and false otherwise */
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field ire is set (has been asigned a value) and false otherwise */
+    public boolean isSetIre() {
+      return this.ire != null;
+=======
+    /** Returns true if field te is set (has been assigned a value) and false otherwise */
     public boolean isSetTe() {
       return this.te != null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setTeIsSet(boolean value) {
@@ -20010,8 +22600,13 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetSuccess()) {
+        lastComparison = TBaseHelper.compareTo(this.success, typedOther.success);
+=======
       if (isSetIre()) {
-        lastComparison = TBaseHelper.compareTo(this.ire, typedOther.ire);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.ire, typedOther.ire);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -20020,8 +22615,12 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetIre()) {
+        lastComparison = TBaseHelper.compareTo(this.ire, typedOther.ire);
+=======
       if (isSetUe()) {
-        lastComparison = TBaseHelper.compareTo(this.ue, typedOther.ue);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.ue, typedOther.ue);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -20031,7 +22630,8 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetTe()) {
-        lastComparison = TBaseHelper.compareTo(this.te, typedOther.te);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.te, typedOther.te);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -20053,26 +22653,61 @@ public class Cassandra {
           break;
         }
         switch (field.id) {
+<<<<<<< .merge_file_gpdNwp
+          case 0: // SUCCESS
+            if (field.type == TType.MAP) {
+              {
+                TMap _map135 = iprot.readMapBegin();
+                this.success = new HashMap<String,List<String>>(2*_map135.size);
+                for (int _i136 = 0; _i136 < _map135.size; ++_i136)
+                {
+                  String _key137;
+                  List<String> _val138;
+                  _key137 = iprot.readString();
+                  {
+                    TList _list139 = iprot.readListBegin();
+                    _val138 = new ArrayList<String>(_list139.size);
+                    for (int _i140 = 0; _i140 < _list139.size; ++_i140)
+                    {
+                      String _elem141;
+                      _elem141 = iprot.readString();
+                      _val138.add(_elem141);
+                    }
+                    iprot.readListEnd();
+                  }
+                  this.success.put(_key137, _val138);
+                }
+                iprot.readMapEnd();
+              }
+=======
+          case 1: // IRE
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
+              this.ire = new InvalidRequestException();
+              this.ire.read(iprot);
+>>>>>>> .merge_file_UlVTYo
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+<<<<<<< .merge_file_gpdNwp
           case 1: // IRE
             if (field.type == TType.STRUCT) {
               this.ire = new InvalidRequestException();
               this.ire.read(iprot);
-            } else { 
-              TProtocolUtil.skip(iprot, field.type);
-            }
-            break;
+=======
           case 2: // UE
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.ue = new UnavailableException();
               this.ue.read(iprot);
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           case 3: // TE
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.te = new TimedOutException();
               this.te.read(iprot);
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
@@ -20091,7 +22726,30 @@ public class Cassandra {
     public void write(TProtocol oprot) throws TException {
       oprot.writeStructBegin(STRUCT_DESC);
 
+<<<<<<< .merge_file_gpdNwp
+      if (this.isSetSuccess()) {
+        oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
+        {
+          oprot.writeMapBegin(new TMap(TType.STRING, TType.LIST, this.success.size()));
+          for (Map.Entry<String, List<String>> _iter142 : this.success.entrySet())
+          {
+            oprot.writeString(_iter142.getKey());
+            {
+              oprot.writeListBegin(new TList(TType.STRING, _iter142.getValue().size()));
+              for (String _iter143 : _iter142.getValue())
+              {
+                oprot.writeString(_iter143);
+              }
+              oprot.writeListEnd();
+            }
+          }
+          oprot.writeMapEnd();
+        }
+        oprot.writeFieldEnd();
+      } else if (this.isSetIre()) {
+=======
       if (this.isSetIre()) {
+>>>>>>> .merge_file_UlVTYo
         oprot.writeFieldBegin(IRE_FIELD_DESC);
         this.ire.write(oprot);
         oprot.writeFieldEnd();
@@ -20146,8 +22804,13 @@ public class Cassandra {
 
   }
 
-  public static class describe_schema_versions_args implements TBase<describe_schema_versions_args, describe_schema_versions_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_schema_versions_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class describe_keyspaces_args implements TBase<describe_keyspaces_args, describe_keyspaces_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_keyspaces_args");
+=======
+  public static class describe_schema_versions_args implements org.apache.thrift.TBase<describe_schema_versions_args, describe_schema_versions_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_schema_versions_args");
+>>>>>>> .merge_file_UlVTYo
 
 
 
@@ -20210,7 +22873,11 @@ public class Cassandra {
     static {
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(describe_schema_versions_args.class, metaDataMap);
+<<<<<<< .merge_file_gpdNwp
+      FieldMetaData.addStructMetaDataMap(describe_keyspaces_args.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_schema_versions_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public describe_schema_versions_args() {
@@ -20334,14 +23001,25 @@ public class Cassandra {
 
   }
 
-  public static class describe_schema_versions_result implements TBase<describe_schema_versions_result, describe_schema_versions_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_schema_versions_result");
+<<<<<<< .merge_file_gpdNwp
+  public static class describe_keyspaces_result implements TBase<describe_keyspaces_result, describe_keyspaces_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_keyspaces_result");
 
-    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.MAP, (short)0);
+    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.LIST, (short)0);
     private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
 
-    public Map<String,List<String>> success;
+    public List<KsDef> success;
     public InvalidRequestException ire;
+=======
+  public static class describe_schema_versions_result implements org.apache.thrift.TBase<describe_schema_versions_result, describe_schema_versions_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_schema_versions_result");
+
+    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.MAP, (short)0);
+    private static final org.apache.thrift.protocol.TField IRE_FIELD_DESC = new org.apache.thrift.protocol.TField("ire", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+
+    public Map<String,List<String>> success; // required
+    public InvalidRequestException ire; // required
+>>>>>>> .merge_file_UlVTYo
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
@@ -20408,16 +23086,27 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
       tmpMap.put(_Fields.SUCCESS, new FieldMetaData("success", TFieldRequirementType.DEFAULT, 
-          new MapMetaData(TType.MAP, 
-              new FieldValueMetaData(TType.STRING), 
-              new ListMetaData(TType.LIST, 
-                  new FieldValueMetaData(TType.STRING)))));
+          new ListMetaData(TType.LIST, 
+              new StructMetaData(TType.STRUCT, KsDef.class))));
       tmpMap.put(_Fields.IRE, new FieldMetaData("ire", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(describe_schema_versions_result.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(describe_keyspaces_result.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.MapMetaData(org.apache.thrift.protocol.TType.MAP, 
+              new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING), 
+              new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST, 
+                  new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)))));
+      tmpMap.put(_Fields.IRE, new org.apache.thrift.meta_data.FieldMetaData("ire", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_schema_versions_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public describe_schema_versions_result() {
@@ -20673,27 +23362,40 @@ public class Cassandra {
         }
         switch (field.id) {
           case 0: // SUCCESS
-            if (field.type == TType.MAP) {
+<<<<<<< .merge_file_gpdNwp
+            if (field.type == TType.LIST) {
               {
-                TMap _map135 = iprot.readMapBegin();
-                this.success = new HashMap<String,List<String>>(2*_map135.size);
-                for (int _i136 = 0; _i136 < _map135.size; ++_i136)
+                TList _list144 = iprot.readListBegin();
+                this.success = new ArrayList<KsDef>(_list144.size);
+                for (int _i145 = 0; _i145 < _list144.size; ++_i145)
                 {
-                  String _key137;
-                  List<String> _val138;
-                  _key137 = iprot.readString();
+                  KsDef _elem146;
+                  _elem146 = new KsDef();
+                  _elem146.read(iprot);
+                  this.success.add(_elem146);
+=======
+            if (field.type == org.apache.thrift.protocol.TType.MAP) {
+              {
+                org.apache.thrift.protocol.TMap _map147 = iprot.readMapBegin();
+                this.success = new HashMap<String,List<String>>(2*_map147.size);
+                for (int _i148 = 0; _i148 < _map147.size; ++_i148)
+                {
+                  String _key149; // required
+                  List<String> _val150; // required
+                  _key149 = iprot.readString();
                   {
-                    TList _list139 = iprot.readListBegin();
-                    _val138 = new ArrayList<String>(_list139.size);
-                    for (int _i140 = 0; _i140 < _list139.size; ++_i140)
+                    org.apache.thrift.protocol.TList _list151 = iprot.readListBegin();
+                    _val150 = new ArrayList<String>(_list151.size);
+                    for (int _i152 = 0; _i152 < _list151.size; ++_i152)
                     {
-                      String _elem141;
-                      _elem141 = iprot.readString();
-                      _val138.add(_elem141);
+                      String _elem153; // required
+                      _elem153 = iprot.readString();
+                      _val150.add(_elem153);
                     }
                     iprot.readListEnd();
                   }
-                  this.success.put(_key137, _val138);
+                  this.success.put(_key149, _val150);
+>>>>>>> .merge_file_UlVTYo
                 }
                 iprot.readMapEnd();
               }
@@ -20726,15 +23428,20 @@ public class Cassandra {
       if (this.isSetSuccess()) {
         oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
         {
-          oprot.writeMapBegin(new TMap(TType.STRING, TType.LIST, this.success.size()));
-          for (Map.Entry<String, List<String>> _iter142 : this.success.entrySet())
+<<<<<<< .merge_file_gpdNwp
+          oprot.writeListBegin(new TList(TType.STRUCT, this.success.size()));
+          for (KsDef _iter147 : this.success)
+=======
+          oprot.writeMapBegin(new org.apache.thrift.protocol.TMap(org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.LIST, this.success.size()));
+          for (Map.Entry<String, List<String>> _iter154 : this.success.entrySet())
+>>>>>>> .merge_file_UlVTYo
           {
-            oprot.writeString(_iter142.getKey());
+            oprot.writeString(_iter154.getKey());
             {
-              oprot.writeListBegin(new TList(TType.STRING, _iter142.getValue().size()));
-              for (String _iter143 : _iter142.getValue())
+              oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, _iter154.getValue().size()));
+              for (String _iter155 : _iter154.getValue())
               {
-                oprot.writeString(_iter143);
+                oprot.writeString(_iter155);
               }
               oprot.writeListEnd();
             }
@@ -20781,8 +23488,13 @@ public class Cassandra {
 
   }
 
-  public static class describe_keyspaces_args implements TBase<describe_keyspaces_args, describe_keyspaces_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_keyspaces_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class describe_cluster_name_args implements TBase<describe_cluster_name_args, describe_cluster_name_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_cluster_name_args");
+=======
+  public static class describe_keyspaces_args implements org.apache.thrift.TBase<describe_keyspaces_args, describe_keyspaces_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_keyspaces_args");
+>>>>>>> .merge_file_UlVTYo
 
 
 
@@ -20845,7 +23557,11 @@ public class Cassandra {
     static {
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(describe_keyspaces_args.class, metaDataMap);
+<<<<<<< .merge_file_gpdNwp
+      FieldMetaData.addStructMetaDataMap(describe_cluster_name_args.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_keyspaces_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public describe_keyspaces_args() {
@@ -20969,19 +23685,32 @@ public class Cassandra {
 
   }
 
-  public static class describe_keyspaces_result implements TBase<describe_keyspaces_result, describe_keyspaces_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_keyspaces_result");
+<<<<<<< .merge_file_gpdNwp
+  public static class describe_cluster_name_result implements TBase<describe_cluster_name_result, describe_cluster_name_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_cluster_name_result");
 
-    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.LIST, (short)0);
-    private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
+    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRING, (short)0);
 
-    public List<KsDef> success;
-    public InvalidRequestException ire;
+    public String success;
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
+      SUCCESS((short)0, "success");
+=======
+  public static class describe_keyspaces_result implements org.apache.thrift.TBase<describe_keyspaces_result, describe_keyspaces_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_keyspaces_result");
+
+    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.LIST, (short)0);
+    private static final org.apache.thrift.protocol.TField IRE_FIELD_DESC = new org.apache.thrift.protocol.TField("ire", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+
+    public List<KsDef> success; // required
+    public InvalidRequestException ire; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       SUCCESS((short)0, "success"),
       IRE((short)1, "ire");
+>>>>>>> .merge_file_UlVTYo
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -21043,14 +23772,22 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
       tmpMap.put(_Fields.SUCCESS, new FieldMetaData("success", TFieldRequirementType.DEFAULT, 
-          new ListMetaData(TType.LIST, 
-              new StructMetaData(TType.STRUCT, KsDef.class))));
-      tmpMap.put(_Fields.IRE, new FieldMetaData("ire", TFieldRequirementType.DEFAULT, 
-          new FieldValueMetaData(TType.STRUCT)));
+          new FieldValueMetaData(TType.STRING)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(describe_keyspaces_result.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(describe_cluster_name_result.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST, 
+              new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, KsDef.class))));
+      tmpMap.put(_Fields.IRE, new org.apache.thrift.meta_data.FieldMetaData("ire", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_keyspaces_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public describe_keyspaces_result() {
@@ -21143,7 +23880,7 @@ public class Cassandra {
       this.ire = null;
     }
 
-    /** Returns true if field ire is set (has been asigned a value) and false otherwise */
+    /** Returns true if field ire is set (has been assigned a value) and false otherwise */
     public boolean isSetIre() {
       return this.ire != null;
     }
@@ -21276,7 +24013,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetIre()) {
-        lastComparison = TBaseHelper.compareTo(this.ire, typedOther.ire);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.ire, typedOther.ire);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -21299,27 +24036,32 @@ public class Cassandra {
         }
         switch (field.id) {
           case 0: // SUCCESS
-            if (field.type == TType.LIST) {
+<<<<<<< .merge_file_gpdNwp
+            if (field.type == TType.STRING) {
+              this.success = iprot.readString();
+=======
+            if (field.type == org.apache.thrift.protocol.TType.LIST) {
               {
-                TList _list144 = iprot.readListBegin();
-                this.success = new ArrayList<KsDef>(_list144.size);
-                for (int _i145 = 0; _i145 < _list144.size; ++_i145)
+                org.apache.thrift.protocol.TList _list156 = iprot.readListBegin();
+                this.success = new ArrayList<KsDef>(_list156.size);
+                for (int _i157 = 0; _i157 < _list156.size; ++_i157)
                 {
-                  KsDef _elem146;
-                  _elem146 = new KsDef();
-                  _elem146.read(iprot);
-                  this.success.add(_elem146);
+                  KsDef _elem158; // required
+                  _elem158 = new KsDef();
+                  _elem158.read(iprot);
+                  this.success.add(_elem158);
                 }
                 iprot.readListEnd();
               }
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           case 1: // IRE
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.ire = new InvalidRequestException();
               this.ire.read(iprot);
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
@@ -21341,10 +24083,10 @@ public class Cassandra {
       if (this.isSetSuccess()) {
         oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
         {
-          oprot.writeListBegin(new TList(TType.STRUCT, this.success.size()));
-          for (KsDef _iter147 : this.success)
+          oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRUCT, this.success.size()));
+          for (KsDef _iter159 : this.success)
           {
-            _iter147.write(oprot);
+            _iter159.write(oprot);
           }
           oprot.writeListEnd();
         }
@@ -21388,8 +24130,13 @@ public class Cassandra {
 
   }
 
-  public static class describe_cluster_name_args implements TBase<describe_cluster_name_args, describe_cluster_name_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_cluster_name_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class describe_version_args implements TBase<describe_version_args, describe_version_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_version_args");
+=======
+  public static class describe_cluster_name_args implements org.apache.thrift.TBase<describe_cluster_name_args, describe_cluster_name_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_cluster_name_args");
+>>>>>>> .merge_file_UlVTYo
 
 
 
@@ -21452,7 +24199,11 @@ public class Cassandra {
     static {
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(describe_cluster_name_args.class, metaDataMap);
+<<<<<<< .merge_file_gpdNwp
+      FieldMetaData.addStructMetaDataMap(describe_version_args.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_cluster_name_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public describe_cluster_name_args() {
@@ -21576,8 +24327,13 @@ public class Cassandra {
 
   }
 
-  public static class describe_cluster_name_result implements TBase<describe_cluster_name_result, describe_cluster_name_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_cluster_name_result");
+<<<<<<< .merge_file_gpdNwp
+  public static class describe_version_result implements TBase<describe_version_result, describe_version_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_version_result");
+=======
+  public static class describe_cluster_name_result implements org.apache.thrift.TBase<describe_cluster_name_result, describe_cluster_name_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_cluster_name_result");
+>>>>>>> .merge_file_UlVTYo
 
     private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRING, (short)0);
 
@@ -21649,7 +24405,11 @@ public class Cassandra {
       tmpMap.put(_Fields.SUCCESS, new FieldMetaData("success", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRING)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(describe_cluster_name_result.class, metaDataMap);
+<<<<<<< .merge_file_gpdNwp
+      FieldMetaData.addStructMetaDataMap(describe_version_result.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_cluster_name_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public describe_cluster_name_result() {
@@ -21863,14 +24623,27 @@ public class Cassandra {
 
   }
 
-  public static class describe_version_args implements TBase<describe_version_args, describe_version_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_version_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class describe_ring_args implements TBase<describe_ring_args, describe_ring_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_ring_args");
+
+    private static final TField KEYSPACE_FIELD_DESC = new TField("keyspace", TType.STRING, (short)1);
+
+    public String keyspace;
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements TFieldIdEnum {
+      KEYSPACE((short)1, "keyspace");
+=======
+  public static class describe_version_args implements org.apache.thrift.TBase<describe_version_args, describe_version_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_version_args");
 
 
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
-    public enum _Fields implements TFieldIdEnum {
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
 ;
+>>>>>>> .merge_file_UlVTYo
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -21923,11 +24696,27 @@ public class Cassandra {
         return _fieldName;
       }
     }
+<<<<<<< .merge_file_gpdNwp
+
+    // isset id assignments
+
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.KEYSPACE, new FieldMetaData("keyspace", TFieldRequirementType.REQUIRED, 
+          new FieldValueMetaData(TType.STRING)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(describe_version_args.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(describe_ring_args.class, metaDataMap);
+    }
+
+    public describe_ring_args() {
+=======
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
+    static {
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_version_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public describe_version_args() {
@@ -21945,6 +24734,34 @@ public class Cassandra {
 
     @Override
     public void clear() {
+<<<<<<< .merge_file_gpdNwp
+      this.keyspace = null;
+    }
+
+    public String getKeyspace() {
+      return this.keyspace;
+    }
+
+    public describe_ring_args setKeyspace(String keyspace) {
+      this.keyspace = keyspace;
+      return this;
+    }
+
+    public void unsetKeyspace() {
+      this.keyspace = null;
+    }
+
+    /** Returns true if field keyspace is set (has been asigned a value) and false otherwise */
+    public boolean isSetKeyspace() {
+      return this.keyspace != null;
+    }
+
+    public void setKeyspaceIsSet(boolean value) {
+      if (!value) {
+        this.keyspace = null;
+      }
+=======
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setFieldValue(_Fields field, Object value) {
@@ -22000,6 +24817,19 @@ public class Cassandra {
       int lastComparison = 0;
       describe_version_args typedOther = (describe_version_args)other;
 
+<<<<<<< .merge_file_gpdNwp
+      lastComparison = Boolean.valueOf(isSetKeyspace()).compareTo(typedOther.isSetKeyspace());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetKeyspace()) {
+        lastComparison = TBaseHelper.compareTo(this.keyspace, typedOther.keyspace);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+=======
+>>>>>>> .merge_file_UlVTYo
       return 0;
     }
 
@@ -22017,6 +24847,16 @@ public class Cassandra {
           break;
         }
         switch (field.id) {
+<<<<<<< .merge_file_gpdNwp
+          case 1: // KEYSPACE
+            if (field.type == TType.STRING) {
+              this.keyspace = iprot.readString();
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+=======
+>>>>>>> .merge_file_UlVTYo
           default:
             TProtocolUtil.skip(iprot, field.type);
         }
@@ -22047,20 +24887,59 @@ public class Cassandra {
 
     public void validate() throws TException {
       // check for required fields
+<<<<<<< .merge_file_gpdNwp
+      if (keyspace == null) {
+        throw new TProtocolException("Required field 'keyspace' was not present! Struct: " + toString());
+      }
     }
 
   }
 
-  public static class describe_version_result implements TBase<describe_version_result, describe_version_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_version_result");
+  public static class describe_ring_result implements TBase<describe_ring_result, describe_ring_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_ring_result");
 
-    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRING, (short)0);
+    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.LIST, (short)0);
+    private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
 
-    public String success;
+    public List<TokenRange> success;
+    public InvalidRequestException ire;
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
+      SUCCESS((short)0, "success"),
+      IRE((short)1, "ire");
+=======
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+  }
+
+  public static class describe_version_result implements org.apache.thrift.TBase<describe_version_result, describe_version_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_version_result");
+
+    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.STRING, (short)0);
+
+    public String success; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       SUCCESS((short)0, "success");
+>>>>>>> .merge_file_UlVTYo
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -22120,11 +24999,22 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
       tmpMap.put(_Fields.SUCCESS, new FieldMetaData("success", TFieldRequirementType.DEFAULT, 
-          new FieldValueMetaData(TType.STRING)));
+          new ListMetaData(TType.LIST, 
+              new StructMetaData(TType.STRUCT, TokenRange.class))));
+      tmpMap.put(_Fields.IRE, new FieldMetaData("ire", TFieldRequirementType.DEFAULT, 
+          new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(describe_version_result.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(describe_ring_result.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_version_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public describe_version_result() {
@@ -22179,6 +25069,33 @@ public class Cassandra {
       }
     }
 
+<<<<<<< .merge_file_gpdNwp
+    public InvalidRequestException getIre() {
+      return this.ire;
+    }
+
+    public describe_ring_result setIre(InvalidRequestException ire) {
+      this.ire = ire;
+      return this;
+    }
+
+    public void unsetIre() {
+      this.ire = null;
+    }
+
+    /** Returns true if field ire is set (has been asigned a value) and false otherwise */
+    public boolean isSetIre() {
+      return this.ire != null;
+    }
+
+    public void setIreIsSet(boolean value) {
+      if (!value) {
+        this.ire = null;
+      }
+    }
+
+=======
+>>>>>>> .merge_file_UlVTYo
     public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       case SUCCESS:
@@ -22269,6 +25186,19 @@ public class Cassandra {
           return lastComparison;
         }
       }
+<<<<<<< .merge_file_gpdNwp
+      lastComparison = Boolean.valueOf(isSetIre()).compareTo(typedOther.isSetIre());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetIre()) {
+        lastComparison = TBaseHelper.compareTo(this.ire, typedOther.ire);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+=======
+>>>>>>> .merge_file_UlVTYo
       return 0;
     }
 
@@ -22287,8 +25217,32 @@ public class Cassandra {
         }
         switch (field.id) {
           case 0: // SUCCESS
-            if (field.type == TType.STRING) {
+<<<<<<< .merge_file_gpdNwp
+            if (field.type == TType.LIST) {
+              {
+                TList _list148 = iprot.readListBegin();
+                this.success = new ArrayList<TokenRange>(_list148.size);
+                for (int _i149 = 0; _i149 < _list148.size; ++_i149)
+                {
+                  TokenRange _elem150;
+                  _elem150 = new TokenRange();
+                  _elem150.read(iprot);
+                  this.success.add(_elem150);
+                }
+                iprot.readListEnd();
+              }
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          case 1: // IRE
+            if (field.type == TType.STRUCT) {
+              this.ire = new InvalidRequestException();
+              this.ire.read(iprot);
+=======
+            if (field.type == org.apache.thrift.protocol.TType.STRING) {
               this.success = iprot.readString();
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
@@ -22309,7 +25263,22 @@ public class Cassandra {
 
       if (this.isSetSuccess()) {
         oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
+<<<<<<< .merge_file_gpdNwp
+        {
+          oprot.writeListBegin(new TList(TType.STRUCT, this.success.size()));
+          for (TokenRange _iter151 : this.success)
+          {
+            _iter151.write(oprot);
+          }
+          oprot.writeListEnd();
+        }
+        oprot.writeFieldEnd();
+      } else if (this.isSetIre()) {
+        oprot.writeFieldBegin(IRE_FIELD_DESC);
+        this.ire.write(oprot);
+=======
         oprot.writeString(this.success);
+>>>>>>> .merge_file_UlVTYo
         oprot.writeFieldEnd();
       }
       oprot.writeFieldStop();
@@ -22338,16 +25307,26 @@ public class Cassandra {
 
   }
 
-  public static class describe_ring_args implements TBase<describe_ring_args, describe_ring_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_ring_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class describe_partitioner_args implements TBase<describe_partitioner_args, describe_partitioner_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_partitioner_args");
+=======
+  public static class describe_ring_args implements org.apache.thrift.TBase<describe_ring_args, describe_ring_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_ring_args");
+>>>>>>> .merge_file_UlVTYo
 
-    private static final TField KEYSPACE_FIELD_DESC = new TField("keyspace", TType.STRING, (short)1);
+    private static final org.apache.thrift.protocol.TField KEYSPACE_FIELD_DESC = new org.apache.thrift.protocol.TField("keyspace", org.apache.thrift.protocol.TType.STRING, (short)1);
 
-    public String keyspace;
+    public String keyspace; // required
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+<<<<<<< .merge_file_gpdNwp
     public enum _Fields implements TFieldIdEnum {
+;
+=======
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       KEYSPACE((short)1, "keyspace");
+>>>>>>> .merge_file_UlVTYo
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -22402,16 +25381,24 @@ public class Cassandra {
         return _fieldName;
       }
     }
-
-    // isset id assignments
-
+<<<<<<< .merge_file_gpdNwp
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.KEYSPACE, new FieldMetaData("keyspace", TFieldRequirementType.REQUIRED, 
-          new FieldValueMetaData(TType.STRING)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(describe_ring_args.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(describe_partitioner_args.class, metaDataMap);
+=======
+
+    // isset id assignments
+
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
+    static {
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.KEYSPACE, new org.apache.thrift.meta_data.FieldMetaData("keyspace", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_ring_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public describe_ring_args() {
@@ -22455,7 +25442,7 @@ public class Cassandra {
       this.keyspace = null;
     }
 
-    /** Returns true if field keyspace is set (has been asigned a value) and false otherwise */
+    /** Returns true if field keyspace is set (has been assigned a value) and false otherwise */
     public boolean isSetKeyspace() {
       return this.keyspace != null;
     }
@@ -22551,7 +25538,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetKeyspace()) {
-        lastComparison = TBaseHelper.compareTo(this.keyspace, typedOther.keyspace);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.keyspace, typedOther.keyspace);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -22574,10 +25561,10 @@ public class Cassandra {
         }
         switch (field.id) {
           case 1: // KEYSPACE
-            if (field.type == TType.STRING) {
+            if (field.type == org.apache.thrift.protocol.TType.STRING) {
               this.keyspace = iprot.readString();
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           default:
@@ -22623,25 +25610,38 @@ public class Cassandra {
     public void validate() throws TException {
       // check for required fields
       if (keyspace == null) {
-        throw new TProtocolException("Required field 'keyspace' was not present! Struct: " + toString());
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'keyspace' was not present! Struct: " + toString());
       }
     }
 
   }
 
-  public static class describe_ring_result implements TBase<describe_ring_result, describe_ring_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_ring_result");
+<<<<<<< .merge_file_gpdNwp
+  public static class describe_partitioner_result implements TBase<describe_partitioner_result, describe_partitioner_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_partitioner_result");
 
-    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.LIST, (short)0);
-    private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
+    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRING, (short)0);
 
-    public List<TokenRange> success;
-    public InvalidRequestException ire;
+    public String success;
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
+      SUCCESS((short)0, "success");
+=======
+  public static class describe_ring_result implements org.apache.thrift.TBase<describe_ring_result, describe_ring_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_ring_result");
+
+    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.LIST, (short)0);
+    private static final org.apache.thrift.protocol.TField IRE_FIELD_DESC = new org.apache.thrift.protocol.TField("ire", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+
+    public List<TokenRange> success; // required
+    public InvalidRequestException ire; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       SUCCESS((short)0, "success"),
       IRE((short)1, "ire");
+>>>>>>> .merge_file_UlVTYo
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -22703,14 +25703,22 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
       tmpMap.put(_Fields.SUCCESS, new FieldMetaData("success", TFieldRequirementType.DEFAULT, 
-          new ListMetaData(TType.LIST, 
-              new StructMetaData(TType.STRUCT, TokenRange.class))));
-      tmpMap.put(_Fields.IRE, new FieldMetaData("ire", TFieldRequirementType.DEFAULT, 
-          new FieldValueMetaData(TType.STRUCT)));
+          new FieldValueMetaData(TType.STRING)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(describe_ring_result.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(describe_partitioner_result.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST, 
+              new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, TokenRange.class))));
+      tmpMap.put(_Fields.IRE, new org.apache.thrift.meta_data.FieldMetaData("ire", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_ring_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public describe_ring_result() {
@@ -22803,7 +25811,7 @@ public class Cassandra {
       this.ire = null;
     }
 
-    /** Returns true if field ire is set (has been asigned a value) and false otherwise */
+    /** Returns true if field ire is set (has been assigned a value) and false otherwise */
     public boolean isSetIre() {
       return this.ire != null;
     }
@@ -22936,7 +25944,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetIre()) {
-        lastComparison = TBaseHelper.compareTo(this.ire, typedOther.ire);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.ire, typedOther.ire);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -22959,27 +25967,32 @@ public class Cassandra {
         }
         switch (field.id) {
           case 0: // SUCCESS
-            if (field.type == TType.LIST) {
+<<<<<<< .merge_file_gpdNwp
+            if (field.type == TType.STRING) {
+              this.success = iprot.readString();
+=======
+            if (field.type == org.apache.thrift.protocol.TType.LIST) {
               {
-                TList _list148 = iprot.readListBegin();
-                this.success = new ArrayList<TokenRange>(_list148.size);
-                for (int _i149 = 0; _i149 < _list148.size; ++_i149)
+                org.apache.thrift.protocol.TList _list160 = iprot.readListBegin();
+                this.success = new ArrayList<TokenRange>(_list160.size);
+                for (int _i161 = 0; _i161 < _list160.size; ++_i161)
                 {
-                  TokenRange _elem150;
-                  _elem150 = new TokenRange();
-                  _elem150.read(iprot);
-                  this.success.add(_elem150);
+                  TokenRange _elem162; // required
+                  _elem162 = new TokenRange();
+                  _elem162.read(iprot);
+                  this.success.add(_elem162);
                 }
                 iprot.readListEnd();
               }
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           case 1: // IRE
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.ire = new InvalidRequestException();
               this.ire.read(iprot);
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
@@ -23001,10 +26014,10 @@ public class Cassandra {
       if (this.isSetSuccess()) {
         oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
         {
-          oprot.writeListBegin(new TList(TType.STRUCT, this.success.size()));
-          for (TokenRange _iter151 : this.success)
+          oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRUCT, this.success.size()));
+          for (TokenRange _iter163 : this.success)
           {
-            _iter151.write(oprot);
+            _iter163.write(oprot);
           }
           oprot.writeListEnd();
         }
@@ -23048,8 +26061,13 @@ public class Cassandra {
 
   }
 
-  public static class describe_partitioner_args implements TBase<describe_partitioner_args, describe_partitioner_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_partitioner_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class describe_snitch_args implements TBase<describe_snitch_args, describe_snitch_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_snitch_args");
+=======
+  public static class describe_token_map_args implements org.apache.thrift.TBase<describe_token_map_args, describe_token_map_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_token_map_args");
+>>>>>>> .merge_file_UlVTYo
 
 
 
@@ -23112,7 +26130,680 @@ public class Cassandra {
     static {
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(describe_partitioner_args.class, metaDataMap);
+<<<<<<< .merge_file_gpdNwp
+      FieldMetaData.addStructMetaDataMap(describe_snitch_args.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_token_map_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
+    }
+
+    public describe_token_map_args() {
+    }
+
+    /**
+     * Performs a deep copy on <i>other</i>.
+     */
+    public describe_token_map_args(describe_token_map_args other) {
+    }
+
+    public describe_token_map_args deepCopy() {
+      return new describe_token_map_args(this);
+    }
+
+    @Override
+    public void clear() {
+    }
+
+    public void setFieldValue(_Fields field, Object value) {
+      switch (field) {
+      }
+    }
+
+    public Object getFieldValue(_Fields field) {
+      switch (field) {
+      }
+      throw new IllegalStateException();
+    }
+
+    /** Returns true if field corresponding to fieldID is set (has been asigned a value) and false otherwise */
+    public boolean isSet(_Fields field) {
+      if (field == null) {
+        throw new IllegalArgumentException();
+      }
+
+      switch (field) {
+      }
+      throw new IllegalStateException();
+    }
+
+    @Override
+    public boolean equals(Object that) {
+      if (that == null)
+        return false;
+      if (that instanceof describe_token_map_args)
+        return this.equals((describe_token_map_args)that);
+      return false;
+    }
+
+    public boolean equals(describe_token_map_args that) {
+      if (that == null)
+        return false;
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      HashCodeBuilder builder = new HashCodeBuilder();
+
+      return builder.toHashCode();
+    }
+
+    public int compareTo(describe_token_map_args other) {
+      if (!getClass().equals(other.getClass())) {
+        return getClass().getName().compareTo(other.getClass().getName());
+      }
+
+      int lastComparison = 0;
+      describe_token_map_args typedOther = (describe_token_map_args)other;
+
+      return 0;
+    }
+
+    public _Fields fieldForId(int fieldId) {
+      return _Fields.findByThriftId(fieldId);
+    }
+
+    public void read(TProtocol iprot) throws TException {
+      TField field;
+      iprot.readStructBegin();
+      while (true)
+      {
+        field = iprot.readFieldBegin();
+        if (field.type == TType.STOP) { 
+          break;
+        }
+        switch (field.id) {
+          default:
+            TProtocolUtil.skip(iprot, field.type);
+        }
+        iprot.readFieldEnd();
+      }
+      iprot.readStructEnd();
+
+      // check for required fields of primitive type, which can't be checked in the validate method
+      validate();
+    }
+
+    public void write(TProtocol oprot) throws TException {
+      validate();
+
+      oprot.writeStructBegin(STRUCT_DESC);
+      oprot.writeFieldStop();
+      oprot.writeStructEnd();
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder sb = new StringBuilder("describe_token_map_args(");
+      boolean first = true;
+
+      sb.append(")");
+      return sb.toString();
+    }
+
+    public void validate() throws TException {
+      // check for required fields
+    }
+
+  }
+
+<<<<<<< .merge_file_gpdNwp
+  public static class describe_snitch_result implements TBase<describe_snitch_result, describe_snitch_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_snitch_result");
+
+    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRING, (short)0);
+
+    public String success;
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements TFieldIdEnum {
+      SUCCESS((short)0, "success");
+=======
+  public static class describe_token_map_result implements org.apache.thrift.TBase<describe_token_map_result, describe_token_map_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_token_map_result");
+
+    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.MAP, (short)0);
+    private static final org.apache.thrift.protocol.TField IRE_FIELD_DESC = new org.apache.thrift.protocol.TField("ire", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+
+    public Map<String,String> success; // required
+    public InvalidRequestException ire; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
+      SUCCESS((short)0, "success"),
+      IRE((short)1, "ire");
+>>>>>>> .merge_file_UlVTYo
+
+      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
+
+      static {
+        for (_Fields field : EnumSet.allOf(_Fields.class)) {
+          byName.put(field.getFieldName(), field);
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, or null if its not found.
+       */
+      public static _Fields findByThriftId(int fieldId) {
+        switch(fieldId) {
+          case 0: // SUCCESS
+            return SUCCESS;
+          case 1: // IRE
+            return IRE;
+          default:
+            return null;
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, throwing an exception
+       * if it is not found.
+       */
+      public static _Fields findByThriftIdOrThrow(int fieldId) {
+        _Fields fields = findByThriftId(fieldId);
+        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
+        return fields;
+      }
+
+      /**
+       * Find the _Fields constant that matches name, or null if its not found.
+       */
+      public static _Fields findByName(String name) {
+        return byName.get(name);
+      }
+
+      private final short _thriftId;
+      private final String _fieldName;
+
+      _Fields(short thriftId, String fieldName) {
+        _thriftId = thriftId;
+        _fieldName = fieldName;
+      }
+
+      public short getThriftFieldId() {
+        return _thriftId;
+      }
+
+      public String getFieldName() {
+        return _fieldName;
+      }
+    }
+
+    // isset id assignments
+
+    public static final Map<_Fields, FieldMetaData> metaDataMap;
+    static {
+<<<<<<< .merge_file_gpdNwp
+      Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new FieldMetaData("success", TFieldRequirementType.DEFAULT, 
+          new FieldValueMetaData(TType.STRING)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      FieldMetaData.addStructMetaDataMap(describe_snitch_result.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.MapMetaData(org.apache.thrift.protocol.TType.MAP, 
+              new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING), 
+              new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING))));
+      tmpMap.put(_Fields.IRE, new org.apache.thrift.meta_data.FieldMetaData("ire", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_token_map_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
+    }
+
+    public describe_token_map_result() {
+    }
+
+    public describe_token_map_result(
+      Map<String,String> success,
+      InvalidRequestException ire)
+    {
+      this();
+      this.success = success;
+      this.ire = ire;
+    }
+
+    /**
+     * Performs a deep copy on <i>other</i>.
+     */
+    public describe_token_map_result(describe_token_map_result other) {
+      if (other.isSetSuccess()) {
+        Map<String,String> __this__success = new HashMap<String,String>();
+        for (Map.Entry<String, String> other_element : other.success.entrySet()) {
+
+          String other_element_key = other_element.getKey();
+          String other_element_value = other_element.getValue();
+
+          String __this__success_copy_key = other_element_key;
+
+          String __this__success_copy_value = other_element_value;
+
+          __this__success.put(__this__success_copy_key, __this__success_copy_value);
+        }
+        this.success = __this__success;
+      }
+      if (other.isSetIre()) {
+        this.ire = new InvalidRequestException(other.ire);
+      }
+    }
+
+    public describe_token_map_result deepCopy() {
+      return new describe_token_map_result(this);
+    }
+
+    @Override
+    public void clear() {
+      this.success = null;
+      this.ire = null;
+    }
+
+    public int getSuccessSize() {
+      return (this.success == null) ? 0 : this.success.size();
+    }
+
+    public void putToSuccess(String key, String val) {
+      if (this.success == null) {
+        this.success = new HashMap<String,String>();
+      }
+      this.success.put(key, val);
+    }
+
+    public Map<String,String> getSuccess() {
+      return this.success;
+    }
+
+    public describe_token_map_result setSuccess(Map<String,String> success) {
+      this.success = success;
+      return this;
+    }
+
+    public void unsetSuccess() {
+      this.success = null;
+    }
+
+    /** Returns true if field success is set (has been asigned a value) and false otherwise */
+    public boolean isSetSuccess() {
+      return this.success != null;
+    }
+
+    public void setSuccessIsSet(boolean value) {
+      if (!value) {
+        this.success = null;
+      }
+    }
+
+    public InvalidRequestException getIre() {
+      return this.ire;
+    }
+
+    public describe_token_map_result setIre(InvalidRequestException ire) {
+      this.ire = ire;
+      return this;
+    }
+
+    public void unsetIre() {
+      this.ire = null;
+    }
+
+    /** Returns true if field ire is set (has been assigned a value) and false otherwise */
+    public boolean isSetIre() {
+      return this.ire != null;
+    }
+
+    public void setIreIsSet(boolean value) {
+      if (!value) {
+        this.ire = null;
+      }
+    }
+
+    public void setFieldValue(_Fields field, Object value) {
+      switch (field) {
+      case SUCCESS:
+        if (value == null) {
+          unsetSuccess();
+        } else {
+          setSuccess((Map<String,String>)value);
+        }
+        break;
+
+      case IRE:
+        if (value == null) {
+          unsetIre();
+        } else {
+          setIre((InvalidRequestException)value);
+        }
+        break;
+
+      }
+    }
+
+    public Object getFieldValue(_Fields field) {
+      switch (field) {
+      case SUCCESS:
+        return getSuccess();
+
+      case IRE:
+        return getIre();
+
+      }
+      throw new IllegalStateException();
+    }
+
+    /** Returns true if field corresponding to fieldID is set (has been asigned a value) and false otherwise */
+    public boolean isSet(_Fields field) {
+      if (field == null) {
+        throw new IllegalArgumentException();
+      }
+
+      switch (field) {
+      case SUCCESS:
+        return isSetSuccess();
+      case IRE:
+        return isSetIre();
+      }
+      throw new IllegalStateException();
+    }
+
+    @Override
+    public boolean equals(Object that) {
+      if (that == null)
+        return false;
+      if (that instanceof describe_token_map_result)
+        return this.equals((describe_token_map_result)that);
+      return false;
+    }
+
+    public boolean equals(describe_token_map_result that) {
+      if (that == null)
+        return false;
+
+      boolean this_present_success = true && this.isSetSuccess();
+      boolean that_present_success = true && that.isSetSuccess();
+      if (this_present_success || that_present_success) {
+        if (!(this_present_success && that_present_success))
+          return false;
+        if (!this.success.equals(that.success))
+          return false;
+      }
+
+      boolean this_present_ire = true && this.isSetIre();
+      boolean that_present_ire = true && that.isSetIre();
+      if (this_present_ire || that_present_ire) {
+        if (!(this_present_ire && that_present_ire))
+          return false;
+        if (!this.ire.equals(that.ire))
+          return false;
+      }
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      HashCodeBuilder builder = new HashCodeBuilder();
+
+      boolean present_success = true && (isSetSuccess());
+      builder.append(present_success);
+      if (present_success)
+        builder.append(success);
+
+      boolean present_ire = true && (isSetIre());
+      builder.append(present_ire);
+      if (present_ire)
+        builder.append(ire);
+
+      return builder.toHashCode();
+    }
+
+    public int compareTo(describe_token_map_result other) {
+      if (!getClass().equals(other.getClass())) {
+        return getClass().getName().compareTo(other.getClass().getName());
+      }
+
+      int lastComparison = 0;
+      describe_token_map_result typedOther = (describe_token_map_result)other;
+
+      lastComparison = Boolean.valueOf(isSetSuccess()).compareTo(typedOther.isSetSuccess());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetSuccess()) {
+        lastComparison = TBaseHelper.compareTo(this.success, typedOther.success);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      lastComparison = Boolean.valueOf(isSetIre()).compareTo(typedOther.isSetIre());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetIre()) {
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.ire, typedOther.ire);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      return 0;
+    }
+
+    public _Fields fieldForId(int fieldId) {
+      return _Fields.findByThriftId(fieldId);
+    }
+
+    public void read(TProtocol iprot) throws TException {
+      TField field;
+      iprot.readStructBegin();
+      while (true)
+      {
+        field = iprot.readFieldBegin();
+        if (field.type == TType.STOP) { 
+          break;
+        }
+        switch (field.id) {
+          case 0: // SUCCESS
+<<<<<<< .merge_file_gpdNwp
+            if (field.type == TType.STRING) {
+              this.success = iprot.readString();
+=======
+            if (field.type == org.apache.thrift.protocol.TType.MAP) {
+              {
+                org.apache.thrift.protocol.TMap _map164 = iprot.readMapBegin();
+                this.success = new HashMap<String,String>(2*_map164.size);
+                for (int _i165 = 0; _i165 < _map164.size; ++_i165)
+                {
+                  String _key166; // required
+                  String _val167; // required
+                  _key166 = iprot.readString();
+                  _val167 = iprot.readString();
+                  this.success.put(_key166, _val167);
+                }
+                iprot.readMapEnd();
+              }
+            } else { 
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          case 1: // IRE
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
+              this.ire = new InvalidRequestException();
+              this.ire.read(iprot);
+>>>>>>> .merge_file_UlVTYo
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          default:
+            TProtocolUtil.skip(iprot, field.type);
+        }
+        iprot.readFieldEnd();
+      }
+      iprot.readStructEnd();
+
+      // check for required fields of primitive type, which can't be checked in the validate method
+      validate();
+    }
+
+    public void write(TProtocol oprot) throws TException {
+      oprot.writeStructBegin(STRUCT_DESC);
+
+      if (this.isSetSuccess()) {
+        oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
+        {
+          oprot.writeMapBegin(new org.apache.thrift.protocol.TMap(org.apache.thrift.protocol.TType.STRING, org.apache.thrift.protocol.TType.STRING, this.success.size()));
+          for (Map.Entry<String, String> _iter168 : this.success.entrySet())
+          {
+            oprot.writeString(_iter168.getKey());
+            oprot.writeString(_iter168.getValue());
+          }
+          oprot.writeMapEnd();
+        }
+        oprot.writeFieldEnd();
+      } else if (this.isSetIre()) {
+        oprot.writeFieldBegin(IRE_FIELD_DESC);
+        this.ire.write(oprot);
+        oprot.writeFieldEnd();
+      }
+      oprot.writeFieldStop();
+      oprot.writeStructEnd();
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder sb = new StringBuilder("describe_token_map_result(");
+      boolean first = true;
+
+      sb.append("success:");
+      if (this.success == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.success);
+      }
+      first = false;
+      if (!first) sb.append(", ");
+      sb.append("ire:");
+      if (this.ire == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.ire);
+      }
+      first = false;
+      sb.append(")");
+      return sb.toString();
+    }
+
+    public void validate() throws TException {
+      // check for required fields
+    }
+
+  }
+
+<<<<<<< .merge_file_gpdNwp
+  public static class describe_keyspace_args implements TBase<describe_keyspace_args, describe_keyspace_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_keyspace_args");
+
+    private static final TField KEYSPACE_FIELD_DESC = new TField("keyspace", TType.STRING, (short)1);
+
+    public String keyspace;
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements TFieldIdEnum {
+      KEYSPACE((short)1, "keyspace");
+=======
+  public static class describe_partitioner_args implements org.apache.thrift.TBase<describe_partitioner_args, describe_partitioner_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_partitioner_args");
+
+
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
+;
+>>>>>>> .merge_file_UlVTYo
+
+      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
+
+      static {
+        for (_Fields field : EnumSet.allOf(_Fields.class)) {
+          byName.put(field.getFieldName(), field);
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, or null if its not found.
+       */
+      public static _Fields findByThriftId(int fieldId) {
+        switch(fieldId) {
+          default:
+            return null;
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, throwing an exception
+       * if it is not found.
+       */
+      public static _Fields findByThriftIdOrThrow(int fieldId) {
+        _Fields fields = findByThriftId(fieldId);
+        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
+        return fields;
+      }
+
+      /**
+       * Find the _Fields constant that matches name, or null if its not found.
+       */
+      public static _Fields findByName(String name) {
+        return byName.get(name);
+      }
+
+      private final short _thriftId;
+      private final String _fieldName;
+
+      _Fields(short thriftId, String fieldName) {
+        _thriftId = thriftId;
+        _fieldName = fieldName;
+      }
+
+      public short getThriftFieldId() {
+        return _thriftId;
+      }
+
+      public String getFieldName() {
+        return _fieldName;
+      }
+    }
+<<<<<<< .merge_file_gpdNwp
+
+    // isset id assignments
+
+    public static final Map<_Fields, FieldMetaData> metaDataMap;
+    static {
+      Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.KEYSPACE, new FieldMetaData("keyspace", TFieldRequirementType.REQUIRED, 
+          new FieldValueMetaData(TType.STRING)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      FieldMetaData.addStructMetaDataMap(describe_keyspace_args.class, metaDataMap);
+    }
+
+    public describe_keyspace_args() {
+=======
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
+    static {
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_partitioner_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public describe_partitioner_args() {
@@ -23130,6 +26821,34 @@ public class Cassandra {
 
     @Override
     public void clear() {
+<<<<<<< .merge_file_gpdNwp
+      this.keyspace = null;
+    }
+
+    public String getKeyspace() {
+      return this.keyspace;
+    }
+
+    public describe_keyspace_args setKeyspace(String keyspace) {
+      this.keyspace = keyspace;
+      return this;
+    }
+
+    public void unsetKeyspace() {
+      this.keyspace = null;
+    }
+
+    /** Returns true if field keyspace is set (has been asigned a value) and false otherwise */
+    public boolean isSetKeyspace() {
+      return this.keyspace != null;
+    }
+
+    public void setKeyspaceIsSet(boolean value) {
+      if (!value) {
+        this.keyspace = null;
+      }
+=======
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setFieldValue(_Fields field, Object value) {
@@ -23185,6 +26904,19 @@ public class Cassandra {
       int lastComparison = 0;
       describe_partitioner_args typedOther = (describe_partitioner_args)other;
 
+<<<<<<< .merge_file_gpdNwp
+      lastComparison = Boolean.valueOf(isSetKeyspace()).compareTo(typedOther.isSetKeyspace());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetKeyspace()) {
+        lastComparison = TBaseHelper.compareTo(this.keyspace, typedOther.keyspace);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+=======
+>>>>>>> .merge_file_UlVTYo
       return 0;
     }
 
@@ -23202,6 +26934,16 @@ public class Cassandra {
           break;
         }
         switch (field.id) {
+<<<<<<< .merge_file_gpdNwp
+          case 1: // KEYSPACE
+            if (field.type == TType.STRING) {
+              this.keyspace = iprot.readString();
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+=======
+>>>>>>> .merge_file_UlVTYo
           default:
             TProtocolUtil.skip(iprot, field.type);
         }
@@ -23232,20 +26974,62 @@ public class Cassandra {
 
     public void validate() throws TException {
       // check for required fields
+<<<<<<< .merge_file_gpdNwp
+      if (keyspace == null) {
+        throw new TProtocolException("Required field 'keyspace' was not present! Struct: " + toString());
+      }
     }
 
   }
 
-  public static class describe_partitioner_result implements TBase<describe_partitioner_result, describe_partitioner_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_partitioner_result");
+  public static class describe_keyspace_result implements TBase<describe_keyspace_result, describe_keyspace_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_keyspace_result");
 
-    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRING, (short)0);
+    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRUCT, (short)0);
+    private static final TField NFE_FIELD_DESC = new TField("nfe", TType.STRUCT, (short)1);
+    private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)2);
 
-    public String success;
+    public KsDef success;
+    public NotFoundException nfe;
+    public InvalidRequestException ire;
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
+      SUCCESS((short)0, "success"),
+      NFE((short)1, "nfe"),
+      IRE((short)2, "ire");
+=======
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+  }
+
+  public static class describe_partitioner_result implements org.apache.thrift.TBase<describe_partitioner_result, describe_partitioner_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_partitioner_result");
+
+    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.STRING, (short)0);
+
+    public String success; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       SUCCESS((short)0, "success");
+>>>>>>> .merge_file_UlVTYo
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -23303,13 +27087,13 @@ public class Cassandra {
 
     // isset id assignments
 
-    public static final Map<_Fields, FieldMetaData> metaDataMap;
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
     static {
-      Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.SUCCESS, new FieldMetaData("success", TFieldRequirementType.DEFAULT, 
-          new FieldValueMetaData(TType.STRING)));
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(describe_partitioner_result.class, metaDataMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_partitioner_result.class, metaDataMap);
     }
 
     public describe_partitioner_result() {
@@ -23353,7 +27137,7 @@ public class Cassandra {
       this.success = null;
     }
 
-    /** Returns true if field success is set (has been asigned a value) and false otherwise */
+    /** Returns true if field success is set (has been assigned a value) and false otherwise */
     public boolean isSetSuccess() {
       return this.success != null;
     }
@@ -23386,7 +27170,7 @@ public class Cassandra {
       throw new IllegalStateException();
     }
 
-    /** Returns true if field corresponding to fieldID is set (has been asigned a value) and false otherwise */
+    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
     public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
@@ -23449,7 +27233,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetSuccess()) {
-        lastComparison = TBaseHelper.compareTo(this.success, typedOther.success);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.success, typedOther.success);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -23461,25 +27245,25 @@ public class Cassandra {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(TProtocol iprot) throws TException {
-      TField field;
+    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+      org.apache.thrift.protocol.TField field;
       iprot.readStructBegin();
       while (true)
       {
         field = iprot.readFieldBegin();
-        if (field.type == TType.STOP) { 
+        if (field.type == org.apache.thrift.protocol.TType.STOP) { 
           break;
         }
         switch (field.id) {
           case 0: // SUCCESS
-            if (field.type == TType.STRING) {
+            if (field.type == org.apache.thrift.protocol.TType.STRING) {
               this.success = iprot.readString();
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           default:
-            TProtocolUtil.skip(iprot, field.type);
+            org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
         }
         iprot.readFieldEnd();
       }
@@ -23489,7 +27273,7 @@ public class Cassandra {
       validate();
     }
 
-    public void write(TProtocol oprot) throws TException {
+    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       oprot.writeStructBegin(STRUCT_DESC);
 
       if (this.isSetSuccess()) {
@@ -23517,19 +27301,35 @@ public class Cassandra {
       return sb.toString();
     }
 
-    public void validate() throws TException {
+    public void validate() throws org.apache.thrift.TException {
       // check for required fields
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
     }
 
   }
 
-  public static class describe_snitch_args implements TBase<describe_snitch_args, describe_snitch_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_snitch_args");
+  public static class describe_snitch_args implements org.apache.thrift.TBase<describe_snitch_args, describe_snitch_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_snitch_args");
 
 
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
-    public enum _Fields implements TFieldIdEnum {
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
 ;
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
@@ -23583,11 +27383,11 @@ public class Cassandra {
         return _fieldName;
       }
     }
-    public static final Map<_Fields, FieldMetaData> metaDataMap;
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
     static {
-      Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(describe_snitch_args.class, metaDataMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_snitch_args.class, metaDataMap);
     }
 
     public describe_snitch_args() {
@@ -23618,7 +27418,7 @@ public class Cassandra {
       throw new IllegalStateException();
     }
 
-    /** Returns true if field corresponding to fieldID is set (has been asigned a value) and false otherwise */
+    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
     public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
@@ -23667,18 +27467,18 @@ public class Cassandra {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(TProtocol iprot) throws TException {
-      TField field;
+    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+      org.apache.thrift.protocol.TField field;
       iprot.readStructBegin();
       while (true)
       {
         field = iprot.readFieldBegin();
-        if (field.type == TType.STOP) { 
+        if (field.type == org.apache.thrift.protocol.TType.STOP) { 
           break;
         }
         switch (field.id) {
           default:
-            TProtocolUtil.skip(iprot, field.type);
+            org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
         }
         iprot.readFieldEnd();
       }
@@ -23688,7 +27488,7 @@ public class Cassandra {
       validate();
     }
 
-    public void write(TProtocol oprot) throws TException {
+    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       validate();
 
       oprot.writeStructBegin(STRUCT_DESC);
@@ -23705,21 +27505,37 @@ public class Cassandra {
       return sb.toString();
     }
 
-    public void validate() throws TException {
+    public void validate() throws org.apache.thrift.TException {
       // check for required fields
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
     }
 
   }
 
-  public static class describe_snitch_result implements TBase<describe_snitch_result, describe_snitch_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_snitch_result");
+  public static class describe_snitch_result implements org.apache.thrift.TBase<describe_snitch_result, describe_snitch_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_snitch_result");
 
-    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRING, (short)0);
+    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.STRING, (short)0);
 
-    public String success;
+    public String success; // required
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
-    public enum _Fields implements TFieldIdEnum {
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       SUCCESS((short)0, "success");
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
@@ -23778,13 +27594,13 @@ public class Cassandra {
 
     // isset id assignments
 
-    public static final Map<_Fields, FieldMetaData> metaDataMap;
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
     static {
-      Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.SUCCESS, new FieldMetaData("success", TFieldRequirementType.DEFAULT, 
-          new FieldValueMetaData(TType.STRING)));
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(describe_snitch_result.class, metaDataMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_snitch_result.class, metaDataMap);
     }
 
     public describe_snitch_result() {
@@ -23828,7 +27644,7 @@ public class Cassandra {
       this.success = null;
     }
 
-    /** Returns true if field success is set (has been asigned a value) and false otherwise */
+    /** Returns true if field success is set (has been assigned a value) and false otherwise */
     public boolean isSetSuccess() {
       return this.success != null;
     }
@@ -23861,7 +27677,7 @@ public class Cassandra {
       throw new IllegalStateException();
     }
 
-    /** Returns true if field corresponding to fieldID is set (has been asigned a value) and false otherwise */
+    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
     public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
@@ -23924,7 +27740,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetSuccess()) {
-        lastComparison = TBaseHelper.compareTo(this.success, typedOther.success);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.success, typedOther.success);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -23936,25 +27752,25 @@ public class Cassandra {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(TProtocol iprot) throws TException {
-      TField field;
+    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+      org.apache.thrift.protocol.TField field;
       iprot.readStructBegin();
       while (true)
       {
         field = iprot.readFieldBegin();
-        if (field.type == TType.STOP) { 
+        if (field.type == org.apache.thrift.protocol.TType.STOP) { 
           break;
         }
         switch (field.id) {
           case 0: // SUCCESS
-            if (field.type == TType.STRING) {
+            if (field.type == org.apache.thrift.protocol.TType.STRING) {
               this.success = iprot.readString();
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           default:
-            TProtocolUtil.skip(iprot, field.type);
+            org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
         }
         iprot.readFieldEnd();
       }
@@ -23964,7 +27780,7 @@ public class Cassandra {
       validate();
     }
 
-    public void write(TProtocol oprot) throws TException {
+    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       oprot.writeStructBegin(STRUCT_DESC);
 
       if (this.isSetSuccess()) {
@@ -23992,21 +27808,37 @@ public class Cassandra {
       return sb.toString();
     }
 
-    public void validate() throws TException {
+    public void validate() throws org.apache.thrift.TException {
       // check for required fields
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
     }
 
   }
 
-  public static class describe_keyspace_args implements TBase<describe_keyspace_args, describe_keyspace_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_keyspace_args");
+  public static class describe_keyspace_args implements org.apache.thrift.TBase<describe_keyspace_args, describe_keyspace_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_keyspace_args");
 
-    private static final TField KEYSPACE_FIELD_DESC = new TField("keyspace", TType.STRING, (short)1);
+    private static final org.apache.thrift.protocol.TField KEYSPACE_FIELD_DESC = new org.apache.thrift.protocol.TField("keyspace", org.apache.thrift.protocol.TType.STRING, (short)1);
 
-    public String keyspace;
+    public String keyspace; // required
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
-    public enum _Fields implements TFieldIdEnum {
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       KEYSPACE((short)1, "keyspace");
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
@@ -24065,13 +27897,13 @@ public class Cassandra {
 
     // isset id assignments
 
-    public static final Map<_Fields, FieldMetaData> metaDataMap;
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
     static {
-      Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.KEYSPACE, new FieldMetaData("keyspace", TFieldRequirementType.REQUIRED, 
-          new FieldValueMetaData(TType.STRING)));
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.KEYSPACE, new org.apache.thrift.meta_data.FieldMetaData("keyspace", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(describe_keyspace_args.class, metaDataMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_keyspace_args.class, metaDataMap);
     }
 
     public describe_keyspace_args() {
@@ -24115,7 +27947,7 @@ public class Cassandra {
       this.keyspace = null;
     }
 
-    /** Returns true if field keyspace is set (has been asigned a value) and false otherwise */
+    /** Returns true if field keyspace is set (has been assigned a value) and false otherwise */
     public boolean isSetKeyspace() {
       return this.keyspace != null;
     }
@@ -24148,7 +27980,7 @@ public class Cassandra {
       throw new IllegalStateException();
     }
 
-    /** Returns true if field corresponding to fieldID is set (has been asigned a value) and false otherwise */
+    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
     public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
@@ -24211,7 +28043,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetKeyspace()) {
-        lastComparison = TBaseHelper.compareTo(this.keyspace, typedOther.keyspace);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.keyspace, typedOther.keyspace);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -24223,25 +28055,25 @@ public class Cassandra {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(TProtocol iprot) throws TException {
-      TField field;
+    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+      org.apache.thrift.protocol.TField field;
       iprot.readStructBegin();
       while (true)
       {
         field = iprot.readFieldBegin();
-        if (field.type == TType.STOP) { 
+        if (field.type == org.apache.thrift.protocol.TType.STOP) { 
           break;
         }
         switch (field.id) {
           case 1: // KEYSPACE
-            if (field.type == TType.STRING) {
+            if (field.type == org.apache.thrift.protocol.TType.STRING) {
               this.keyspace = iprot.readString();
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           default:
-            TProtocolUtil.skip(iprot, field.type);
+            org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
         }
         iprot.readFieldEnd();
       }
@@ -24251,7 +28083,7 @@ public class Cassandra {
       validate();
     }
 
-    public void write(TProtocol oprot) throws TException {
+    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       validate();
 
       oprot.writeStructBegin(STRUCT_DESC);
@@ -24280,28 +28112,44 @@ public class Cassandra {
       return sb.toString();
     }
 
-    public void validate() throws TException {
+    public void validate() throws org.apache.thrift.TException {
       // check for required fields
       if (keyspace == null) {
-        throw new TProtocolException("Required field 'keyspace' was not present! Struct: " + toString());
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'keyspace' was not present! Struct: " + toString());
+      }
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
       }
     }
 
   }
 
-  public static class describe_keyspace_result implements TBase<describe_keyspace_result, describe_keyspace_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_keyspace_result");
+  public static class describe_keyspace_result implements org.apache.thrift.TBase<describe_keyspace_result, describe_keyspace_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_keyspace_result");
 
-    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRUCT, (short)0);
-    private static final TField NFE_FIELD_DESC = new TField("nfe", TType.STRUCT, (short)1);
-    private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)2);
+    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.STRUCT, (short)0);
+    private static final org.apache.thrift.protocol.TField NFE_FIELD_DESC = new org.apache.thrift.protocol.TField("nfe", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+    private static final org.apache.thrift.protocol.TField IRE_FIELD_DESC = new org.apache.thrift.protocol.TField("ire", org.apache.thrift.protocol.TType.STRUCT, (short)2);
 
-    public KsDef success;
-    public NotFoundException nfe;
-    public InvalidRequestException ire;
+    public KsDef success; // required
+    public NotFoundException nfe; // required
+    public InvalidRequestException ire; // required
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
-    public enum _Fields implements TFieldIdEnum {
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       SUCCESS((short)0, "success"),
       NFE((short)1, "nfe"),
       IRE((short)2, "ire");
@@ -24376,7 +28224,10 @@ public class Cassandra {
       tmpMap.put(_Fields.IRE, new FieldMetaData("ire", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
+<<<<<<< .merge_file_gpdNwp
       FieldMetaData.addStructMetaDataMap(describe_keyspace_result.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_keyspace_result.class, metaDataMap);
     }
 
     public describe_keyspace_result() {
@@ -24432,7 +28283,7 @@ public class Cassandra {
       this.success = null;
     }
 
-    /** Returns true if field success is set (has been asigned a value) and false otherwise */
+    /** Returns true if field success is set (has been assigned a value) and false otherwise */
     public boolean isSetSuccess() {
       return this.success != null;
     }
@@ -24456,7 +28307,7 @@ public class Cassandra {
       this.nfe = null;
     }
 
-    /** Returns true if field nfe is set (has been asigned a value) and false otherwise */
+    /** Returns true if field nfe is set (has been assigned a value) and false otherwise */
     public boolean isSetNfe() {
       return this.nfe != null;
     }
@@ -24480,7 +28331,7 @@ public class Cassandra {
       this.ire = null;
     }
 
-    /** Returns true if field ire is set (has been asigned a value) and false otherwise */
+    /** Returns true if field ire is set (has been assigned a value) and false otherwise */
     public boolean isSetIre() {
       return this.ire != null;
     }
@@ -24535,7 +28386,7 @@ public class Cassandra {
       throw new IllegalStateException();
     }
 
-    /** Returns true if field corresponding to fieldID is set (has been asigned a value) and false otherwise */
+    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
     public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
@@ -24630,7 +28481,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetSuccess()) {
-        lastComparison = TBaseHelper.compareTo(this.success, typedOther.success);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.success, typedOther.success);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -24640,7 +28491,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetNfe()) {
-        lastComparison = TBaseHelper.compareTo(this.nfe, typedOther.nfe);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.nfe, typedOther.nfe);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -24650,7 +28501,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetIre()) {
-        lastComparison = TBaseHelper.compareTo(this.ire, typedOther.ire);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.ire, typedOther.ire);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -24662,42 +28513,42 @@ public class Cassandra {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(TProtocol iprot) throws TException {
-      TField field;
+    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+      org.apache.thrift.protocol.TField field;
       iprot.readStructBegin();
       while (true)
       {
         field = iprot.readFieldBegin();
-        if (field.type == TType.STOP) { 
+        if (field.type == org.apache.thrift.protocol.TType.STOP) { 
           break;
         }
         switch (field.id) {
           case 0: // SUCCESS
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.success = new KsDef();
               this.success.read(iprot);
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           case 1: // NFE
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.nfe = new NotFoundException();
               this.nfe.read(iprot);
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           case 2: // IRE
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.ire = new InvalidRequestException();
               this.ire.read(iprot);
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           default:
-            TProtocolUtil.skip(iprot, field.type);
+            org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
         }
         iprot.readFieldEnd();
       }
@@ -24707,7 +28558,7 @@ public class Cassandra {
       validate();
     }
 
-    public void write(TProtocol oprot) throws TException {
+    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       oprot.writeStructBegin(STRUCT_DESC);
 
       if (this.isSetSuccess()) {
@@ -24759,27 +28610,43 @@ public class Cassandra {
       return sb.toString();
     }
 
-    public void validate() throws TException {
+    public void validate() throws org.apache.thrift.TException {
       // check for required fields
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
     }
 
   }
 
-  public static class describe_splits_args implements TBase<describe_splits_args, describe_splits_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_splits_args");
+  public static class describe_splits_args implements org.apache.thrift.TBase<describe_splits_args, describe_splits_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_splits_args");
 
-    private static final TField CF_NAME_FIELD_DESC = new TField("cfName", TType.STRING, (short)1);
-    private static final TField START_TOKEN_FIELD_DESC = new TField("start_token", TType.STRING, (short)2);
-    private static final TField END_TOKEN_FIELD_DESC = new TField("end_token", TType.STRING, (short)3);
-    private static final TField KEYS_PER_SPLIT_FIELD_DESC = new TField("keys_per_split", TType.I32, (short)4);
+    private static final org.apache.thrift.protocol.TField CF_NAME_FIELD_DESC = new org.apache.thrift.protocol.TField("cfName", org.apache.thrift.protocol.TType.STRING, (short)1);
+    private static final org.apache.thrift.protocol.TField START_TOKEN_FIELD_DESC = new org.apache.thrift.protocol.TField("start_token", org.apache.thrift.protocol.TType.STRING, (short)2);
+    private static final org.apache.thrift.protocol.TField END_TOKEN_FIELD_DESC = new org.apache.thrift.protocol.TField("end_token", org.apache.thrift.protocol.TType.STRING, (short)3);
+    private static final org.apache.thrift.protocol.TField KEYS_PER_SPLIT_FIELD_DESC = new org.apache.thrift.protocol.TField("keys_per_split", org.apache.thrift.protocol.TType.I32, (short)4);
 
-    public String cfName;
-    public String start_token;
-    public String end_token;
-    public int keys_per_split;
+    public String cfName; // required
+    public String start_token; // required
+    public String end_token; // required
+    public int keys_per_split; // required
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
-    public enum _Fields implements TFieldIdEnum {
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       CF_NAME((short)1, "cfName"),
       START_TOKEN((short)2, "start_token"),
       END_TOKEN((short)3, "end_token"),
@@ -24849,19 +28716,19 @@ public class Cassandra {
     private static final int __KEYS_PER_SPLIT_ISSET_ID = 0;
     private BitSet __isset_bit_vector = new BitSet(1);
 
-    public static final Map<_Fields, FieldMetaData> metaDataMap;
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
     static {
-      Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.CF_NAME, new FieldMetaData("cfName", TFieldRequirementType.REQUIRED, 
-          new FieldValueMetaData(TType.STRING)));
-      tmpMap.put(_Fields.START_TOKEN, new FieldMetaData("start_token", TFieldRequirementType.REQUIRED, 
-          new FieldValueMetaData(TType.STRING)));
-      tmpMap.put(_Fields.END_TOKEN, new FieldMetaData("end_token", TFieldRequirementType.REQUIRED, 
-          new FieldValueMetaData(TType.STRING)));
-      tmpMap.put(_Fields.KEYS_PER_SPLIT, new FieldMetaData("keys_per_split", TFieldRequirementType.REQUIRED, 
-          new FieldValueMetaData(TType.I32)));
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.CF_NAME, new org.apache.thrift.meta_data.FieldMetaData("cfName", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
+      tmpMap.put(_Fields.START_TOKEN, new org.apache.thrift.meta_data.FieldMetaData("start_token", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
+      tmpMap.put(_Fields.END_TOKEN, new org.apache.thrift.meta_data.FieldMetaData("end_token", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
+      tmpMap.put(_Fields.KEYS_PER_SPLIT, new org.apache.thrift.meta_data.FieldMetaData("keys_per_split", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I32)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(describe_splits_args.class, metaDataMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_splits_args.class, metaDataMap);
     }
 
     public describe_splits_args() {
@@ -24925,7 +28792,7 @@ public class Cassandra {
       this.cfName = null;
     }
 
-    /** Returns true if field cfName is set (has been asigned a value) and false otherwise */
+    /** Returns true if field cfName is set (has been assigned a value) and false otherwise */
     public boolean isSetCfName() {
       return this.cfName != null;
     }
@@ -24949,7 +28816,7 @@ public class Cassandra {
       this.start_token = null;
     }
 
-    /** Returns true if field start_token is set (has been asigned a value) and false otherwise */
+    /** Returns true if field start_token is set (has been assigned a value) and false otherwise */
     public boolean isSetStart_token() {
       return this.start_token != null;
     }
@@ -24973,7 +28840,7 @@ public class Cassandra {
       this.end_token = null;
     }
 
-    /** Returns true if field end_token is set (has been asigned a value) and false otherwise */
+    /** Returns true if field end_token is set (has been assigned a value) and false otherwise */
     public boolean isSetEnd_token() {
       return this.end_token != null;
     }
@@ -24998,7 +28865,7 @@ public class Cassandra {
       __isset_bit_vector.clear(__KEYS_PER_SPLIT_ISSET_ID);
     }
 
-    /** Returns true if field keys_per_split is set (has been asigned a value) and false otherwise */
+    /** Returns true if field keys_per_split is set (has been assigned a value) and false otherwise */
     public boolean isSetKeys_per_split() {
       return __isset_bit_vector.get(__KEYS_PER_SPLIT_ISSET_ID);
     }
@@ -25056,13 +28923,13 @@ public class Cassandra {
         return getEnd_token();
 
       case KEYS_PER_SPLIT:
-        return new Integer(getKeys_per_split());
+        return Integer.valueOf(getKeys_per_split());
 
       }
       throw new IllegalStateException();
     }
 
-    /** Returns true if field corresponding to fieldID is set (has been asigned a value) and false otherwise */
+    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
     public boolean isSet(_Fields field) {
       if (field == null) {
         throw new IllegalArgumentException();
@@ -25173,7 +29040,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetCfName()) {
-        lastComparison = TBaseHelper.compareTo(this.cfName, typedOther.cfName);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.cfName, typedOther.cfName);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -25183,7 +29050,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetStart_token()) {
-        lastComparison = TBaseHelper.compareTo(this.start_token, typedOther.start_token);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.start_token, typedOther.start_token);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -25193,7 +29060,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetEnd_token()) {
-        lastComparison = TBaseHelper.compareTo(this.end_token, typedOther.end_token);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.end_token, typedOther.end_token);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -25203,7 +29070,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetKeys_per_split()) {
-        lastComparison = TBaseHelper.compareTo(this.keys_per_split, typedOther.keys_per_split);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.keys_per_split, typedOther.keys_per_split);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -25215,47 +29082,47 @@ public class Cassandra {
       return _Fields.findByThriftId(fieldId);
     }
 
-    public void read(TProtocol iprot) throws TException {
-      TField field;
+    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+      org.apache.thrift.protocol.TField field;
       iprot.readStructBegin();
       while (true)
       {
         field = iprot.readFieldBegin();
-        if (field.type == TType.STOP) { 
+        if (field.type == org.apache.thrift.protocol.TType.STOP) { 
           break;
         }
         switch (field.id) {
           case 1: // CF_NAME
-            if (field.type == TType.STRING) {
+            if (field.type == org.apache.thrift.protocol.TType.STRING) {
               this.cfName = iprot.readString();
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           case 2: // START_TOKEN
-            if (field.type == TType.STRING) {
+            if (field.type == org.apache.thrift.protocol.TType.STRING) {
               this.start_token = iprot.readString();
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           case 3: // END_TOKEN
-            if (field.type == TType.STRING) {
+            if (field.type == org.apache.thrift.protocol.TType.STRING) {
               this.end_token = iprot.readString();
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           case 4: // KEYS_PER_SPLIT
-            if (field.type == TType.I32) {
+            if (field.type == org.apache.thrift.protocol.TType.I32) {
               this.keys_per_split = iprot.readI32();
               setKeys_per_splitIsSet(true);
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           default:
-            TProtocolUtil.skip(iprot, field.type);
+            org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
         }
         iprot.readFieldEnd();
       }
@@ -25263,12 +29130,12 @@ public class Cassandra {
 
       // check for required fields of primitive type, which can't be checked in the validate method
       if (!isSetKeys_per_split()) {
-        throw new TProtocolException("Required field 'keys_per_split' was not found in serialized data! Struct: " + toString());
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'keys_per_split' was not found in serialized data! Struct: " + toString());
       }
       validate();
     }
 
-    public void write(TProtocol oprot) throws TException {
+    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
       validate();
 
       oprot.writeStructBegin(STRUCT_DESC);
@@ -25330,33 +29197,51 @@ public class Cassandra {
       return sb.toString();
     }
 
-    public void validate() throws TException {
+    public void validate() throws org.apache.thrift.TException {
       // check for required fields
       if (cfName == null) {
-        throw new TProtocolException("Required field 'cfName' was not present! Struct: " + toString());
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'cfName' was not present! Struct: " + toString());
       }
       if (start_token == null) {
-        throw new TProtocolException("Required field 'start_token' was not present! Struct: " + toString());
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'start_token' was not present! Struct: " + toString());
       }
       if (end_token == null) {
-        throw new TProtocolException("Required field 'end_token' was not present! Struct: " + toString());
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'end_token' was not present! Struct: " + toString());
       }
       // alas, we cannot check 'keys_per_split' because it's a primitive and you chose the non-beans generator.
     }
 
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        // it doesn't seem like you should have to do this, but java serialization is wacky, and doesn't call the default constructor.
+        __isset_bit_vector = new BitSet(1);
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
   }
 
-  public static class describe_splits_result implements TBase<describe_splits_result, describe_splits_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("describe_splits_result");
+  public static class describe_splits_result implements org.apache.thrift.TBase<describe_splits_result, describe_splits_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("describe_splits_result");
 
-    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.LIST, (short)0);
-    private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
+    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.LIST, (short)0);
+    private static final org.apache.thrift.protocol.TField IRE_FIELD_DESC = new org.apache.thrift.protocol.TField("ire", org.apache.thrift.protocol.TType.STRUCT, (short)1);
 
-    public List<String> success;
-    public InvalidRequestException ire;
+    public List<String> success; // required
+    public InvalidRequestException ire; // required
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
-    public enum _Fields implements TFieldIdEnum {
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       SUCCESS((short)0, "success"),
       IRE((short)1, "ire");
 
@@ -25418,16 +29303,17 @@ public class Cassandra {
 
     // isset id assignments
 
-    public static final Map<_Fields, FieldMetaData> metaDataMap;
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
     static {
-      Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.SUCCESS, new FieldMetaData("success", TFieldRequirementType.DEFAULT, 
-          new ListMetaData(TType.LIST, 
-              new FieldValueMetaData(TType.STRING))));
-      tmpMap.put(_Fields.IRE, new FieldMetaData("ire", TFieldRequirementType.DEFAULT, 
-          new FieldValueMetaData(TType.STRUCT)));
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST, 
+              new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING))));
+      tmpMap.put(_Fields.IRE, new org.apache.thrift.meta_data.FieldMetaData("ire", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(describe_splits_result.class, metaDataMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(describe_splits_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public describe_splits_result() {
@@ -25507,6 +29393,33 @@ public class Cassandra {
       }
     }
 
+<<<<<<< .merge_file_gpdNwp
+    public NotFoundException getNfe() {
+      return this.nfe;
+    }
+
+    public describe_keyspace_result setNfe(NotFoundException nfe) {
+      this.nfe = nfe;
+      return this;
+    }
+
+    public void unsetNfe() {
+      this.nfe = null;
+    }
+
+    /** Returns true if field nfe is set (has been asigned a value) and false otherwise */
+    public boolean isSetNfe() {
+      return this.nfe != null;
+    }
+
+    public void setNfeIsSet(boolean value) {
+      if (!value) {
+        this.nfe = null;
+      }
+    }
+
+=======
+>>>>>>> .merge_file_UlVTYo
     public InvalidRequestException getIre() {
       return this.ire;
     }
@@ -25648,6 +29561,19 @@ public class Cassandra {
           return lastComparison;
         }
       }
+<<<<<<< .merge_file_gpdNwp
+      lastComparison = Boolean.valueOf(isSetNfe()).compareTo(typedOther.isSetNfe());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetNfe()) {
+        lastComparison = TBaseHelper.compareTo(this.nfe, typedOther.nfe);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+=======
+>>>>>>> .merge_file_UlVTYo
       lastComparison = Boolean.valueOf(isSetIre()).compareTo(typedOther.isSetIre());
       if (lastComparison != 0) {
         return lastComparison;
@@ -25676,24 +29602,43 @@ public class Cassandra {
         }
         switch (field.id) {
           case 0: // SUCCESS
-            if (field.type == TType.LIST) {
-              {
-                TList _list152 = iprot.readListBegin();
-                this.success = new ArrayList<String>(_list152.size);
-                for (int _i153 = 0; _i153 < _list152.size; ++_i153)
-                {
-                  String _elem154;
-                  _elem154 = iprot.readString();
-                  this.success.add(_elem154);
-                }
-                iprot.readListEnd();
-              }
+<<<<<<< .merge_file_gpdNwp
+            if (field.type == TType.STRUCT) {
+              this.success = new KsDef();
+              this.success.read(iprot);
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
             break;
-          case 1: // IRE
+          case 1: // NFE
             if (field.type == TType.STRUCT) {
+              this.nfe = new NotFoundException();
+              this.nfe.read(iprot);
+=======
+            if (field.type == org.apache.thrift.protocol.TType.LIST) {
+              {
+                org.apache.thrift.protocol.TList _list169 = iprot.readListBegin();
+                this.success = new ArrayList<String>(_list169.size);
+                for (int _i170 = 0; _i170 < _list169.size; ++_i170)
+                {
+                  String _elem171; // required
+                  _elem171 = iprot.readString();
+                  this.success.add(_elem171);
+                }
+                iprot.readListEnd();
+              }
+>>>>>>> .merge_file_UlVTYo
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+<<<<<<< .merge_file_gpdNwp
+          case 2: // IRE
+            if (field.type == TType.STRUCT) {
+=======
+          case 1: // IRE
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
+>>>>>>> .merge_file_UlVTYo
               this.ire = new InvalidRequestException();
               this.ire.read(iprot);
             } else { 
@@ -25711,19 +29656,31 @@ public class Cassandra {
       validate();
     }
 
+<<<<<<< .merge_file_gpdNwp
     public void write(TProtocol oprot) throws TException {
+=======
+    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+>>>>>>> .merge_file_UlVTYo
       oprot.writeStructBegin(STRUCT_DESC);
 
       if (this.isSetSuccess()) {
         oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
+<<<<<<< .merge_file_gpdNwp
+        this.success.write(oprot);
+        oprot.writeFieldEnd();
+      } else if (this.isSetNfe()) {
+        oprot.writeFieldBegin(NFE_FIELD_DESC);
+        this.nfe.write(oprot);
+=======
         {
-          oprot.writeListBegin(new TList(TType.STRING, this.success.size()));
-          for (String _iter155 : this.success)
+          oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, this.success.size()));
+          for (String _iter172 : this.success)
           {
-            oprot.writeString(_iter155);
+            oprot.writeString(_iter172);
           }
           oprot.writeListEnd();
         }
+>>>>>>> .merge_file_UlVTYo
         oprot.writeFieldEnd();
       } else if (this.isSetIre()) {
         oprot.writeFieldBegin(IRE_FIELD_DESC);
@@ -25764,16 +29721,38 @@ public class Cassandra {
 
   }
 
-  public static class system_add_column_family_args implements TBase<system_add_column_family_args, system_add_column_family_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("system_add_column_family_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class describe_splits_args implements TBase<describe_splits_args, describe_splits_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_splits_args");
 
-    private static final TField CF_DEF_FIELD_DESC = new TField("cf_def", TType.STRUCT, (short)1);
+    private static final TField CF_NAME_FIELD_DESC = new TField("cfName", TType.STRING, (short)1);
+    private static final TField START_TOKEN_FIELD_DESC = new TField("start_token", TType.STRING, (short)2);
+    private static final TField END_TOKEN_FIELD_DESC = new TField("end_token", TType.STRING, (short)3);
+    private static final TField KEYS_PER_SPLIT_FIELD_DESC = new TField("keys_per_split", TType.I32, (short)4);
 
-    public CfDef cf_def;
+    public String cfName;
+    public String start_token;
+    public String end_token;
+    public int keys_per_split;
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
+      CF_NAME((short)1, "cfName"),
+      START_TOKEN((short)2, "start_token"),
+      END_TOKEN((short)3, "end_token"),
+      KEYS_PER_SPLIT((short)4, "keys_per_split");
+=======
+  public static class system_add_column_family_args implements org.apache.thrift.TBase<system_add_column_family_args, system_add_column_family_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("system_add_column_family_args");
+
+    private static final org.apache.thrift.protocol.TField CF_DEF_FIELD_DESC = new org.apache.thrift.protocol.TField("cf_def", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+
+    public CfDef cf_def; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       CF_DEF((short)1, "cf_def");
+>>>>>>> .merge_file_UlVTYo
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -25833,11 +29812,25 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.CF_DEF, new FieldMetaData("cf_def", TFieldRequirementType.REQUIRED, 
-          new StructMetaData(TType.STRUCT, CfDef.class)));
+      tmpMap.put(_Fields.CF_NAME, new FieldMetaData("cfName", TFieldRequirementType.REQUIRED, 
+          new FieldValueMetaData(TType.STRING)));
+      tmpMap.put(_Fields.START_TOKEN, new FieldMetaData("start_token", TFieldRequirementType.REQUIRED, 
+          new FieldValueMetaData(TType.STRING)));
+      tmpMap.put(_Fields.END_TOKEN, new FieldMetaData("end_token", TFieldRequirementType.REQUIRED, 
+          new FieldValueMetaData(TType.STRING)));
+      tmpMap.put(_Fields.KEYS_PER_SPLIT, new FieldMetaData("keys_per_split", TFieldRequirementType.REQUIRED, 
+          new FieldValueMetaData(TType.I32)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(system_add_column_family_args.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(describe_splits_args.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.CF_DEF, new org.apache.thrift.meta_data.FieldMetaData("cf_def", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, CfDef.class)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(system_add_column_family_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public system_add_column_family_args() {
@@ -25865,7 +29858,63 @@ public class Cassandra {
 
     @Override
     public void clear() {
+<<<<<<< .merge_file_gpdNwp
+      this.cfName = null;
+      this.start_token = null;
+      this.end_token = null;
+      setKeys_per_splitIsSet(false);
+      this.keys_per_split = 0;
+    }
+
+    public String getCfName() {
+      return this.cfName;
+    }
+
+    public describe_splits_args setCfName(String cfName) {
+      this.cfName = cfName;
+      return this;
+    }
+
+    public void unsetCfName() {
+      this.cfName = null;
+    }
+
+    /** Returns true if field cfName is set (has been asigned a value) and false otherwise */
+    public boolean isSetCfName() {
+      return this.cfName != null;
+    }
+
+    public void setCfNameIsSet(boolean value) {
+      if (!value) {
+        this.cfName = null;
+      }
+    }
+
+    public String getStart_token() {
+      return this.start_token;
+    }
+
+    public describe_splits_args setStart_token(String start_token) {
+      this.start_token = start_token;
+      return this;
+    }
+
+    public void unsetStart_token() {
+      this.start_token = null;
+    }
+
+    /** Returns true if field start_token is set (has been asigned a value) and false otherwise */
+    public boolean isSetStart_token() {
+      return this.start_token != null;
+    }
+
+    public void setStart_tokenIsSet(boolean value) {
+      if (!value) {
+        this.start_token = null;
+      }
+=======
       this.cf_def = null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public CfDef getCf_def() {
@@ -25881,9 +29930,15 @@ public class Cassandra {
       this.cf_def = null;
     }
 
-    /** Returns true if field cf_def is set (has been asigned a value) and false otherwise */
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field end_token is set (has been asigned a value) and false otherwise */
+    public boolean isSetEnd_token() {
+      return this.end_token != null;
+=======
+    /** Returns true if field cf_def is set (has been assigned a value) and false otherwise */
     public boolean isSetCf_def() {
       return this.cf_def != null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setCf_defIsSet(boolean value) {
@@ -25892,6 +29947,32 @@ public class Cassandra {
       }
     }
 
+<<<<<<< .merge_file_gpdNwp
+    public int getKeys_per_split() {
+      return this.keys_per_split;
+    }
+
+    public describe_splits_args setKeys_per_split(int keys_per_split) {
+      this.keys_per_split = keys_per_split;
+      setKeys_per_splitIsSet(true);
+      return this;
+    }
+
+    public void unsetKeys_per_split() {
+      __isset_bit_vector.clear(__KEYS_PER_SPLIT_ISSET_ID);
+    }
+
+    /** Returns true if field keys_per_split is set (has been asigned a value) and false otherwise */
+    public boolean isSetKeys_per_split() {
+      return __isset_bit_vector.get(__KEYS_PER_SPLIT_ISSET_ID);
+    }
+
+    public void setKeys_per_splitIsSet(boolean value) {
+      __isset_bit_vector.set(__KEYS_PER_SPLIT_ISSET_ID, value);
+    }
+
+=======
+>>>>>>> .merge_file_UlVTYo
     public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       case CF_DEF:
@@ -25907,8 +29988,22 @@ public class Cassandra {
 
     public Object getFieldValue(_Fields field) {
       switch (field) {
+<<<<<<< .merge_file_gpdNwp
+      case CF_NAME:
+        return getCfName();
+
+      case START_TOKEN:
+        return getStart_token();
+
+      case END_TOKEN:
+        return getEnd_token();
+
+      case KEYS_PER_SPLIT:
+        return new Integer(getKeys_per_split());
+=======
       case CF_DEF:
         return getCf_def();
+>>>>>>> .merge_file_UlVTYo
 
       }
       throw new IllegalStateException();
@@ -25972,12 +30067,51 @@ public class Cassandra {
       int lastComparison = 0;
       system_add_column_family_args typedOther = (system_add_column_family_args)other;
 
+<<<<<<< .merge_file_gpdNwp
+      lastComparison = Boolean.valueOf(isSetCfName()).compareTo(typedOther.isSetCfName());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetCfName()) {
+        lastComparison = TBaseHelper.compareTo(this.cfName, typedOther.cfName);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      lastComparison = Boolean.valueOf(isSetStart_token()).compareTo(typedOther.isSetStart_token());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetStart_token()) {
+        lastComparison = TBaseHelper.compareTo(this.start_token, typedOther.start_token);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      lastComparison = Boolean.valueOf(isSetEnd_token()).compareTo(typedOther.isSetEnd_token());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetEnd_token()) {
+        lastComparison = TBaseHelper.compareTo(this.end_token, typedOther.end_token);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      lastComparison = Boolean.valueOf(isSetKeys_per_split()).compareTo(typedOther.isSetKeys_per_split());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetKeys_per_split()) {
+        lastComparison = TBaseHelper.compareTo(this.keys_per_split, typedOther.keys_per_split);
+=======
       lastComparison = Boolean.valueOf(isSetCf_def()).compareTo(typedOther.isSetCf_def());
       if (lastComparison != 0) {
         return lastComparison;
       }
       if (isSetCf_def()) {
-        lastComparison = TBaseHelper.compareTo(this.cf_def, typedOther.cf_def);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.cf_def, typedOther.cf_def);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -25999,10 +30133,38 @@ public class Cassandra {
           break;
         }
         switch (field.id) {
+<<<<<<< .merge_file_gpdNwp
+          case 1: // CF_NAME
+            if (field.type == TType.STRING) {
+              this.cfName = iprot.readString();
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          case 2: // START_TOKEN
+            if (field.type == TType.STRING) {
+              this.start_token = iprot.readString();
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          case 3: // END_TOKEN
+            if (field.type == TType.STRING) {
+              this.end_token = iprot.readString();
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          case 4: // KEYS_PER_SPLIT
+            if (field.type == TType.I32) {
+              this.keys_per_split = iprot.readI32();
+              setKeys_per_splitIsSet(true);
+=======
           case 1: // CF_DEF
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.cf_def = new CfDef();
               this.cf_def.read(iprot);
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
@@ -26015,6 +30177,12 @@ public class Cassandra {
       iprot.readStructEnd();
 
       // check for required fields of primitive type, which can't be checked in the validate method
+<<<<<<< .merge_file_gpdNwp
+      if (!isSetKeys_per_split()) {
+        throw new TProtocolException("Required field 'keys_per_split' was not found in serialized data! Struct: " + toString());
+      }
+=======
+>>>>>>> .merge_file_UlVTYo
       validate();
     }
 
@@ -26049,23 +30217,45 @@ public class Cassandra {
 
     public void validate() throws TException {
       // check for required fields
+<<<<<<< .merge_file_gpdNwp
+      if (cfName == null) {
+        throw new TProtocolException("Required field 'cfName' was not present! Struct: " + toString());
+      }
+      if (start_token == null) {
+        throw new TProtocolException("Required field 'start_token' was not present! Struct: " + toString());
+      }
+      if (end_token == null) {
+        throw new TProtocolException("Required field 'end_token' was not present! Struct: " + toString());
+=======
       if (cf_def == null) {
-        throw new TProtocolException("Required field 'cf_def' was not present! Struct: " + toString());
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'cf_def' was not present! Struct: " + toString());
+>>>>>>> .merge_file_UlVTYo
       }
     }
 
   }
 
-  public static class system_add_column_family_result implements TBase<system_add_column_family_result, system_add_column_family_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("system_add_column_family_result");
+<<<<<<< .merge_file_gpdNwp
+  public static class describe_splits_result implements TBase<describe_splits_result, describe_splits_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("describe_splits_result");
 
-    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRING, (short)0);
+    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.LIST, (short)0);
     private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
-    private static final TField SDE_FIELD_DESC = new TField("sde", TType.STRUCT, (short)2);
 
-    public String success;
+    public List<String> success;
     public InvalidRequestException ire;
-    public SchemaDisagreementException sde;
+=======
+  public static class system_add_column_family_result implements org.apache.thrift.TBase<system_add_column_family_result, system_add_column_family_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("system_add_column_family_result");
+
+    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.STRING, (short)0);
+    private static final org.apache.thrift.protocol.TField IRE_FIELD_DESC = new org.apache.thrift.protocol.TField("ire", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+    private static final org.apache.thrift.protocol.TField SDE_FIELD_DESC = new org.apache.thrift.protocol.TField("sde", org.apache.thrift.protocol.TType.STRUCT, (short)2);
+
+    public String success; // required
+    public InvalidRequestException ire; // required
+    public SchemaDisagreementException sde; // required
+>>>>>>> .merge_file_UlVTYo
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
@@ -26135,15 +30325,26 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
       tmpMap.put(_Fields.SUCCESS, new FieldMetaData("success", TFieldRequirementType.DEFAULT, 
-          new FieldValueMetaData(TType.STRING)));
+          new ListMetaData(TType.LIST, 
+              new FieldValueMetaData(TType.STRING))));
       tmpMap.put(_Fields.IRE, new FieldMetaData("ire", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
-      tmpMap.put(_Fields.SDE, new FieldMetaData("sde", TFieldRequirementType.DEFAULT, 
-          new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(system_add_column_family_result.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(describe_splits_result.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
+      tmpMap.put(_Fields.IRE, new org.apache.thrift.meta_data.FieldMetaData("ire", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      tmpMap.put(_Fields.SDE, new org.apache.thrift.meta_data.FieldMetaData("sde", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(system_add_column_family_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public system_add_column_family_result() {
@@ -26247,7 +30448,7 @@ public class Cassandra {
       this.sde = null;
     }
 
-    /** Returns true if field sde is set (has been asigned a value) and false otherwise */
+    /** Returns true if field sde is set (has been assigned a value) and false otherwise */
     public boolean isSetSde() {
       return this.sde != null;
     }
@@ -26417,7 +30618,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetSde()) {
-        lastComparison = TBaseHelper.compareTo(this.sde, typedOther.sde);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.sde, typedOther.sde);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -26440,8 +30641,23 @@ public class Cassandra {
         }
         switch (field.id) {
           case 0: // SUCCESS
-            if (field.type == TType.STRING) {
+<<<<<<< .merge_file_gpdNwp
+            if (field.type == TType.LIST) {
+              {
+                TList _list152 = iprot.readListBegin();
+                this.success = new ArrayList<String>(_list152.size);
+                for (int _i153 = 0; _i153 < _list152.size; ++_i153)
+                {
+                  String _elem154;
+                  _elem154 = iprot.readString();
+                  this.success.add(_elem154);
+                }
+                iprot.readListEnd();
+              }
+=======
+            if (field.type == org.apache.thrift.protocol.TType.STRING) {
               this.success = iprot.readString();
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
@@ -26455,11 +30671,11 @@ public class Cassandra {
             }
             break;
           case 2: // SDE
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.sde = new SchemaDisagreementException();
               this.sde.read(iprot);
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           default:
@@ -26478,7 +30694,18 @@ public class Cassandra {
 
       if (this.isSetSuccess()) {
         oprot.writeFieldBegin(SUCCESS_FIELD_DESC);
+<<<<<<< .merge_file_gpdNwp
+        {
+          oprot.writeListBegin(new TList(TType.STRING, this.success.size()));
+          for (String _iter155 : this.success)
+          {
+            oprot.writeString(_iter155);
+          }
+          oprot.writeListEnd();
+        }
+=======
         oprot.writeString(this.success);
+>>>>>>> .merge_file_UlVTYo
         oprot.writeFieldEnd();
       } else if (this.isSetIre()) {
         oprot.writeFieldBegin(IRE_FIELD_DESC);
@@ -26531,16 +30758,29 @@ public class Cassandra {
 
   }
 
-  public static class system_drop_column_family_args implements TBase<system_drop_column_family_args, system_drop_column_family_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("system_drop_column_family_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class system_add_column_family_args implements TBase<system_add_column_family_args, system_add_column_family_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("system_add_column_family_args");
 
-    private static final TField COLUMN_FAMILY_FIELD_DESC = new TField("column_family", TType.STRING, (short)1);
+    private static final TField CF_DEF_FIELD_DESC = new TField("cf_def", TType.STRUCT, (short)1);
 
-    public String column_family;
+    public CfDef cf_def;
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
+      CF_DEF((short)1, "cf_def");
+=======
+  public static class system_drop_column_family_args implements org.apache.thrift.TBase<system_drop_column_family_args, system_drop_column_family_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("system_drop_column_family_args");
+
+    private static final org.apache.thrift.protocol.TField COLUMN_FAMILY_FIELD_DESC = new org.apache.thrift.protocol.TField("column_family", org.apache.thrift.protocol.TType.STRING, (short)1);
+
+    public String column_family; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       COLUMN_FAMILY((short)1, "column_family");
+>>>>>>> .merge_file_UlVTYo
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -26600,11 +30840,19 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.COLUMN_FAMILY, new FieldMetaData("column_family", TFieldRequirementType.REQUIRED, 
-          new FieldValueMetaData(TType.STRING)));
+      tmpMap.put(_Fields.CF_DEF, new FieldMetaData("cf_def", TFieldRequirementType.REQUIRED, 
+          new StructMetaData(TType.STRUCT, CfDef.class)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(system_drop_column_family_args.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(system_add_column_family_args.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.COLUMN_FAMILY, new org.apache.thrift.meta_data.FieldMetaData("column_family", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(system_drop_column_family_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public system_drop_column_family_args() {
@@ -26648,9 +30896,15 @@ public class Cassandra {
       this.column_family = null;
     }
 
-    /** Returns true if field column_family is set (has been asigned a value) and false otherwise */
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field cf_def is set (has been asigned a value) and false otherwise */
+    public boolean isSetCf_def() {
+      return this.cf_def != null;
+=======
+    /** Returns true if field column_family is set (has been assigned a value) and false otherwise */
     public boolean isSetColumn_family() {
       return this.column_family != null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setColumn_familyIsSet(boolean value) {
@@ -26743,8 +30997,13 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetCf_def()) {
+        lastComparison = TBaseHelper.compareTo(this.cf_def, typedOther.cf_def);
+=======
       if (isSetColumn_family()) {
-        lastComparison = TBaseHelper.compareTo(this.column_family, typedOther.column_family);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.column_family, typedOther.column_family);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -26766,9 +31025,16 @@ public class Cassandra {
           break;
         }
         switch (field.id) {
+<<<<<<< .merge_file_gpdNwp
+          case 1: // CF_DEF
+            if (field.type == TType.STRUCT) {
+              this.cf_def = new CfDef();
+              this.cf_def.read(iprot);
+=======
           case 1: // COLUMN_FAMILY
-            if (field.type == TType.STRING) {
+            if (field.type == org.apache.thrift.protocol.TType.STRING) {
               this.column_family = iprot.readString();
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
@@ -26815,15 +31081,43 @@ public class Cassandra {
 
     public void validate() throws TException {
       // check for required fields
-      if (column_family == null) {
-        throw new TProtocolException("Required field 'column_family' was not present! Struct: " + toString());
+<<<<<<< .merge_file_gpdNwp
+      if (cf_def == null) {
+        throw new TProtocolException("Required field 'cf_def' was not present! Struct: " + toString());
       }
     }
 
   }
 
-  public static class system_drop_column_family_result implements TBase<system_drop_column_family_result, system_drop_column_family_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("system_drop_column_family_result");
+  public static class system_add_column_family_result implements TBase<system_add_column_family_result, system_add_column_family_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("system_add_column_family_result");
+=======
+      if (column_family == null) {
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'column_family' was not present! Struct: " + toString());
+      }
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+  }
+
+  public static class system_drop_column_family_result implements org.apache.thrift.TBase<system_drop_column_family_result, system_drop_column_family_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("system_drop_column_family_result");
+>>>>>>> .merge_file_UlVTYo
 
     private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRING, (short)0);
     private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
@@ -26909,7 +31203,11 @@ public class Cassandra {
       tmpMap.put(_Fields.SDE, new FieldMetaData("sde", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(system_drop_column_family_result.class, metaDataMap);
+<<<<<<< .merge_file_gpdNwp
+      FieldMetaData.addStructMetaDataMap(system_add_column_family_result.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(system_drop_column_family_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public system_drop_column_family_result() {
@@ -27297,16 +31595,29 @@ public class Cassandra {
 
   }
 
-  public static class system_add_keyspace_args implements TBase<system_add_keyspace_args, system_add_keyspace_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("system_add_keyspace_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class system_drop_column_family_args implements TBase<system_drop_column_family_args, system_drop_column_family_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("system_drop_column_family_args");
 
-    private static final TField KS_DEF_FIELD_DESC = new TField("ks_def", TType.STRUCT, (short)1);
+    private static final TField COLUMN_FAMILY_FIELD_DESC = new TField("column_family", TType.STRING, (short)1);
 
-    public KsDef ks_def;
+    public String column_family;
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
+      COLUMN_FAMILY((short)1, "column_family");
+=======
+  public static class system_add_keyspace_args implements org.apache.thrift.TBase<system_add_keyspace_args, system_add_keyspace_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("system_add_keyspace_args");
+
+    private static final org.apache.thrift.protocol.TField KS_DEF_FIELD_DESC = new org.apache.thrift.protocol.TField("ks_def", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+
+    public KsDef ks_def; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       KS_DEF((short)1, "ks_def");
+>>>>>>> .merge_file_UlVTYo
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -27366,11 +31677,19 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.KS_DEF, new FieldMetaData("ks_def", TFieldRequirementType.REQUIRED, 
-          new StructMetaData(TType.STRUCT, KsDef.class)));
+      tmpMap.put(_Fields.COLUMN_FAMILY, new FieldMetaData("column_family", TFieldRequirementType.REQUIRED, 
+          new FieldValueMetaData(TType.STRING)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(system_add_keyspace_args.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(system_drop_column_family_args.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.KS_DEF, new org.apache.thrift.meta_data.FieldMetaData("ks_def", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, KsDef.class)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(system_add_keyspace_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public system_add_keyspace_args() {
@@ -27414,9 +31733,15 @@ public class Cassandra {
       this.ks_def = null;
     }
 
-    /** Returns true if field ks_def is set (has been asigned a value) and false otherwise */
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field column_family is set (has been asigned a value) and false otherwise */
+    public boolean isSetColumn_family() {
+      return this.column_family != null;
+=======
+    /** Returns true if field ks_def is set (has been assigned a value) and false otherwise */
     public boolean isSetKs_def() {
       return this.ks_def != null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setKs_defIsSet(boolean value) {
@@ -27509,8 +31834,13 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetColumn_family()) {
+        lastComparison = TBaseHelper.compareTo(this.column_family, typedOther.column_family);
+=======
       if (isSetKs_def()) {
-        lastComparison = TBaseHelper.compareTo(this.ks_def, typedOther.ks_def);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.ks_def, typedOther.ks_def);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -27532,10 +31862,16 @@ public class Cassandra {
           break;
         }
         switch (field.id) {
+<<<<<<< .merge_file_gpdNwp
+          case 1: // COLUMN_FAMILY
+            if (field.type == TType.STRING) {
+              this.column_family = iprot.readString();
+=======
           case 1: // KS_DEF
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.ks_def = new KsDef();
               this.ks_def.read(iprot);
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
@@ -27582,15 +31918,43 @@ public class Cassandra {
 
     public void validate() throws TException {
       // check for required fields
-      if (ks_def == null) {
-        throw new TProtocolException("Required field 'ks_def' was not present! Struct: " + toString());
+<<<<<<< .merge_file_gpdNwp
+      if (column_family == null) {
+        throw new TProtocolException("Required field 'column_family' was not present! Struct: " + toString());
       }
     }
 
   }
 
-  public static class system_add_keyspace_result implements TBase<system_add_keyspace_result, system_add_keyspace_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("system_add_keyspace_result");
+  public static class system_drop_column_family_result implements TBase<system_drop_column_family_result, system_drop_column_family_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("system_drop_column_family_result");
+=======
+      if (ks_def == null) {
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'ks_def' was not present! Struct: " + toString());
+      }
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+  }
+
+  public static class system_add_keyspace_result implements org.apache.thrift.TBase<system_add_keyspace_result, system_add_keyspace_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("system_add_keyspace_result");
+>>>>>>> .merge_file_UlVTYo
 
     private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRING, (short)0);
     private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
@@ -27676,7 +32040,11 @@ public class Cassandra {
       tmpMap.put(_Fields.SDE, new FieldMetaData("sde", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(system_add_keyspace_result.class, metaDataMap);
+<<<<<<< .merge_file_gpdNwp
+      FieldMetaData.addStructMetaDataMap(system_drop_column_family_result.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(system_add_keyspace_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public system_add_keyspace_result() {
@@ -28064,16 +32432,29 @@ public class Cassandra {
 
   }
 
-  public static class system_drop_keyspace_args implements TBase<system_drop_keyspace_args, system_drop_keyspace_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("system_drop_keyspace_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class system_add_keyspace_args implements TBase<system_add_keyspace_args, system_add_keyspace_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("system_add_keyspace_args");
 
-    private static final TField KEYSPACE_FIELD_DESC = new TField("keyspace", TType.STRING, (short)1);
+    private static final TField KS_DEF_FIELD_DESC = new TField("ks_def", TType.STRUCT, (short)1);
 
-    public String keyspace;
+    public KsDef ks_def;
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
+      KS_DEF((short)1, "ks_def");
+=======
+  public static class system_drop_keyspace_args implements org.apache.thrift.TBase<system_drop_keyspace_args, system_drop_keyspace_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("system_drop_keyspace_args");
+
+    private static final org.apache.thrift.protocol.TField KEYSPACE_FIELD_DESC = new org.apache.thrift.protocol.TField("keyspace", org.apache.thrift.protocol.TType.STRING, (short)1);
+
+    public String keyspace; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       KEYSPACE((short)1, "keyspace");
+>>>>>>> .merge_file_UlVTYo
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -28133,11 +32514,19 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.KEYSPACE, new FieldMetaData("keyspace", TFieldRequirementType.REQUIRED, 
-          new FieldValueMetaData(TType.STRING)));
+      tmpMap.put(_Fields.KS_DEF, new FieldMetaData("ks_def", TFieldRequirementType.REQUIRED, 
+          new StructMetaData(TType.STRUCT, KsDef.class)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(system_drop_keyspace_args.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(system_add_keyspace_args.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.KEYSPACE, new org.apache.thrift.meta_data.FieldMetaData("keyspace", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(system_drop_keyspace_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public system_drop_keyspace_args() {
@@ -28181,9 +32570,15 @@ public class Cassandra {
       this.keyspace = null;
     }
 
-    /** Returns true if field keyspace is set (has been asigned a value) and false otherwise */
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field ks_def is set (has been asigned a value) and false otherwise */
+    public boolean isSetKs_def() {
+      return this.ks_def != null;
+=======
+    /** Returns true if field keyspace is set (has been assigned a value) and false otherwise */
     public boolean isSetKeyspace() {
       return this.keyspace != null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setKeyspaceIsSet(boolean value) {
@@ -28276,8 +32671,13 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetKs_def()) {
+        lastComparison = TBaseHelper.compareTo(this.ks_def, typedOther.ks_def);
+=======
       if (isSetKeyspace()) {
-        lastComparison = TBaseHelper.compareTo(this.keyspace, typedOther.keyspace);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.keyspace, typedOther.keyspace);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -28299,9 +32699,16 @@ public class Cassandra {
           break;
         }
         switch (field.id) {
+<<<<<<< .merge_file_gpdNwp
+          case 1: // KS_DEF
+            if (field.type == TType.STRUCT) {
+              this.ks_def = new KsDef();
+              this.ks_def.read(iprot);
+=======
           case 1: // KEYSPACE
-            if (field.type == TType.STRING) {
+            if (field.type == org.apache.thrift.protocol.TType.STRING) {
               this.keyspace = iprot.readString();
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
@@ -28348,15 +32755,43 @@ public class Cassandra {
 
     public void validate() throws TException {
       // check for required fields
-      if (keyspace == null) {
-        throw new TProtocolException("Required field 'keyspace' was not present! Struct: " + toString());
+<<<<<<< .merge_file_gpdNwp
+      if (ks_def == null) {
+        throw new TProtocolException("Required field 'ks_def' was not present! Struct: " + toString());
       }
     }
 
   }
 
-  public static class system_drop_keyspace_result implements TBase<system_drop_keyspace_result, system_drop_keyspace_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("system_drop_keyspace_result");
+  public static class system_add_keyspace_result implements TBase<system_add_keyspace_result, system_add_keyspace_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("system_add_keyspace_result");
+=======
+      if (keyspace == null) {
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'keyspace' was not present! Struct: " + toString());
+      }
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+  }
+
+  public static class system_drop_keyspace_result implements org.apache.thrift.TBase<system_drop_keyspace_result, system_drop_keyspace_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("system_drop_keyspace_result");
+>>>>>>> .merge_file_UlVTYo
 
     private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRING, (short)0);
     private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
@@ -28442,7 +32877,11 @@ public class Cassandra {
       tmpMap.put(_Fields.SDE, new FieldMetaData("sde", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(system_drop_keyspace_result.class, metaDataMap);
+<<<<<<< .merge_file_gpdNwp
+      FieldMetaData.addStructMetaDataMap(system_add_keyspace_result.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(system_drop_keyspace_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public system_drop_keyspace_result() {
@@ -28830,16 +33269,29 @@ public class Cassandra {
 
   }
 
-  public static class system_update_keyspace_args implements TBase<system_update_keyspace_args, system_update_keyspace_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("system_update_keyspace_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class system_drop_keyspace_args implements TBase<system_drop_keyspace_args, system_drop_keyspace_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("system_drop_keyspace_args");
 
-    private static final TField KS_DEF_FIELD_DESC = new TField("ks_def", TType.STRUCT, (short)1);
+    private static final TField KEYSPACE_FIELD_DESC = new TField("keyspace", TType.STRING, (short)1);
 
-    public KsDef ks_def;
+    public String keyspace;
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
+      KEYSPACE((short)1, "keyspace");
+=======
+  public static class system_update_keyspace_args implements org.apache.thrift.TBase<system_update_keyspace_args, system_update_keyspace_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("system_update_keyspace_args");
+
+    private static final org.apache.thrift.protocol.TField KS_DEF_FIELD_DESC = new org.apache.thrift.protocol.TField("ks_def", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+
+    public KsDef ks_def; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       KS_DEF((short)1, "ks_def");
+>>>>>>> .merge_file_UlVTYo
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -28899,11 +33351,19 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.KS_DEF, new FieldMetaData("ks_def", TFieldRequirementType.REQUIRED, 
-          new StructMetaData(TType.STRUCT, KsDef.class)));
+      tmpMap.put(_Fields.KEYSPACE, new FieldMetaData("keyspace", TFieldRequirementType.REQUIRED, 
+          new FieldValueMetaData(TType.STRING)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(system_update_keyspace_args.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(system_drop_keyspace_args.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.KS_DEF, new org.apache.thrift.meta_data.FieldMetaData("ks_def", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, KsDef.class)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(system_update_keyspace_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public system_update_keyspace_args() {
@@ -28947,9 +33407,15 @@ public class Cassandra {
       this.ks_def = null;
     }
 
-    /** Returns true if field ks_def is set (has been asigned a value) and false otherwise */
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field keyspace is set (has been asigned a value) and false otherwise */
+    public boolean isSetKeyspace() {
+      return this.keyspace != null;
+=======
+    /** Returns true if field ks_def is set (has been assigned a value) and false otherwise */
     public boolean isSetKs_def() {
       return this.ks_def != null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setKs_defIsSet(boolean value) {
@@ -29042,8 +33508,13 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetKeyspace()) {
+        lastComparison = TBaseHelper.compareTo(this.keyspace, typedOther.keyspace);
+=======
       if (isSetKs_def()) {
-        lastComparison = TBaseHelper.compareTo(this.ks_def, typedOther.ks_def);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.ks_def, typedOther.ks_def);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -29065,10 +33536,16 @@ public class Cassandra {
           break;
         }
         switch (field.id) {
+<<<<<<< .merge_file_gpdNwp
+          case 1: // KEYSPACE
+            if (field.type == TType.STRING) {
+              this.keyspace = iprot.readString();
+=======
           case 1: // KS_DEF
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.ks_def = new KsDef();
               this.ks_def.read(iprot);
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
@@ -29115,15 +33592,43 @@ public class Cassandra {
 
     public void validate() throws TException {
       // check for required fields
-      if (ks_def == null) {
-        throw new TProtocolException("Required field 'ks_def' was not present! Struct: " + toString());
+<<<<<<< .merge_file_gpdNwp
+      if (keyspace == null) {
+        throw new TProtocolException("Required field 'keyspace' was not present! Struct: " + toString());
       }
     }
 
   }
 
-  public static class system_update_keyspace_result implements TBase<system_update_keyspace_result, system_update_keyspace_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("system_update_keyspace_result");
+  public static class system_drop_keyspace_result implements TBase<system_drop_keyspace_result, system_drop_keyspace_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("system_drop_keyspace_result");
+=======
+      if (ks_def == null) {
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'ks_def' was not present! Struct: " + toString());
+      }
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+  }
+
+  public static class system_update_keyspace_result implements org.apache.thrift.TBase<system_update_keyspace_result, system_update_keyspace_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("system_update_keyspace_result");
+>>>>>>> .merge_file_UlVTYo
 
     private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRING, (short)0);
     private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
@@ -29209,7 +33714,11 @@ public class Cassandra {
       tmpMap.put(_Fields.SDE, new FieldMetaData("sde", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(system_update_keyspace_result.class, metaDataMap);
+<<<<<<< .merge_file_gpdNwp
+      FieldMetaData.addStructMetaDataMap(system_drop_keyspace_result.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(system_update_keyspace_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public system_update_keyspace_result() {
@@ -29597,16 +34106,29 @@ public class Cassandra {
 
   }
 
-  public static class system_update_column_family_args implements TBase<system_update_column_family_args, system_update_column_family_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("system_update_column_family_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class system_update_keyspace_args implements TBase<system_update_keyspace_args, system_update_keyspace_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("system_update_keyspace_args");
 
-    private static final TField CF_DEF_FIELD_DESC = new TField("cf_def", TType.STRUCT, (short)1);
+    private static final TField KS_DEF_FIELD_DESC = new TField("ks_def", TType.STRUCT, (short)1);
 
-    public CfDef cf_def;
+    public KsDef ks_def;
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
+      KS_DEF((short)1, "ks_def");
+=======
+  public static class system_update_column_family_args implements org.apache.thrift.TBase<system_update_column_family_args, system_update_column_family_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("system_update_column_family_args");
+
+    private static final org.apache.thrift.protocol.TField CF_DEF_FIELD_DESC = new org.apache.thrift.protocol.TField("cf_def", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+
+    public CfDef cf_def; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       CF_DEF((short)1, "cf_def");
+>>>>>>> .merge_file_UlVTYo
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -29666,11 +34188,19 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.CF_DEF, new FieldMetaData("cf_def", TFieldRequirementType.REQUIRED, 
-          new StructMetaData(TType.STRUCT, CfDef.class)));
+      tmpMap.put(_Fields.KS_DEF, new FieldMetaData("ks_def", TFieldRequirementType.REQUIRED, 
+          new StructMetaData(TType.STRUCT, KsDef.class)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(system_update_column_family_args.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(system_update_keyspace_args.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.CF_DEF, new org.apache.thrift.meta_data.FieldMetaData("cf_def", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, CfDef.class)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(system_update_column_family_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public system_update_column_family_args() {
@@ -29714,9 +34244,15 @@ public class Cassandra {
       this.cf_def = null;
     }
 
-    /** Returns true if field cf_def is set (has been asigned a value) and false otherwise */
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field ks_def is set (has been asigned a value) and false otherwise */
+    public boolean isSetKs_def() {
+      return this.ks_def != null;
+=======
+    /** Returns true if field cf_def is set (has been assigned a value) and false otherwise */
     public boolean isSetCf_def() {
       return this.cf_def != null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setCf_defIsSet(boolean value) {
@@ -29809,8 +34345,13 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetKs_def()) {
+        lastComparison = TBaseHelper.compareTo(this.ks_def, typedOther.ks_def);
+=======
       if (isSetCf_def()) {
-        lastComparison = TBaseHelper.compareTo(this.cf_def, typedOther.cf_def);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.cf_def, typedOther.cf_def);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -29832,10 +34373,17 @@ public class Cassandra {
           break;
         }
         switch (field.id) {
-          case 1: // CF_DEF
+<<<<<<< .merge_file_gpdNwp
+          case 1: // KS_DEF
             if (field.type == TType.STRUCT) {
+              this.ks_def = new KsDef();
+              this.ks_def.read(iprot);
+=======
+          case 1: // CF_DEF
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.cf_def = new CfDef();
               this.cf_def.read(iprot);
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
@@ -29882,15 +34430,43 @@ public class Cassandra {
 
     public void validate() throws TException {
       // check for required fields
-      if (cf_def == null) {
-        throw new TProtocolException("Required field 'cf_def' was not present! Struct: " + toString());
+<<<<<<< .merge_file_gpdNwp
+      if (ks_def == null) {
+        throw new TProtocolException("Required field 'ks_def' was not present! Struct: " + toString());
       }
     }
 
   }
 
-  public static class system_update_column_family_result implements TBase<system_update_column_family_result, system_update_column_family_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("system_update_column_family_result");
+  public static class system_update_keyspace_result implements TBase<system_update_keyspace_result, system_update_keyspace_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("system_update_keyspace_result");
+=======
+      if (cf_def == null) {
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'cf_def' was not present! Struct: " + toString());
+      }
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+  }
+
+  public static class system_update_column_family_result implements org.apache.thrift.TBase<system_update_column_family_result, system_update_column_family_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("system_update_column_family_result");
+>>>>>>> .merge_file_UlVTYo
 
     private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRING, (short)0);
     private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
@@ -29976,7 +34552,11 @@ public class Cassandra {
       tmpMap.put(_Fields.SDE, new FieldMetaData("sde", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(system_update_column_family_result.class, metaDataMap);
+<<<<<<< .merge_file_gpdNwp
+      FieldMetaData.addStructMetaDataMap(system_update_keyspace_result.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(system_update_column_family_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public system_update_column_family_result() {
@@ -30364,27 +34944,40 @@ public class Cassandra {
 
   }
 
-  public static class execute_cql_query_args implements TBase<execute_cql_query_args, execute_cql_query_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("execute_cql_query_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class system_update_column_family_args implements TBase<system_update_column_family_args, system_update_column_family_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("system_update_column_family_args");
 
-    private static final TField QUERY_FIELD_DESC = new TField("query", TType.STRING, (short)1);
-    private static final TField COMPRESSION_FIELD_DESC = new TField("compression", TType.I32, (short)2);
+    private static final TField CF_DEF_FIELD_DESC = new TField("cf_def", TType.STRUCT, (short)1);
 
-    public ByteBuffer query;
+    public CfDef cf_def;
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements TFieldIdEnum {
+      CF_DEF((short)1, "cf_def");
+=======
+  public static class execute_cql_query_args implements org.apache.thrift.TBase<execute_cql_query_args, execute_cql_query_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("execute_cql_query_args");
+
+    private static final org.apache.thrift.protocol.TField QUERY_FIELD_DESC = new org.apache.thrift.protocol.TField("query", org.apache.thrift.protocol.TType.STRING, (short)1);
+    private static final org.apache.thrift.protocol.TField COMPRESSION_FIELD_DESC = new org.apache.thrift.protocol.TField("compression", org.apache.thrift.protocol.TType.I32, (short)2);
+
+    public ByteBuffer query; // required
     /**
      * 
      * @see Compression
      */
-    public Compression compression;
+    public Compression compression; // required
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
-    public enum _Fields implements TFieldIdEnum {
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       QUERY((short)1, "query"),
       /**
        * 
        * @see Compression
        */
       COMPRESSION((short)2, "compression");
+>>>>>>> .merge_file_UlVTYo
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -30446,13 +35039,21 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.QUERY, new FieldMetaData("query", TFieldRequirementType.REQUIRED, 
-          new FieldValueMetaData(TType.STRING)));
-      tmpMap.put(_Fields.COMPRESSION, new FieldMetaData("compression", TFieldRequirementType.REQUIRED, 
-          new EnumMetaData(TType.ENUM, Compression.class)));
+      tmpMap.put(_Fields.CF_DEF, new FieldMetaData("cf_def", TFieldRequirementType.REQUIRED, 
+          new StructMetaData(TType.STRUCT, CfDef.class)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(execute_cql_query_args.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(system_update_column_family_args.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.QUERY, new org.apache.thrift.meta_data.FieldMetaData("query", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING          , true)));
+      tmpMap.put(_Fields.COMPRESSION, new org.apache.thrift.meta_data.FieldMetaData("compression", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.EnumMetaData(org.apache.thrift.protocol.TType.ENUM, Compression.class)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(execute_cql_query_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public execute_cql_query_args() {
@@ -30472,7 +35073,7 @@ public class Cassandra {
      */
     public execute_cql_query_args(execute_cql_query_args other) {
       if (other.isSetQuery()) {
-        this.query = TBaseHelper.copyBinary(other.query);
+        this.query = org.apache.thrift.TBaseHelper.copyBinary(other.query);
 ;
       }
       if (other.isSetCompression()) {
@@ -30491,16 +35092,16 @@ public class Cassandra {
     }
 
     public byte[] getQuery() {
-      setQuery(TBaseHelper.rightSize(query));
-      return query.array();
+      setQuery(org.apache.thrift.TBaseHelper.rightSize(query));
+      return query == null ? null : query.array();
     }
 
-    public ByteBuffer BufferForQuery() {
+    public ByteBuffer bufferForQuery() {
       return query;
     }
 
     public execute_cql_query_args setQuery(byte[] query) {
-      setQuery(ByteBuffer.wrap(query));
+      setQuery(query == null ? (ByteBuffer)null : ByteBuffer.wrap(query));
       return this;
     }
 
@@ -30509,11 +35110,17 @@ public class Cassandra {
       return this;
     }
 
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field cf_def is set (has been asigned a value) and false otherwise */
+    public boolean isSetCf_def() {
+      return this.cf_def != null;
+=======
     public void unsetQuery() {
       this.query = null;
+>>>>>>> .merge_file_UlVTYo
     }
 
-    /** Returns true if field query is set (has been asigned a value) and false otherwise */
+    /** Returns true if field query is set (has been assigned a value) and false otherwise */
     public boolean isSetQuery() {
       return this.query != null;
     }
@@ -30545,7 +35152,7 @@ public class Cassandra {
       this.compression = null;
     }
 
-    /** Returns true if field compression is set (has been asigned a value) and false otherwise */
+    /** Returns true if field compression is set (has been assigned a value) and false otherwise */
     public boolean isSetCompression() {
       return this.compression != null;
     }
@@ -30667,8 +35274,12 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetCf_def()) {
+        lastComparison = TBaseHelper.compareTo(this.cf_def, typedOther.cf_def);
+=======
       if (isSetQuery()) {
-        lastComparison = TBaseHelper.compareTo(this.query, typedOther.query);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.query, typedOther.query);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -30678,7 +35289,8 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetCompression()) {
-        lastComparison = TBaseHelper.compareTo(this.compression, typedOther.compression);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.compression, typedOther.compression);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -30700,16 +35312,23 @@ public class Cassandra {
           break;
         }
         switch (field.id) {
+<<<<<<< .merge_file_gpdNwp
+          case 1: // CF_DEF
+            if (field.type == TType.STRUCT) {
+              this.cf_def = new CfDef();
+              this.cf_def.read(iprot);
+=======
           case 1: // QUERY
-            if (field.type == TType.STRING) {
+            if (field.type == org.apache.thrift.protocol.TType.STRING) {
               this.query = iprot.readBinary();
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           case 2: // COMPRESSION
-            if (field.type == TType.I32) {
+            if (field.type == org.apache.thrift.protocol.TType.I32) {
               this.compression = Compression.findByValue(iprot.readI32());
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
@@ -30752,7 +35371,7 @@ public class Cassandra {
       if (this.query == null) {
         sb.append("null");
       } else {
-        TBaseHelper.toString(this.query, sb);
+        org.apache.thrift.TBaseHelper.toString(this.query, sb);
       }
       first = false;
       if (!first) sb.append(", ");
@@ -30769,30 +35388,66 @@ public class Cassandra {
 
     public void validate() throws TException {
       // check for required fields
-      if (query == null) {
-        throw new TProtocolException("Required field 'query' was not present! Struct: " + toString());
-      }
-      if (compression == null) {
-        throw new TProtocolException("Required field 'compression' was not present! Struct: " + toString());
+<<<<<<< .merge_file_gpdNwp
+      if (cf_def == null) {
+        throw new TProtocolException("Required field 'cf_def' was not present! Struct: " + toString());
       }
     }
 
   }
 
-  public static class execute_cql_query_result implements TBase<execute_cql_query_result, execute_cql_query_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("execute_cql_query_result");
+  public static class system_update_column_family_result implements TBase<system_update_column_family_result, system_update_column_family_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("system_update_column_family_result");
 
-    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRUCT, (short)0);
+    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRING, (short)0);
     private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
-    private static final TField UE_FIELD_DESC = new TField("ue", TType.STRUCT, (short)2);
-    private static final TField TE_FIELD_DESC = new TField("te", TType.STRUCT, (short)3);
-    private static final TField SDE_FIELD_DESC = new TField("sde", TType.STRUCT, (short)4);
+    private static final TField SDE_FIELD_DESC = new TField("sde", TType.STRUCT, (short)2);
 
-    public CqlResult success;
+    public String success;
     public InvalidRequestException ire;
-    public UnavailableException ue;
-    public TimedOutException te;
     public SchemaDisagreementException sde;
+=======
+      if (query == null) {
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'query' was not present! Struct: " + toString());
+      }
+      if (compression == null) {
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'compression' was not present! Struct: " + toString());
+      }
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+  }
+
+  public static class execute_cql_query_result implements org.apache.thrift.TBase<execute_cql_query_result, execute_cql_query_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("execute_cql_query_result");
+
+    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.STRUCT, (short)0);
+    private static final org.apache.thrift.protocol.TField IRE_FIELD_DESC = new org.apache.thrift.protocol.TField("ire", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+    private static final org.apache.thrift.protocol.TField UE_FIELD_DESC = new org.apache.thrift.protocol.TField("ue", org.apache.thrift.protocol.TType.STRUCT, (short)2);
+    private static final org.apache.thrift.protocol.TField TE_FIELD_DESC = new org.apache.thrift.protocol.TField("te", org.apache.thrift.protocol.TType.STRUCT, (short)3);
+    private static final org.apache.thrift.protocol.TField SDE_FIELD_DESC = new org.apache.thrift.protocol.TField("sde", org.apache.thrift.protocol.TType.STRUCT, (short)4);
+
+    public CqlResult success; // required
+    public InvalidRequestException ire; // required
+    public UnavailableException ue; // required
+    public TimedOutException te; // required
+    public SchemaDisagreementException sde; // required
+>>>>>>> .merge_file_UlVTYo
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
@@ -30868,19 +35523,31 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
       tmpMap.put(_Fields.SUCCESS, new FieldMetaData("success", TFieldRequirementType.DEFAULT, 
-          new StructMetaData(TType.STRUCT, CqlResult.class)));
+          new FieldValueMetaData(TType.STRING)));
       tmpMap.put(_Fields.IRE, new FieldMetaData("ire", TFieldRequirementType.DEFAULT, 
-          new FieldValueMetaData(TType.STRUCT)));
-      tmpMap.put(_Fields.UE, new FieldMetaData("ue", TFieldRequirementType.DEFAULT, 
-          new FieldValueMetaData(TType.STRUCT)));
-      tmpMap.put(_Fields.TE, new FieldMetaData("te", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
       tmpMap.put(_Fields.SDE, new FieldMetaData("sde", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(execute_cql_query_result.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(system_update_column_family_result.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, CqlResult.class)));
+      tmpMap.put(_Fields.IRE, new org.apache.thrift.meta_data.FieldMetaData("ire", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      tmpMap.put(_Fields.UE, new org.apache.thrift.meta_data.FieldMetaData("ue", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      tmpMap.put(_Fields.TE, new org.apache.thrift.meta_data.FieldMetaData("te", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      tmpMap.put(_Fields.SDE, new org.apache.thrift.meta_data.FieldMetaData("sde", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(execute_cql_query_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public execute_cql_query_result() {
@@ -30996,7 +35663,7 @@ public class Cassandra {
       this.ue = null;
     }
 
-    /** Returns true if field ue is set (has been asigned a value) and false otherwise */
+    /** Returns true if field ue is set (has been assigned a value) and false otherwise */
     public boolean isSetUe() {
       return this.ue != null;
     }
@@ -31020,7 +35687,7 @@ public class Cassandra {
       this.te = null;
     }
 
-    /** Returns true if field te is set (has been asigned a value) and false otherwise */
+    /** Returns true if field te is set (has been assigned a value) and false otherwise */
     public boolean isSetTe() {
       return this.te != null;
     }
@@ -31268,7 +35935,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetUe()) {
-        lastComparison = TBaseHelper.compareTo(this.ue, typedOther.ue);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.ue, typedOther.ue);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -31278,7 +35945,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetTe()) {
-        lastComparison = TBaseHelper.compareTo(this.te, typedOther.te);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.te, typedOther.te);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -31311,9 +35978,14 @@ public class Cassandra {
         }
         switch (field.id) {
           case 0: // SUCCESS
-            if (field.type == TType.STRUCT) {
+<<<<<<< .merge_file_gpdNwp
+            if (field.type == TType.STRING) {
+              this.success = iprot.readString();
+=======
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.success = new CqlResult();
               this.success.read(iprot);
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
@@ -31326,24 +35998,29 @@ public class Cassandra {
               TProtocolUtil.skip(iprot, field.type);
             }
             break;
-          case 2: // UE
+<<<<<<< .merge_file_gpdNwp
+          case 2: // SDE
             if (field.type == TType.STRUCT) {
+=======
+          case 2: // UE
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.ue = new UnavailableException();
               this.ue.read(iprot);
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           case 3: // TE
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.te = new TimedOutException();
               this.te.read(iprot);
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           case 4: // SDE
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
+>>>>>>> .merge_file_UlVTYo
               this.sde = new SchemaDisagreementException();
               this.sde.read(iprot);
             } else { 
@@ -31443,8 +36120,13 @@ public class Cassandra {
 
   }
 
-  public static class prepare_cql_query_args implements TBase<prepare_cql_query_args, prepare_cql_query_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("prepare_cql_query_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class execute_cql_query_args implements TBase<execute_cql_query_args, execute_cql_query_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("execute_cql_query_args");
+=======
+  public static class prepare_cql_query_args implements org.apache.thrift.TBase<prepare_cql_query_args, prepare_cql_query_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("prepare_cql_query_args");
+>>>>>>> .merge_file_UlVTYo
 
     private static final TField QUERY_FIELD_DESC = new TField("query", TType.STRING, (short)1);
     private static final TField COMPRESSION_FIELD_DESC = new TField("compression", TType.I32, (short)2);
@@ -31531,7 +36213,11 @@ public class Cassandra {
       tmpMap.put(_Fields.COMPRESSION, new FieldMetaData("compression", TFieldRequirementType.REQUIRED, 
           new EnumMetaData(TType.ENUM, Compression.class)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(prepare_cql_query_args.class, metaDataMap);
+<<<<<<< .merge_file_gpdNwp
+      FieldMetaData.addStructMetaDataMap(execute_cql_query_args.class, metaDataMap);
+=======
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(prepare_cql_query_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public prepare_cql_query_args() {
@@ -31578,8 +36264,13 @@ public class Cassandra {
       return query;
     }
 
-    public prepare_cql_query_args setQuery(byte[] query) {
+<<<<<<< .merge_file_gpdNwp
+    public execute_cql_query_args setQuery(byte[] query) {
       setQuery(ByteBuffer.wrap(query));
+=======
+    public prepare_cql_query_args setQuery(byte[] query) {
+      setQuery(query == null ? (ByteBuffer)null : ByteBuffer.wrap(query));
+>>>>>>> .merge_file_UlVTYo
       return this;
     }
 
@@ -31858,14 +36549,31 @@ public class Cassandra {
 
   }
 
-  public static class prepare_cql_query_result implements TBase<prepare_cql_query_result, prepare_cql_query_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("prepare_cql_query_result");
+<<<<<<< .merge_file_gpdNwp
+  public static class execute_cql_query_result implements TBase<execute_cql_query_result, execute_cql_query_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("execute_cql_query_result");
 
     private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRUCT, (short)0);
     private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
+    private static final TField UE_FIELD_DESC = new TField("ue", TType.STRUCT, (short)2);
+    private static final TField TE_FIELD_DESC = new TField("te", TType.STRUCT, (short)3);
+    private static final TField SDE_FIELD_DESC = new TField("sde", TType.STRUCT, (short)4);
 
-    public CqlPreparedResult success;
+    public CqlResult success;
     public InvalidRequestException ire;
+    public UnavailableException ue;
+    public TimedOutException te;
+    public SchemaDisagreementException sde;
+=======
+  public static class prepare_cql_query_result implements org.apache.thrift.TBase<prepare_cql_query_result, prepare_cql_query_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("prepare_cql_query_result");
+
+    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.STRUCT, (short)0);
+    private static final org.apache.thrift.protocol.TField IRE_FIELD_DESC = new org.apache.thrift.protocol.TField("ire", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+
+    public CqlPreparedResult success; // required
+    public InvalidRequestException ire; // required
+>>>>>>> .merge_file_UlVTYo
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
@@ -31932,13 +36640,29 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
       tmpMap.put(_Fields.SUCCESS, new FieldMetaData("success", TFieldRequirementType.DEFAULT, 
-          new StructMetaData(TType.STRUCT, CqlPreparedResult.class)));
+          new StructMetaData(TType.STRUCT, CqlResult.class)));
       tmpMap.put(_Fields.IRE, new FieldMetaData("ire", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
+      tmpMap.put(_Fields.UE, new FieldMetaData("ue", TFieldRequirementType.DEFAULT, 
+          new FieldValueMetaData(TType.STRUCT)));
+      tmpMap.put(_Fields.TE, new FieldMetaData("te", TFieldRequirementType.DEFAULT, 
+          new FieldValueMetaData(TType.STRUCT)));
+      tmpMap.put(_Fields.SDE, new FieldMetaData("sde", TFieldRequirementType.DEFAULT, 
+          new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(prepare_cql_query_result.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(execute_cql_query_result.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, CqlPreparedResult.class)));
+      tmpMap.put(_Fields.IRE, new org.apache.thrift.meta_data.FieldMetaData("ire", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(prepare_cql_query_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public prepare_cql_query_result() {
@@ -32023,6 +36747,81 @@ public class Cassandra {
       }
     }
 
+<<<<<<< .merge_file_gpdNwp
+    public UnavailableException getUe() {
+      return this.ue;
+    }
+
+    public execute_cql_query_result setUe(UnavailableException ue) {
+      this.ue = ue;
+      return this;
+    }
+
+    public void unsetUe() {
+      this.ue = null;
+    }
+
+    /** Returns true if field ue is set (has been asigned a value) and false otherwise */
+    public boolean isSetUe() {
+      return this.ue != null;
+    }
+
+    public void setUeIsSet(boolean value) {
+      if (!value) {
+        this.ue = null;
+      }
+    }
+
+    public TimedOutException getTe() {
+      return this.te;
+    }
+
+    public execute_cql_query_result setTe(TimedOutException te) {
+      this.te = te;
+      return this;
+    }
+
+    public void unsetTe() {
+      this.te = null;
+    }
+
+    /** Returns true if field te is set (has been asigned a value) and false otherwise */
+    public boolean isSetTe() {
+      return this.te != null;
+    }
+
+    public void setTeIsSet(boolean value) {
+      if (!value) {
+        this.te = null;
+      }
+    }
+
+    public SchemaDisagreementException getSde() {
+      return this.sde;
+    }
+
+    public execute_cql_query_result setSde(SchemaDisagreementException sde) {
+      this.sde = sde;
+      return this;
+    }
+
+    public void unsetSde() {
+      this.sde = null;
+    }
+
+    /** Returns true if field sde is set (has been asigned a value) and false otherwise */
+    public boolean isSetSde() {
+      return this.sde != null;
+    }
+
+    public void setSdeIsSet(boolean value) {
+      if (!value) {
+        this.sde = null;
+      }
+    }
+
+=======
+>>>>>>> .merge_file_UlVTYo
     public void setFieldValue(_Fields field, Object value) {
       switch (field) {
       case SUCCESS:
@@ -32150,6 +36949,39 @@ public class Cassandra {
           return lastComparison;
         }
       }
+<<<<<<< .merge_file_gpdNwp
+      lastComparison = Boolean.valueOf(isSetUe()).compareTo(typedOther.isSetUe());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetUe()) {
+        lastComparison = TBaseHelper.compareTo(this.ue, typedOther.ue);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      lastComparison = Boolean.valueOf(isSetTe()).compareTo(typedOther.isSetTe());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetTe()) {
+        lastComparison = TBaseHelper.compareTo(this.te, typedOther.te);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      lastComparison = Boolean.valueOf(isSetSde()).compareTo(typedOther.isSetSde());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetSde()) {
+        lastComparison = TBaseHelper.compareTo(this.sde, typedOther.sde);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+=======
+>>>>>>> .merge_file_UlVTYo
       return 0;
     }
 
@@ -32168,8 +37000,13 @@ public class Cassandra {
         }
         switch (field.id) {
           case 0: // SUCCESS
+<<<<<<< .merge_file_gpdNwp
             if (field.type == TType.STRUCT) {
+              this.success = new CqlResult();
+=======
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.success = new CqlPreparedResult();
+>>>>>>> .merge_file_UlVTYo
               this.success.read(iprot);
             } else { 
               TProtocolUtil.skip(iprot, field.type);
@@ -32183,6 +37020,33 @@ public class Cassandra {
               TProtocolUtil.skip(iprot, field.type);
             }
             break;
+<<<<<<< .merge_file_gpdNwp
+          case 2: // UE
+            if (field.type == TType.STRUCT) {
+              this.ue = new UnavailableException();
+              this.ue.read(iprot);
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          case 3: // TE
+            if (field.type == TType.STRUCT) {
+              this.te = new TimedOutException();
+              this.te.read(iprot);
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          case 4: // SDE
+            if (field.type == TType.STRUCT) {
+              this.sde = new SchemaDisagreementException();
+              this.sde.read(iprot);
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+=======
+>>>>>>> .merge_file_UlVTYo
           default:
             TProtocolUtil.skip(iprot, field.type);
         }
@@ -32240,19 +37104,43 @@ public class Cassandra {
 
   }
 
-  public static class execute_prepared_cql_query_args implements TBase<execute_prepared_cql_query_args, execute_prepared_cql_query_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("execute_prepared_cql_query_args");
+<<<<<<< .merge_file_gpdNwp
+  public static class prepare_cql_query_args implements TBase<prepare_cql_query_args, prepare_cql_query_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("prepare_cql_query_args");
 
-    private static final TField ITEM_ID_FIELD_DESC = new TField("itemId", TType.I32, (short)1);
-    private static final TField VALUES_FIELD_DESC = new TField("values", TType.LIST, (short)2);
+    private static final TField QUERY_FIELD_DESC = new TField("query", TType.STRING, (short)1);
+    private static final TField COMPRESSION_FIELD_DESC = new TField("compression", TType.I32, (short)2);
 
-    public int itemId;
-    public List<ByteBuffer> values;
+    public ByteBuffer query;
+    /**
+     * 
+     * @see Compression
+     */
+    public Compression compression;
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
+      QUERY((short)1, "query"),
+      /**
+       * 
+       * @see Compression
+       */
+      COMPRESSION((short)2, "compression");
+=======
+  public static class execute_prepared_cql_query_args implements org.apache.thrift.TBase<execute_prepared_cql_query_args, execute_prepared_cql_query_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("execute_prepared_cql_query_args");
+
+    private static final org.apache.thrift.protocol.TField ITEM_ID_FIELD_DESC = new org.apache.thrift.protocol.TField("itemId", org.apache.thrift.protocol.TType.I32, (short)1);
+    private static final org.apache.thrift.protocol.TField VALUES_FIELD_DESC = new org.apache.thrift.protocol.TField("values", org.apache.thrift.protocol.TType.LIST, (short)2);
+
+    public int itemId; // required
+    public List<ByteBuffer> values; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
       ITEM_ID((short)1, "itemId"),
       VALUES((short)2, "values");
+>>>>>>> .merge_file_UlVTYo
 
       private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -32316,14 +37204,24 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
-      tmpMap.put(_Fields.ITEM_ID, new FieldMetaData("itemId", TFieldRequirementType.REQUIRED, 
-          new FieldValueMetaData(TType.I32)));
-      tmpMap.put(_Fields.VALUES, new FieldMetaData("values", TFieldRequirementType.REQUIRED, 
-          new ListMetaData(TType.LIST, 
-              new FieldValueMetaData(TType.STRING))));
+      tmpMap.put(_Fields.QUERY, new FieldMetaData("query", TFieldRequirementType.REQUIRED, 
+          new FieldValueMetaData(TType.STRING)));
+      tmpMap.put(_Fields.COMPRESSION, new FieldMetaData("compression", TFieldRequirementType.REQUIRED, 
+          new EnumMetaData(TType.ENUM, Compression.class)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(execute_prepared_cql_query_args.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(prepare_cql_query_args.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.ITEM_ID, new org.apache.thrift.meta_data.FieldMetaData("itemId", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I32)));
+      tmpMap.put(_Fields.VALUES, new org.apache.thrift.meta_data.FieldMetaData("values", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.ListMetaData(org.apache.thrift.protocol.TType.LIST, 
+              new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING              , true))));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(execute_prepared_cql_query_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public execute_prepared_cql_query_args() {
@@ -32342,6 +37240,11 @@ public class Cassandra {
     /**
      * Performs a deep copy on <i>other</i>.
      */
+<<<<<<< .merge_file_gpdNwp
+    public prepare_cql_query_args(prepare_cql_query_args other) {
+      if (other.isSetQuery()) {
+        this.query = TBaseHelper.copyBinary(other.query);
+=======
     public execute_prepared_cql_query_args(execute_prepared_cql_query_args other) {
       __isset_bit_vector.clear();
       __isset_bit_vector.or(other.__isset_bit_vector);
@@ -32349,7 +37252,8 @@ public class Cassandra {
       if (other.isSetValues()) {
         List<ByteBuffer> __this__values = new ArrayList<ByteBuffer>();
         for (ByteBuffer other_element : other.values) {
-          ByteBuffer temp_binary_element = TBaseHelper.copyBinary(other_element);
+          ByteBuffer temp_binary_element = org.apache.thrift.TBaseHelper.copyBinary(other_element);
+>>>>>>> .merge_file_UlVTYo
 ;
           __this__values.add(temp_binary_element);
         }
@@ -32368,6 +37272,20 @@ public class Cassandra {
       this.values = null;
     }
 
+<<<<<<< .merge_file_gpdNwp
+    public byte[] getQuery() {
+      setQuery(TBaseHelper.rightSize(query));
+      return query.array();
+    }
+
+    public ByteBuffer BufferForQuery() {
+      return query;
+    }
+
+    public prepare_cql_query_args setQuery(byte[] query) {
+      setQuery(ByteBuffer.wrap(query));
+      return this;
+=======
     public int getItemId() {
       return this.itemId;
     }
@@ -32380,9 +37298,10 @@ public class Cassandra {
 
     public void unsetItemId() {
       __isset_bit_vector.clear(__ITEMID_ISSET_ID);
+>>>>>>> .merge_file_UlVTYo
     }
 
-    /** Returns true if field itemId is set (has been asigned a value) and false otherwise */
+    /** Returns true if field itemId is set (has been assigned a value) and false otherwise */
     public boolean isSetItemId() {
       return __isset_bit_vector.get(__ITEMID_ISSET_ID);
     }
@@ -32391,8 +37310,14 @@ public class Cassandra {
       __isset_bit_vector.set(__ITEMID_ISSET_ID, value);
     }
 
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field query is set (has been asigned a value) and false otherwise */
+    public boolean isSetQuery() {
+      return this.query != null;
+=======
     public int getValuesSize() {
       return (this.values == null) ? 0 : this.values.size();
+>>>>>>> .merge_file_UlVTYo
     }
 
     public java.util.Iterator<ByteBuffer> getValuesIterator() {
@@ -32419,9 +37344,15 @@ public class Cassandra {
       this.values = null;
     }
 
-    /** Returns true if field values is set (has been asigned a value) and false otherwise */
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field compression is set (has been asigned a value) and false otherwise */
+    public boolean isSetCompression() {
+      return this.compression != null;
+=======
+    /** Returns true if field values is set (has been assigned a value) and false otherwise */
     public boolean isSetValues() {
       return this.values != null;
+>>>>>>> .merge_file_UlVTYo
     }
 
     public void setValuesIsSet(boolean value) {
@@ -32454,7 +37385,7 @@ public class Cassandra {
     public Object getFieldValue(_Fields field) {
       switch (field) {
       case ITEM_ID:
-        return new Integer(getItemId());
+        return Integer.valueOf(getItemId());
 
       case VALUES:
         return getValues();
@@ -32541,8 +37472,13 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetQuery()) {
+        lastComparison = TBaseHelper.compareTo(this.query, typedOther.query);
+=======
       if (isSetItemId()) {
-        lastComparison = TBaseHelper.compareTo(this.itemId, typedOther.itemId);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.itemId, typedOther.itemId);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -32551,8 +37487,13 @@ public class Cassandra {
       if (lastComparison != 0) {
         return lastComparison;
       }
+<<<<<<< .merge_file_gpdNwp
+      if (isSetCompression()) {
+        lastComparison = TBaseHelper.compareTo(this.compression, typedOther.compression);
+=======
       if (isSetValues()) {
-        lastComparison = TBaseHelper.compareTo(this.values, typedOther.values);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.values, typedOther.values);
+>>>>>>> .merge_file_UlVTYo
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -32574,27 +37515,39 @@ public class Cassandra {
           break;
         }
         switch (field.id) {
+<<<<<<< .merge_file_gpdNwp
+          case 1: // QUERY
+            if (field.type == TType.STRING) {
+              this.query = iprot.readBinary();
+=======
           case 1: // ITEM_ID
-            if (field.type == TType.I32) {
+            if (field.type == org.apache.thrift.protocol.TType.I32) {
               this.itemId = iprot.readI32();
               setItemIdIsSet(true);
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
             break;
+<<<<<<< .merge_file_gpdNwp
+          case 2: // COMPRESSION
+            if (field.type == TType.I32) {
+              this.compression = Compression.findByValue(iprot.readI32());
+=======
           case 2: // VALUES
-            if (field.type == TType.LIST) {
+            if (field.type == org.apache.thrift.protocol.TType.LIST) {
               {
-                TList _list156 = iprot.readListBegin();
-                this.values = new ArrayList<ByteBuffer>(_list156.size);
-                for (int _i157 = 0; _i157 < _list156.size; ++_i157)
+                org.apache.thrift.protocol.TList _list173 = iprot.readListBegin();
+                this.values = new ArrayList<ByteBuffer>(_list173.size);
+                for (int _i174 = 0; _i174 < _list173.size; ++_i174)
                 {
-                  ByteBuffer _elem158;
-                  _elem158 = iprot.readBinary();
-                  this.values.add(_elem158);
+                  ByteBuffer _elem175; // required
+                  _elem175 = iprot.readBinary();
+                  this.values.add(_elem175);
                 }
                 iprot.readListEnd();
               }
+>>>>>>> .merge_file_UlVTYo
             } else { 
               TProtocolUtil.skip(iprot, field.type);
             }
@@ -32608,7 +37561,7 @@ public class Cassandra {
 
       // check for required fields of primitive type, which can't be checked in the validate method
       if (!isSetItemId()) {
-        throw new TProtocolException("Required field 'itemId' was not found in serialized data! Struct: " + toString());
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'itemId' was not found in serialized data! Struct: " + toString());
       }
       validate();
     }
@@ -32623,10 +37576,10 @@ public class Cassandra {
       if (this.values != null) {
         oprot.writeFieldBegin(VALUES_FIELD_DESC);
         {
-          oprot.writeListBegin(new TList(TType.STRING, this.values.size()));
-          for (ByteBuffer _iter159 : this.values)
+          oprot.writeListBegin(new org.apache.thrift.protocol.TList(org.apache.thrift.protocol.TType.STRING, this.values.size()));
+          for (ByteBuffer _iter176 : this.values)
           {
-            oprot.writeBinary(_iter159);
+            oprot.writeBinary(_iter176);
           }
           oprot.writeListEnd();
         }
@@ -32641,8 +37594,17 @@ public class Cassandra {
       StringBuilder sb = new StringBuilder("execute_prepared_cql_query_args(");
       boolean first = true;
 
+<<<<<<< .merge_file_gpdNwp
+      sb.append("query:");
+      if (this.query == null) {
+        sb.append("null");
+      } else {
+        TBaseHelper.toString(this.query, sb);
+      }
+=======
       sb.append("itemId:");
       sb.append(this.itemId);
+>>>>>>> .merge_file_UlVTYo
       first = false;
       if (!first) sb.append(", ");
       sb.append("values:");
@@ -32658,28 +37620,65 @@ public class Cassandra {
 
     public void validate() throws TException {
       // check for required fields
-      // alas, we cannot check 'itemId' because it's a primitive and you chose the non-beans generator.
-      if (values == null) {
-        throw new TProtocolException("Required field 'values' was not present! Struct: " + toString());
+<<<<<<< .merge_file_gpdNwp
+      if (query == null) {
+        throw new TProtocolException("Required field 'query' was not present! Struct: " + toString());
+      }
+      if (compression == null) {
+        throw new TProtocolException("Required field 'compression' was not present! Struct: " + toString());
       }
     }
 
   }
 
-  public static class execute_prepared_cql_query_result implements TBase<execute_prepared_cql_query_result, execute_prepared_cql_query_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final TStruct STRUCT_DESC = new TStruct("execute_prepared_cql_query_result");
+  public static class prepare_cql_query_result implements TBase<prepare_cql_query_result, prepare_cql_query_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("prepare_cql_query_result");
 
     private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRUCT, (short)0);
     private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
-    private static final TField UE_FIELD_DESC = new TField("ue", TType.STRUCT, (short)2);
-    private static final TField TE_FIELD_DESC = new TField("te", TType.STRUCT, (short)3);
-    private static final TField SDE_FIELD_DESC = new TField("sde", TType.STRUCT, (short)4);
 
-    public CqlResult success;
+    public CqlPreparedResult success;
     public InvalidRequestException ire;
-    public UnavailableException ue;
-    public TimedOutException te;
-    public SchemaDisagreementException sde;
+=======
+      // alas, we cannot check 'itemId' because it's a primitive and you chose the non-beans generator.
+      if (values == null) {
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'values' was not present! Struct: " + toString());
+      }
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+  }
+
+  public static class execute_prepared_cql_query_result implements org.apache.thrift.TBase<execute_prepared_cql_query_result, execute_prepared_cql_query_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("execute_prepared_cql_query_result");
+
+    private static final org.apache.thrift.protocol.TField SUCCESS_FIELD_DESC = new org.apache.thrift.protocol.TField("success", org.apache.thrift.protocol.TType.STRUCT, (short)0);
+    private static final org.apache.thrift.protocol.TField IRE_FIELD_DESC = new org.apache.thrift.protocol.TField("ire", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+    private static final org.apache.thrift.protocol.TField UE_FIELD_DESC = new org.apache.thrift.protocol.TField("ue", org.apache.thrift.protocol.TType.STRUCT, (short)2);
+    private static final org.apache.thrift.protocol.TField TE_FIELD_DESC = new org.apache.thrift.protocol.TField("te", org.apache.thrift.protocol.TType.STRUCT, (short)3);
+    private static final org.apache.thrift.protocol.TField SDE_FIELD_DESC = new org.apache.thrift.protocol.TField("sde", org.apache.thrift.protocol.TType.STRUCT, (short)4);
+
+    public CqlResult success; // required
+    public InvalidRequestException ire; // required
+    public UnavailableException ue; // required
+    public TimedOutException te; // required
+    public SchemaDisagreementException sde; // required
+>>>>>>> .merge_file_UlVTYo
 
     /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
     public enum _Fields implements TFieldIdEnum {
@@ -32755,19 +37754,29 @@ public class Cassandra {
 
     public static final Map<_Fields, FieldMetaData> metaDataMap;
     static {
+<<<<<<< .merge_file_gpdNwp
       Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
       tmpMap.put(_Fields.SUCCESS, new FieldMetaData("success", TFieldRequirementType.DEFAULT, 
-          new StructMetaData(TType.STRUCT, CqlResult.class)));
+          new StructMetaData(TType.STRUCT, CqlPreparedResult.class)));
       tmpMap.put(_Fields.IRE, new FieldMetaData("ire", TFieldRequirementType.DEFAULT, 
           new FieldValueMetaData(TType.STRUCT)));
-      tmpMap.put(_Fields.UE, new FieldMetaData("ue", TFieldRequirementType.DEFAULT, 
-          new FieldValueMetaData(TType.STRUCT)));
-      tmpMap.put(_Fields.TE, new FieldMetaData("te", TFieldRequirementType.DEFAULT, 
-          new FieldValueMetaData(TType.STRUCT)));
-      tmpMap.put(_Fields.SDE, new FieldMetaData("sde", TFieldRequirementType.DEFAULT, 
-          new FieldValueMetaData(TType.STRUCT)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      FieldMetaData.addStructMetaDataMap(execute_prepared_cql_query_result.class, metaDataMap);
+      FieldMetaData.addStructMetaDataMap(prepare_cql_query_result.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new org.apache.thrift.meta_data.FieldMetaData("success", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, CqlResult.class)));
+      tmpMap.put(_Fields.IRE, new org.apache.thrift.meta_data.FieldMetaData("ire", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      tmpMap.put(_Fields.UE, new org.apache.thrift.meta_data.FieldMetaData("ue", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      tmpMap.put(_Fields.TE, new org.apache.thrift.meta_data.FieldMetaData("te", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      tmpMap.put(_Fields.SDE, new org.apache.thrift.meta_data.FieldMetaData("sde", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(execute_prepared_cql_query_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
     }
 
     public execute_prepared_cql_query_result() {
@@ -32883,7 +37892,7 @@ public class Cassandra {
       this.ue = null;
     }
 
-    /** Returns true if field ue is set (has been asigned a value) and false otherwise */
+    /** Returns true if field ue is set (has been assigned a value) and false otherwise */
     public boolean isSetUe() {
       return this.ue != null;
     }
@@ -32907,7 +37916,7 @@ public class Cassandra {
       this.te = null;
     }
 
-    /** Returns true if field te is set (has been asigned a value) and false otherwise */
+    /** Returns true if field te is set (has been assigned a value) and false otherwise */
     public boolean isSetTe() {
       return this.te != null;
     }
@@ -32931,7 +37940,7 @@ public class Cassandra {
       this.sde = null;
     }
 
-    /** Returns true if field sde is set (has been asigned a value) and false otherwise */
+    /** Returns true if field sde is set (has been assigned a value) and false otherwise */
     public boolean isSetSde() {
       return this.sde != null;
     }
@@ -33155,7 +38164,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetUe()) {
-        lastComparison = TBaseHelper.compareTo(this.ue, typedOther.ue);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.ue, typedOther.ue);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -33165,7 +38174,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetTe()) {
-        lastComparison = TBaseHelper.compareTo(this.te, typedOther.te);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.te, typedOther.te);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -33175,7 +38184,7 @@ public class Cassandra {
         return lastComparison;
       }
       if (isSetSde()) {
-        lastComparison = TBaseHelper.compareTo(this.sde, typedOther.sde);
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.sde, typedOther.sde);
         if (lastComparison != 0) {
           return lastComparison;
         }
@@ -33198,8 +38207,13 @@ public class Cassandra {
         }
         switch (field.id) {
           case 0: // SUCCESS
+<<<<<<< .merge_file_gpdNwp
             if (field.type == TType.STRUCT) {
+              this.success = new CqlPreparedResult();
+=======
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.success = new CqlResult();
+>>>>>>> .merge_file_UlVTYo
               this.success.read(iprot);
             } else { 
               TProtocolUtil.skip(iprot, field.type);
@@ -33214,27 +38228,27 @@ public class Cassandra {
             }
             break;
           case 2: // UE
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.ue = new UnavailableException();
               this.ue.read(iprot);
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           case 3: // TE
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.te = new TimedOutException();
               this.te.read(iprot);
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           case 4: // SDE
-            if (field.type == TType.STRUCT) {
+            if (field.type == org.apache.thrift.protocol.TType.STRUCT) {
               this.sde = new SchemaDisagreementException();
               this.sde.read(iprot);
             } else { 
-              TProtocolUtil.skip(iprot, field.type);
+              org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
             }
             break;
           default:
@@ -33318,6 +38332,1028 @@ public class Cassandra {
         sb.append("null");
       } else {
         sb.append(this.sde);
+      }
+      first = false;
+      sb.append(")");
+      return sb.toString();
+    }
+
+    public void validate() throws TException {
+      // check for required fields
+    }
+
+  }
+
+<<<<<<< .merge_file_gpdNwp
+  public static class execute_prepared_cql_query_args implements TBase<execute_prepared_cql_query_args, execute_prepared_cql_query_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("execute_prepared_cql_query_args");
+
+    private static final TField ITEM_ID_FIELD_DESC = new TField("itemId", TType.I32, (short)1);
+    private static final TField VALUES_FIELD_DESC = new TField("values", TType.LIST, (short)2);
+
+    public int itemId;
+    public List<ByteBuffer> values;
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements TFieldIdEnum {
+      ITEM_ID((short)1, "itemId"),
+      VALUES((short)2, "values");
+=======
+  public static class set_cql_version_args implements org.apache.thrift.TBase<set_cql_version_args, set_cql_version_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("set_cql_version_args");
+
+    private static final org.apache.thrift.protocol.TField VERSION_FIELD_DESC = new org.apache.thrift.protocol.TField("version", org.apache.thrift.protocol.TType.STRING, (short)1);
+
+    public String version; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
+      VERSION((short)1, "version");
+>>>>>>> .merge_file_UlVTYo
+
+      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
+
+      static {
+        for (_Fields field : EnumSet.allOf(_Fields.class)) {
+          byName.put(field.getFieldName(), field);
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, or null if its not found.
+       */
+      public static _Fields findByThriftId(int fieldId) {
+        switch(fieldId) {
+          case 1: // VERSION
+            return VERSION;
+          default:
+            return null;
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, throwing an exception
+       * if it is not found.
+       */
+      public static _Fields findByThriftIdOrThrow(int fieldId) {
+        _Fields fields = findByThriftId(fieldId);
+        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
+        return fields;
+      }
+
+      /**
+       * Find the _Fields constant that matches name, or null if its not found.
+       */
+      public static _Fields findByName(String name) {
+        return byName.get(name);
+      }
+
+      private final short _thriftId;
+      private final String _fieldName;
+
+      _Fields(short thriftId, String fieldName) {
+        _thriftId = thriftId;
+        _fieldName = fieldName;
+      }
+
+      public short getThriftFieldId() {
+        return _thriftId;
+      }
+
+      public String getFieldName() {
+        return _fieldName;
+      }
+    }
+
+    // isset id assignments
+
+    public static final Map<_Fields, FieldMetaData> metaDataMap;
+    static {
+<<<<<<< .merge_file_gpdNwp
+      Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.ITEM_ID, new FieldMetaData("itemId", TFieldRequirementType.REQUIRED, 
+          new FieldValueMetaData(TType.I32)));
+      tmpMap.put(_Fields.VALUES, new FieldMetaData("values", TFieldRequirementType.REQUIRED, 
+          new ListMetaData(TType.LIST, 
+              new FieldValueMetaData(TType.STRING))));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      FieldMetaData.addStructMetaDataMap(execute_prepared_cql_query_args.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.VERSION, new org.apache.thrift.meta_data.FieldMetaData("version", org.apache.thrift.TFieldRequirementType.REQUIRED, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(set_cql_version_args.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
+    }
+
+    public set_cql_version_args() {
+    }
+
+<<<<<<< .merge_file_gpdNwp
+    public execute_prepared_cql_query_args(
+      int itemId,
+      List<ByteBuffer> values)
+=======
+    public set_cql_version_args(
+      String version)
+>>>>>>> .merge_file_UlVTYo
+    {
+      this();
+      this.version = version;
+    }
+
+    /**
+     * Performs a deep copy on <i>other</i>.
+     */
+<<<<<<< .merge_file_gpdNwp
+    public execute_prepared_cql_query_args(execute_prepared_cql_query_args other) {
+      __isset_bit_vector.clear();
+      __isset_bit_vector.or(other.__isset_bit_vector);
+      this.itemId = other.itemId;
+      if (other.isSetValues()) {
+        List<ByteBuffer> __this__values = new ArrayList<ByteBuffer>();
+        for (ByteBuffer other_element : other.values) {
+          ByteBuffer temp_binary_element = TBaseHelper.copyBinary(other_element);
+;
+          __this__values.add(temp_binary_element);
+        }
+        this.values = __this__values;
+      }
+    }
+
+    public execute_prepared_cql_query_args deepCopy() {
+      return new execute_prepared_cql_query_args(this);
+    }
+
+    @Override
+    public void clear() {
+      setItemIdIsSet(false);
+      this.itemId = 0;
+      this.values = null;
+    }
+
+    public int getItemId() {
+      return this.itemId;
+    }
+
+    public execute_prepared_cql_query_args setItemId(int itemId) {
+      this.itemId = itemId;
+      setItemIdIsSet(true);
+      return this;
+    }
+
+    public void unsetItemId() {
+      __isset_bit_vector.clear(__ITEMID_ISSET_ID);
+    }
+
+    /** Returns true if field itemId is set (has been asigned a value) and false otherwise */
+    public boolean isSetItemId() {
+      return __isset_bit_vector.get(__ITEMID_ISSET_ID);
+    }
+
+    public void setItemIdIsSet(boolean value) {
+      __isset_bit_vector.set(__ITEMID_ISSET_ID, value);
+    }
+
+    public int getValuesSize() {
+      return (this.values == null) ? 0 : this.values.size();
+    }
+
+    public java.util.Iterator<ByteBuffer> getValuesIterator() {
+      return (this.values == null) ? null : this.values.iterator();
+    }
+
+    public void addToValues(ByteBuffer elem) {
+      if (this.values == null) {
+        this.values = new ArrayList<ByteBuffer>();
+      }
+      this.values.add(elem);
+    }
+
+    public List<ByteBuffer> getValues() {
+      return this.values;
+    }
+
+    public execute_prepared_cql_query_args setValues(List<ByteBuffer> values) {
+      this.values = values;
+=======
+    public set_cql_version_args(set_cql_version_args other) {
+      if (other.isSetVersion()) {
+        this.version = other.version;
+      }
+    }
+
+    public set_cql_version_args deepCopy() {
+      return new set_cql_version_args(this);
+    }
+
+    @Override
+    public void clear() {
+      this.version = null;
+    }
+
+    public String getVersion() {
+      return this.version;
+    }
+
+    public set_cql_version_args setVersion(String version) {
+      this.version = version;
+>>>>>>> .merge_file_UlVTYo
+      return this;
+    }
+
+    public void unsetVersion() {
+      this.version = null;
+    }
+
+<<<<<<< .merge_file_gpdNwp
+    /** Returns true if field values is set (has been asigned a value) and false otherwise */
+    public boolean isSetValues() {
+      return this.values != null;
+=======
+    /** Returns true if field version is set (has been assigned a value) and false otherwise */
+    public boolean isSetVersion() {
+      return this.version != null;
+>>>>>>> .merge_file_UlVTYo
+    }
+
+    public void setVersionIsSet(boolean value) {
+      if (!value) {
+        this.version = null;
+      }
+    }
+
+    public void setFieldValue(_Fields field, Object value) {
+      switch (field) {
+      case VERSION:
+        if (value == null) {
+          unsetVersion();
+        } else {
+<<<<<<< .merge_file_gpdNwp
+          setValues((List<ByteBuffer>)value);
+=======
+          setVersion((String)value);
+>>>>>>> .merge_file_UlVTYo
+        }
+        break;
+
+      }
+    }
+
+    public Object getFieldValue(_Fields field) {
+      switch (field) {
+<<<<<<< .merge_file_gpdNwp
+      case ITEM_ID:
+        return new Integer(getItemId());
+
+      case VALUES:
+        return getValues();
+=======
+      case VERSION:
+        return getVersion();
+>>>>>>> .merge_file_UlVTYo
+
+      }
+      throw new IllegalStateException();
+    }
+
+    /** Returns true if field corresponding to fieldID is set (has been asigned a value) and false otherwise */
+    public boolean isSet(_Fields field) {
+      if (field == null) {
+        throw new IllegalArgumentException();
+      }
+
+      switch (field) {
+      case VERSION:
+        return isSetVersion();
+      }
+      throw new IllegalStateException();
+    }
+
+    @Override
+    public boolean equals(Object that) {
+      if (that == null)
+        return false;
+      if (that instanceof set_cql_version_args)
+        return this.equals((set_cql_version_args)that);
+      return false;
+    }
+
+    public boolean equals(set_cql_version_args that) {
+      if (that == null)
+        return false;
+
+      boolean this_present_version = true && this.isSetVersion();
+      boolean that_present_version = true && that.isSetVersion();
+      if (this_present_version || that_present_version) {
+        if (!(this_present_version && that_present_version))
+          return false;
+        if (!this.version.equals(that.version))
+          return false;
+      }
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      HashCodeBuilder builder = new HashCodeBuilder();
+
+      boolean present_version = true && (isSetVersion());
+      builder.append(present_version);
+      if (present_version)
+        builder.append(version);
+
+      return builder.toHashCode();
+    }
+
+    public int compareTo(set_cql_version_args other) {
+      if (!getClass().equals(other.getClass())) {
+        return getClass().getName().compareTo(other.getClass().getName());
+      }
+
+      int lastComparison = 0;
+      set_cql_version_args typedOther = (set_cql_version_args)other;
+
+<<<<<<< .merge_file_gpdNwp
+      lastComparison = Boolean.valueOf(isSetItemId()).compareTo(typedOther.isSetItemId());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetItemId()) {
+        lastComparison = TBaseHelper.compareTo(this.itemId, typedOther.itemId);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      lastComparison = Boolean.valueOf(isSetValues()).compareTo(typedOther.isSetValues());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetValues()) {
+        lastComparison = TBaseHelper.compareTo(this.values, typedOther.values);
+=======
+      lastComparison = Boolean.valueOf(isSetVersion()).compareTo(typedOther.isSetVersion());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetVersion()) {
+        lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.version, typedOther.version);
+>>>>>>> .merge_file_UlVTYo
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      return 0;
+    }
+
+    public _Fields fieldForId(int fieldId) {
+      return _Fields.findByThriftId(fieldId);
+    }
+
+    public void read(TProtocol iprot) throws TException {
+      TField field;
+      iprot.readStructBegin();
+      while (true)
+      {
+        field = iprot.readFieldBegin();
+        if (field.type == TType.STOP) { 
+          break;
+        }
+        switch (field.id) {
+<<<<<<< .merge_file_gpdNwp
+          case 1: // ITEM_ID
+            if (field.type == TType.I32) {
+              this.itemId = iprot.readI32();
+              setItemIdIsSet(true);
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          case 2: // VALUES
+            if (field.type == TType.LIST) {
+              {
+                TList _list156 = iprot.readListBegin();
+                this.values = new ArrayList<ByteBuffer>(_list156.size);
+                for (int _i157 = 0; _i157 < _list156.size; ++_i157)
+                {
+                  ByteBuffer _elem158;
+                  _elem158 = iprot.readBinary();
+                  this.values.add(_elem158);
+                }
+                iprot.readListEnd();
+              }
+=======
+          case 1: // VERSION
+            if (field.type == org.apache.thrift.protocol.TType.STRING) {
+              this.version = iprot.readString();
+>>>>>>> .merge_file_UlVTYo
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          default:
+            TProtocolUtil.skip(iprot, field.type);
+        }
+        iprot.readFieldEnd();
+      }
+      iprot.readStructEnd();
+
+      // check for required fields of primitive type, which can't be checked in the validate method
+<<<<<<< .merge_file_gpdNwp
+      if (!isSetItemId()) {
+        throw new TProtocolException("Required field 'itemId' was not found in serialized data! Struct: " + toString());
+      }
+=======
+>>>>>>> .merge_file_UlVTYo
+      validate();
+    }
+
+    public void write(TProtocol oprot) throws TException {
+      validate();
+
+      oprot.writeStructBegin(STRUCT_DESC);
+<<<<<<< .merge_file_gpdNwp
+      oprot.writeFieldBegin(ITEM_ID_FIELD_DESC);
+      oprot.writeI32(this.itemId);
+      oprot.writeFieldEnd();
+      if (this.values != null) {
+        oprot.writeFieldBegin(VALUES_FIELD_DESC);
+        {
+          oprot.writeListBegin(new TList(TType.STRING, this.values.size()));
+          for (ByteBuffer _iter159 : this.values)
+          {
+            oprot.writeBinary(_iter159);
+          }
+          oprot.writeListEnd();
+        }
+=======
+      if (this.version != null) {
+        oprot.writeFieldBegin(VERSION_FIELD_DESC);
+        oprot.writeString(this.version);
+>>>>>>> .merge_file_UlVTYo
+        oprot.writeFieldEnd();
+      }
+      oprot.writeFieldStop();
+      oprot.writeStructEnd();
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder sb = new StringBuilder("set_cql_version_args(");
+      boolean first = true;
+
+      sb.append("version:");
+      if (this.version == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.version);
+      }
+      first = false;
+      sb.append(")");
+      return sb.toString();
+    }
+
+    public void validate() throws TException {
+      // check for required fields
+<<<<<<< .merge_file_gpdNwp
+      // alas, we cannot check 'itemId' because it's a primitive and you chose the non-beans generator.
+      if (values == null) {
+        throw new TProtocolException("Required field 'values' was not present! Struct: " + toString());
+      }
+    }
+
+  }
+
+  public static class execute_prepared_cql_query_result implements TBase<execute_prepared_cql_query_result, execute_prepared_cql_query_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final TStruct STRUCT_DESC = new TStruct("execute_prepared_cql_query_result");
+
+    private static final TField SUCCESS_FIELD_DESC = new TField("success", TType.STRUCT, (short)0);
+    private static final TField IRE_FIELD_DESC = new TField("ire", TType.STRUCT, (short)1);
+    private static final TField UE_FIELD_DESC = new TField("ue", TType.STRUCT, (short)2);
+    private static final TField TE_FIELD_DESC = new TField("te", TType.STRUCT, (short)3);
+    private static final TField SDE_FIELD_DESC = new TField("sde", TType.STRUCT, (short)4);
+
+    public CqlResult success;
+    public InvalidRequestException ire;
+    public UnavailableException ue;
+    public TimedOutException te;
+    public SchemaDisagreementException sde;
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements TFieldIdEnum {
+      SUCCESS((short)0, "success"),
+      IRE((short)1, "ire"),
+      UE((short)2, "ue"),
+      TE((short)3, "te"),
+      SDE((short)4, "sde");
+=======
+      if (version == null) {
+        throw new org.apache.thrift.protocol.TProtocolException("Required field 'version' was not present! Struct: " + toString());
+      }
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+  }
+
+  public static class set_cql_version_result implements org.apache.thrift.TBase<set_cql_version_result, set_cql_version_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("set_cql_version_result");
+
+    private static final org.apache.thrift.protocol.TField IRE_FIELD_DESC = new org.apache.thrift.protocol.TField("ire", org.apache.thrift.protocol.TType.STRUCT, (short)1);
+
+    public InvalidRequestException ire; // required
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
+      IRE((short)1, "ire");
+>>>>>>> .merge_file_UlVTYo
+
+      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
+
+      static {
+        for (_Fields field : EnumSet.allOf(_Fields.class)) {
+          byName.put(field.getFieldName(), field);
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, or null if its not found.
+       */
+      public static _Fields findByThriftId(int fieldId) {
+        switch(fieldId) {
+          case 1: // IRE
+            return IRE;
+          default:
+            return null;
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, throwing an exception
+       * if it is not found.
+       */
+      public static _Fields findByThriftIdOrThrow(int fieldId) {
+        _Fields fields = findByThriftId(fieldId);
+        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
+        return fields;
+      }
+
+      /**
+       * Find the _Fields constant that matches name, or null if its not found.
+       */
+      public static _Fields findByName(String name) {
+        return byName.get(name);
+      }
+
+      private final short _thriftId;
+      private final String _fieldName;
+
+      _Fields(short thriftId, String fieldName) {
+        _thriftId = thriftId;
+        _fieldName = fieldName;
+      }
+
+      public short getThriftFieldId() {
+        return _thriftId;
+      }
+
+      public String getFieldName() {
+        return _fieldName;
+      }
+    }
+
+    // isset id assignments
+
+    public static final Map<_Fields, FieldMetaData> metaDataMap;
+    static {
+<<<<<<< .merge_file_gpdNwp
+      Map<_Fields, FieldMetaData> tmpMap = new EnumMap<_Fields, FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.SUCCESS, new FieldMetaData("success", TFieldRequirementType.DEFAULT, 
+          new StructMetaData(TType.STRUCT, CqlResult.class)));
+      tmpMap.put(_Fields.IRE, new FieldMetaData("ire", TFieldRequirementType.DEFAULT, 
+          new FieldValueMetaData(TType.STRUCT)));
+      tmpMap.put(_Fields.UE, new FieldMetaData("ue", TFieldRequirementType.DEFAULT, 
+          new FieldValueMetaData(TType.STRUCT)));
+      tmpMap.put(_Fields.TE, new FieldMetaData("te", TFieldRequirementType.DEFAULT, 
+          new FieldValueMetaData(TType.STRUCT)));
+      tmpMap.put(_Fields.SDE, new FieldMetaData("sde", TFieldRequirementType.DEFAULT, 
+          new FieldValueMetaData(TType.STRUCT)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      FieldMetaData.addStructMetaDataMap(execute_prepared_cql_query_result.class, metaDataMap);
+=======
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      tmpMap.put(_Fields.IRE, new org.apache.thrift.meta_data.FieldMetaData("ire", org.apache.thrift.TFieldRequirementType.DEFAULT, 
+          new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRUCT)));
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(set_cql_version_result.class, metaDataMap);
+>>>>>>> .merge_file_UlVTYo
+    }
+
+    public set_cql_version_result() {
+    }
+
+    public set_cql_version_result(
+      InvalidRequestException ire)
+    {
+      this();
+      this.ire = ire;
+    }
+
+    /**
+     * Performs a deep copy on <i>other</i>.
+     */
+    public set_cql_version_result(set_cql_version_result other) {
+      if (other.isSetIre()) {
+        this.ire = new InvalidRequestException(other.ire);
+      }
+    }
+
+    public set_cql_version_result deepCopy() {
+      return new set_cql_version_result(this);
+    }
+
+    @Override
+    public void clear() {
+      this.ire = null;
+<<<<<<< .merge_file_gpdNwp
+      this.ue = null;
+      this.te = null;
+      this.sde = null;
+    }
+
+    public CqlResult getSuccess() {
+      return this.success;
+    }
+
+    public execute_prepared_cql_query_result setSuccess(CqlResult success) {
+      this.success = success;
+      return this;
+    }
+
+    public void unsetSuccess() {
+      this.success = null;
+    }
+
+    /** Returns true if field success is set (has been asigned a value) and false otherwise */
+    public boolean isSetSuccess() {
+      return this.success != null;
+    }
+
+    public void setSuccessIsSet(boolean value) {
+      if (!value) {
+        this.success = null;
+      }
+=======
+>>>>>>> .merge_file_UlVTYo
+    }
+
+    public InvalidRequestException getIre() {
+      return this.ire;
+    }
+
+    public set_cql_version_result setIre(InvalidRequestException ire) {
+      this.ire = ire;
+      return this;
+    }
+
+    public void unsetIre() {
+      this.ire = null;
+    }
+
+    /** Returns true if field ire is set (has been asigned a value) and false otherwise */
+    public boolean isSetIre() {
+      return this.ire != null;
+    }
+
+    public void setIreIsSet(boolean value) {
+      if (!value) {
+        this.ire = null;
+      }
+    }
+
+<<<<<<< .merge_file_gpdNwp
+    public UnavailableException getUe() {
+      return this.ue;
+    }
+
+    public execute_prepared_cql_query_result setUe(UnavailableException ue) {
+      this.ue = ue;
+      return this;
+    }
+
+    public void unsetUe() {
+      this.ue = null;
+    }
+
+    /** Returns true if field ue is set (has been asigned a value) and false otherwise */
+    public boolean isSetUe() {
+      return this.ue != null;
+    }
+
+    public void setUeIsSet(boolean value) {
+      if (!value) {
+        this.ue = null;
+      }
+    }
+
+    public TimedOutException getTe() {
+      return this.te;
+    }
+
+    public execute_prepared_cql_query_result setTe(TimedOutException te) {
+      this.te = te;
+      return this;
+    }
+
+    public void unsetTe() {
+      this.te = null;
+    }
+
+    /** Returns true if field te is set (has been asigned a value) and false otherwise */
+    public boolean isSetTe() {
+      return this.te != null;
+    }
+
+    public void setTeIsSet(boolean value) {
+      if (!value) {
+        this.te = null;
+      }
+    }
+
+    public SchemaDisagreementException getSde() {
+      return this.sde;
+    }
+
+    public execute_prepared_cql_query_result setSde(SchemaDisagreementException sde) {
+      this.sde = sde;
+      return this;
+    }
+
+    public void unsetSde() {
+      this.sde = null;
+    }
+
+    /** Returns true if field sde is set (has been asigned a value) and false otherwise */
+    public boolean isSetSde() {
+      return this.sde != null;
+    }
+
+    public void setSdeIsSet(boolean value) {
+      if (!value) {
+        this.sde = null;
+      }
+    }
+
+=======
+>>>>>>> .merge_file_UlVTYo
+    public void setFieldValue(_Fields field, Object value) {
+      switch (field) {
+      case IRE:
+        if (value == null) {
+          unsetIre();
+        } else {
+          setIre((InvalidRequestException)value);
+        }
+        break;
+
+      }
+    }
+
+    public Object getFieldValue(_Fields field) {
+      switch (field) {
+      case IRE:
+        return getIre();
+
+      }
+      throw new IllegalStateException();
+    }
+
+    /** Returns true if field corresponding to fieldID is set (has been asigned a value) and false otherwise */
+    public boolean isSet(_Fields field) {
+      if (field == null) {
+        throw new IllegalArgumentException();
+      }
+
+      switch (field) {
+      case IRE:
+        return isSetIre();
+      }
+      throw new IllegalStateException();
+    }
+
+    @Override
+    public boolean equals(Object that) {
+      if (that == null)
+        return false;
+      if (that instanceof set_cql_version_result)
+        return this.equals((set_cql_version_result)that);
+      return false;
+    }
+
+    public boolean equals(set_cql_version_result that) {
+      if (that == null)
+        return false;
+
+      boolean this_present_ire = true && this.isSetIre();
+      boolean that_present_ire = true && that.isSetIre();
+      if (this_present_ire || that_present_ire) {
+        if (!(this_present_ire && that_present_ire))
+          return false;
+        if (!this.ire.equals(that.ire))
+          return false;
+      }
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      HashCodeBuilder builder = new HashCodeBuilder();
+
+      boolean present_ire = true && (isSetIre());
+      builder.append(present_ire);
+      if (present_ire)
+        builder.append(ire);
+
+      return builder.toHashCode();
+    }
+
+    public int compareTo(set_cql_version_result other) {
+      if (!getClass().equals(other.getClass())) {
+        return getClass().getName().compareTo(other.getClass().getName());
+      }
+
+      int lastComparison = 0;
+      set_cql_version_result typedOther = (set_cql_version_result)other;
+
+<<<<<<< .merge_file_gpdNwp
+      lastComparison = Boolean.valueOf(isSetSuccess()).compareTo(typedOther.isSetSuccess());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetSuccess()) {
+        lastComparison = TBaseHelper.compareTo(this.success, typedOther.success);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+=======
+>>>>>>> .merge_file_UlVTYo
+      lastComparison = Boolean.valueOf(isSetIre()).compareTo(typedOther.isSetIre());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetIre()) {
+        lastComparison = TBaseHelper.compareTo(this.ire, typedOther.ire);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+<<<<<<< .merge_file_gpdNwp
+      lastComparison = Boolean.valueOf(isSetUe()).compareTo(typedOther.isSetUe());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetUe()) {
+        lastComparison = TBaseHelper.compareTo(this.ue, typedOther.ue);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      lastComparison = Boolean.valueOf(isSetTe()).compareTo(typedOther.isSetTe());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetTe()) {
+        lastComparison = TBaseHelper.compareTo(this.te, typedOther.te);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+      lastComparison = Boolean.valueOf(isSetSde()).compareTo(typedOther.isSetSde());
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+      if (isSetSde()) {
+        lastComparison = TBaseHelper.compareTo(this.sde, typedOther.sde);
+        if (lastComparison != 0) {
+          return lastComparison;
+        }
+      }
+=======
+>>>>>>> .merge_file_UlVTYo
+      return 0;
+    }
+
+    public _Fields fieldForId(int fieldId) {
+      return _Fields.findByThriftId(fieldId);
+    }
+
+    public void read(TProtocol iprot) throws TException {
+      TField field;
+      iprot.readStructBegin();
+      while (true)
+      {
+        field = iprot.readFieldBegin();
+        if (field.type == TType.STOP) { 
+          break;
+        }
+        switch (field.id) {
+<<<<<<< .merge_file_gpdNwp
+          case 0: // SUCCESS
+            if (field.type == TType.STRUCT) {
+              this.success = new CqlResult();
+              this.success.read(iprot);
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+=======
+>>>>>>> .merge_file_UlVTYo
+          case 1: // IRE
+            if (field.type == TType.STRUCT) {
+              this.ire = new InvalidRequestException();
+              this.ire.read(iprot);
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+<<<<<<< .merge_file_gpdNwp
+          case 2: // UE
+            if (field.type == TType.STRUCT) {
+              this.ue = new UnavailableException();
+              this.ue.read(iprot);
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          case 3: // TE
+            if (field.type == TType.STRUCT) {
+              this.te = new TimedOutException();
+              this.te.read(iprot);
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+          case 4: // SDE
+            if (field.type == TType.STRUCT) {
+              this.sde = new SchemaDisagreementException();
+              this.sde.read(iprot);
+            } else { 
+              TProtocolUtil.skip(iprot, field.type);
+            }
+            break;
+=======
+>>>>>>> .merge_file_UlVTYo
+          default:
+            TProtocolUtil.skip(iprot, field.type);
+        }
+        iprot.readFieldEnd();
+      }
+      iprot.readStructEnd();
+
+      // check for required fields of primitive type, which can't be checked in the validate method
+      validate();
+    }
+
+    public void write(TProtocol oprot) throws TException {
+      oprot.writeStructBegin(STRUCT_DESC);
+
+      if (this.isSetIre()) {
+        oprot.writeFieldBegin(IRE_FIELD_DESC);
+        this.ire.write(oprot);
+        oprot.writeFieldEnd();
+      }
+      oprot.writeFieldStop();
+      oprot.writeStructEnd();
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder sb = new StringBuilder("set_cql_version_result(");
+      boolean first = true;
+
+      sb.append("ire:");
+      if (this.ire == null) {
+        sb.append("null");
+      } else {
+        sb.append(this.ire);
       }
       first = false;
       sb.append(")");
