@@ -890,7 +890,7 @@ public class QueryProcessor
 
         return new CqlPreparedResult(statementId, statement.boundTerms);
     }
-    
+
     public static CqlResult processPrepared(CQLStatement statement, ClientState clientState, List<ByteBuffer> variables)
     throws UnavailableException, InvalidRequestException, TimedOutException, SchemaDisagreementException
     {
