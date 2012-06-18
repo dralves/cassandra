@@ -24,13 +24,27 @@ import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.text.DecimalFormat;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
-import org.apache.cassandra.service.CacheServiceMBean;
-import org.apache.cassandra.service.StorageProxyMBean;
-import org.apache.commons.cli.*;
+import com.google.common.collect.Maps;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.PosixParser;
 
 import org.apache.cassandra.concurrent.JMXEnabledThreadPoolExecutorMBean;
 import org.apache.cassandra.config.ConfigurationException;
@@ -38,6 +52,8 @@ import org.apache.cassandra.db.ColumnFamilyStoreMBean;
 import org.apache.cassandra.db.compaction.CompactionManagerMBean;
 import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.net.MessagingServiceMBean;
+import org.apache.cassandra.service.CacheServiceMBean;
+import org.apache.cassandra.service.StorageProxyMBean;
 import org.apache.cassandra.thrift.InvalidRequestException;
 import org.apache.cassandra.utils.EstimatedHistogram;
 import org.apache.cassandra.utils.Pair;
@@ -214,48 +230,78 @@ public class NodeCmd
     public void printRing(PrintStream outs, String keyspace)
     {
         Map<String, String> tokenToEndpoint = probe.getTokenToEndpointMap();
-        List<String> sortedTokens = new ArrayList<String>(tokenToEndpoint.keySet());
+        String format = "%-16s%-12s%-7s%-8s%-16s%-20s%-44s%n";
 
+        // Calculate per-token ownership of the ring
+        Map<String, Float> ownerships;
+        boolean keyspaceSelected;
+        try
+        {
+            ownerships = probe.effectiveOwnership(keyspace);
+            keyspaceSelected = true;
+        }
+        catch (ConfigurationException ex)
+        {
+            ownerships = probe.getOwnership();
+            outs.printf("Note: Ownership information does not include topology, please specify a keyspace. %n");
+            keyspaceSelected = false;
+        }
+        try
+        {
+            outs.println();
+            Map<String,Map<String,Float>> perDcOwnerships = Maps.newLinkedHashMap();
+            // get the different datasets and map to tokens
+            for (Map.Entry<String,Float> ownership : ownerships.entrySet())
+            {
+                String dc = probe.getEndpointSnitchInfoProxy().getDatacenter(tokenToEndpoint.get(ownership.getKey()));
+                if (!perDcOwnerships.containsKey(dc)){
+                    perDcOwnerships.put(dc, new LinkedHashMap<String, Float>());
+                }
+                perDcOwnerships.get(dc).put(ownership.getKey(), ownership.getValue());
+            }
+            for (Map.Entry<String,Map<String,Float>> entry : perDcOwnerships.entrySet()){
+                printDc(outs, format, entry.getKey(), tokenToEndpoint, keyspaceSelected, entry.getValue());
+            }
+        }
+        catch (UnknownHostException e)
+        {
+           throw new RuntimeException(e);
+        }
+    }
+    
+    private void printDc(PrintStream outs, String format, String dc, Map<String, String> tokenToEndpoint,
+            boolean keyspaceSelected, Map<String, Float> filteredOwnerships)
+    {
         Collection<String> liveNodes = probe.getLiveNodes();
         Collection<String> deadNodes = probe.getUnreachableNodes();
         Collection<String> joiningNodes = probe.getJoiningNodes();
         Collection<String> leavingNodes = probe.getLeavingNodes();
         Collection<String> movingNodes = probe.getMovingNodes();
         Map<String, String> loadMap = probe.getLoadMap();
-
-        String format = "%-16s%-12s%-12s%-7s%-8s%-16s%-20s%-44s%n";
-
-        // Calculate per-token ownership of the ring
-        Map<String, Float> ownerships;
-        try
-        {
-            ownerships = probe.effectiveOwnership(keyspace);
-            outs.printf(format, "Address", "DC", "Rack", "Status", "State", "Load", "Effective-Ownership", "Token");
+        
+        outs.println("Datacenter: "+dc);
+        outs.println("==========");
+        
+        // get the total amount of replicas for this dc and the last token in this dc's ring
+        float totalReplicas = 0f;
+        String lastToken = "";
+        for (Map.Entry<String, Float> entry : filteredOwnerships.entrySet()){
+            lastToken = entry.getKey();
+            totalReplicas += entry.getValue();
         }
-        catch (ConfigurationException ex)
-        {
-            ownerships = probe.getOwnership();
-            outs.printf("Note: Ownership information does not include topology, please specify a keyspace. %n");
-            outs.printf(format, "Address", "DC", "Rack", "Status", "State", "Load", "Owns", "Token");
-        }
-
-        // show pre-wrap token twice so you can always read a node's range as
-        // (previous line token, current line token]
-        if (sortedTokens.size() > 1)
-            outs.printf(format, "", "", "", "", "", "", "", sortedTokens.get(sortedTokens.size() - 1));
-
-        for (String token : sortedTokens)
-        {
-            String primaryEndpoint = tokenToEndpoint.get(token);
-            String dataCenter;
-            try
-            {
-                dataCenter = probe.getEndpointSnitchInfoProxy().getDatacenter(primaryEndpoint);
-            }
-            catch (UnknownHostException e)
-            {
-                dataCenter = "Unknown";
-            }
+        
+        if (keyspaceSelected)
+            outs.print("Replicas: " + (int) totalReplicas+"\n\n");
+        
+        outs.printf(format, "Address", "Rack", "Status", "State", "Load", "Owns", "Token");
+        
+        if (filteredOwnerships.size() > 1)
+            outs.printf(format, "", "", "", "", "", "", "", lastToken);
+        else
+            outs.println();
+        
+        for (Map.Entry<String, Float> entry : filteredOwnerships.entrySet()){
+            String primaryEndpoint = tokenToEndpoint.get(entry.getKey());
             String rack;
             try
             {
@@ -283,9 +329,10 @@ public class NodeCmd
             String load = loadMap.containsKey(primaryEndpoint)
                           ? loadMap.get(primaryEndpoint)
                           : "?";
-            String owns = new DecimalFormat("##0.00%").format(ownerships.get(token) == null ? 0.0F : ownerships.get(token));
-            outs.printf(format, primaryEndpoint, dataCenter, rack, status, state, load, owns, token);
+            String owns = new DecimalFormat("##0.00%").format(entry.getValue());
+            outs.printf(format, primaryEndpoint, rack, status, state, load, owns, entry.getKey());
         }
+        outs.println();
     }
 
     /** Writes a table of host IDs to a PrintStream */

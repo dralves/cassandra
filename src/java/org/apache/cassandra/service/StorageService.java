@@ -24,46 +24,120 @@ import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
-import java.util.*;
-import java.util.Map.Entry;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeMap;
+import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Future;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
-import javax.management.MBeanServer;
-import javax.management.ObjectName;
 
+import com.google.common.base.Function;
 import com.google.common.base.Supplier;
-import com.google.common.collect.*;
-
-import org.apache.cassandra.metrics.ClientRequestMetrics;
-import org.apache.log4j.Level;
+import com.google.common.collect.ArrayListMultimap;
+import com.google.common.collect.HashMultimap;
+import com.google.common.collect.ImmutableSet;
+import com.google.common.collect.Iterables;
+import com.google.common.collect.Iterators;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import com.google.common.collect.Multimap;
+import com.google.common.collect.Multimaps;
+import com.google.common.collect.Sets;
+import com.google.common.collect.SortedSetMultimap;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import javax.management.MBeanServer;
+import javax.management.ObjectName;
 import org.apache.cassandra.concurrent.DebuggableScheduledThreadPoolExecutor;
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
-import org.apache.cassandra.config.*;
-import org.apache.cassandra.db.*;
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ConfigurationException;
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.config.KSMetaData;
+import org.apache.cassandra.config.Schema;
+import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.CounterMutationVerbHandler;
+import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.DefinitionsUpdateVerbHandler;
+import org.apache.cassandra.db.HintedHandOffManager;
+import org.apache.cassandra.db.MigrationRequestVerbHandler;
+import org.apache.cassandra.db.ReadRepairVerbHandler;
+import org.apache.cassandra.db.ReadVerbHandler;
+import org.apache.cassandra.db.RowMutationVerbHandler;
+import org.apache.cassandra.db.SchemaCheckVerbHandler;
+import org.apache.cassandra.db.SystemTable;
 import org.apache.cassandra.db.Table;
+import org.apache.cassandra.db.TruncateVerbHandler;
 import org.apache.cassandra.db.commitlog.CommitLog;
-import org.apache.cassandra.dht.*;
-import org.apache.cassandra.gms.*;
+import org.apache.cassandra.dht.BootStrapper;
+import org.apache.cassandra.dht.IPartitioner;
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.RangeStreamer;
+import org.apache.cassandra.dht.RingPosition;
+import org.apache.cassandra.dht.StringToken;
+import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.gms.ApplicationState;
+import org.apache.cassandra.gms.EndpointState;
+import org.apache.cassandra.gms.FailureDetector;
+import org.apache.cassandra.gms.GossipDigestAck2VerbHandler;
+import org.apache.cassandra.gms.GossipDigestAckVerbHandler;
+import org.apache.cassandra.gms.GossipDigestSynVerbHandler;
+import org.apache.cassandra.gms.GossipShutdownVerbHandler;
+import org.apache.cassandra.gms.Gossiper;
+import org.apache.cassandra.gms.IEndpointStateChangeSubscriber;
+import org.apache.cassandra.gms.IFailureDetector;
+import org.apache.cassandra.gms.VersionedValue;
 import org.apache.cassandra.io.sstable.SSTableDeletingTask;
 import org.apache.cassandra.io.sstable.SSTableLoader;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.locator.DynamicEndpointSnitch;
 import org.apache.cassandra.locator.IEndpointSnitch;
+import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.locator.TokenMetadata;
-import org.apache.cassandra.net.*;
+import org.apache.cassandra.metrics.ClientRequestMetrics;
+import org.apache.cassandra.net.IAsyncResult;
+import org.apache.cassandra.net.MessageOut;
+import org.apache.cassandra.net.MessagingService;
+import org.apache.cassandra.net.ResponseVerbHandler;
 import org.apache.cassandra.service.AntiEntropyService.TreeRequestVerbHandler;
-import org.apache.cassandra.streaming.*;
-import org.apache.cassandra.thrift.*;
+import org.apache.cassandra.streaming.IStreamCallback;
+import org.apache.cassandra.streaming.OperationType;
+import org.apache.cassandra.streaming.ReplicationFinishedVerbHandler;
+import org.apache.cassandra.streaming.StreamIn;
+import org.apache.cassandra.streaming.StreamOut;
+import org.apache.cassandra.streaming.StreamReplyVerbHandler;
+import org.apache.cassandra.streaming.StreamRequestVerbHandler;
+import org.apache.cassandra.streaming.StreamingRepairTask;
+import org.apache.cassandra.streaming.StreamingService;
+import org.apache.cassandra.thrift.Constants;
+import org.apache.cassandra.thrift.EndpointDetails;
+import org.apache.cassandra.thrift.InvalidRequestException;
+import org.apache.cassandra.thrift.TokenRange;
+import org.apache.cassandra.thrift.UnavailableException;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.NodeId;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.WrappedRunnable;
+import org.apache.log4j.Level;
 
 /**
  * This abstraction contains the token/identifier of this node
@@ -925,25 +999,6 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
             rangeToEndpointMap.put(range, Table.open(keyspace).getReplicationStrategy().getNaturalEndpoints(range.right));
         }
         return rangeToEndpointMap;
-    }
-
-    private Map<InetAddress, Collection<Range<Token>>> constructEndpointToRangeMap(String keyspace)
-    {
-        Multimap<InetAddress, Range<Token>> endpointToRangeMap = Multimaps.newListMultimap(new HashMap<InetAddress, Collection<Range<Token>>>(), new Supplier<List<Range<Token>>>()
-        {
-            public List<Range<Token>> get()
-            {
-                return Lists.newArrayList();
-            }
-        });
-
-        List<Range<Token>> ranges = getAllRanges(tokenMetadata.sortedTokens());
-        for (Range<Token> range : ranges)
-        {
-            for (InetAddress endpoint : Table.open(keyspace).getReplicationStrategy().getNaturalEndpoints(range.left))
-                endpointToRangeMap.put(endpoint, range);
-        }
-        return endpointToRangeMap.asMap();
     }
 
     /*
@@ -2717,8 +2772,9 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
     {
         List<Token> sortedTokens = new ArrayList<Token>(tokenMetadata.getTokenToEndpointMapForReading().keySet());
         Collections.sort(sortedTokens);
-        Map<Token, Float> token_map = getPartitioner().describeOwnership(sortedTokens);
-        Map<String, Float> string_map = new HashMap<String, Float>();
+        // the paritioner (random partitioner at least) returns tokens out-of-order, let's re-order them
+        Map<Token, Float> token_map = new TreeMap<Token, Float>(getPartitioner().describeOwnership(sortedTokens));
+        Map<String, Float> string_map = new LinkedHashMap<String, Float>();
         for(Map.Entry<Token, Float> entry : token_map.entrySet())
         {
             string_map.put(entry.getKey().toString(), entry.getValue());
@@ -2726,9 +2782,23 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         return string_map;
     }
 
-    public Map<String, Float> effectiveOwnership(String keyspace) throws ConfigurationException
+    public boolean isDcAwareReplicationStrategy(String keyspace)
     {
-        Map<String, Float> effective = Maps.newHashMap();
+        AbstractReplicationStrategy rs = Table.open(keyspace).getReplicationStrategy();
+        return rs.getClass() != SimpleStrategy.class;
+    }
+
+    /**
+     * Calculates ownership. If there are multiple DC's and the replication strategy is DC aware then ownership will be
+     * calculated per dc, i.e. each DC will have total ring ownership divided amongst its nodes. Without replication
+     * total ownership will be a multiple of the number of DC's and this value will then go up within each DC depending
+     * on the number of replicas within itself. For DC unaware replication strategies, ownership without replication
+     * will be 100%.
+     * 
+     * @throws ConfigurationException
+     */
+    public LinkedHashMap<String, Float> effectiveOwnership(String keyspace) throws ConfigurationException
+    {
         if (Schema.instance.getNonSystemTables().size() <= 0)
             throw new ConfigurationException("Couldn't find any Non System Keyspaces to infer replication topology");
         if (keyspace == null && !hasSameReplication(Schema.instance.getNonSystemTables()))
@@ -2737,20 +2807,105 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         if (keyspace == null)
             keyspace = Schema.instance.getNonSystemTables().get(0);
 
-        List<Token> sortedTokens = new ArrayList<Token>(tokenMetadata.getTokenToEndpointMapForReading().keySet());
-        Collections.sort(sortedTokens);
-        Map<Token, Float> ownership = getPartitioner().describeOwnership(sortedTokens);
+        Map<Token, InetAddress> tokensToEndpoints = tokenMetadata.getTokenToEndpointMapForReading();
 
-        for (Entry<InetAddress, Collection<Range<Token>>> ranges : constructEndpointToRangeMap(keyspace).entrySet())
+        // avoind creating extra maps because we need all the info
+        class Node implements Comparable<Node>
         {
-            Token token = tokenMetadata.getToken(ranges.getKey());
-            for (Range<Token> range: ranges.getValue())
+            final Token token;
+            final InetAddress endpoint;
+            final List<Range> ranges = new ArrayList<Range>();
+            Float ownership = 0.0f;
+
+            public Node(Map.Entry<Token, InetAddress> entry)
             {
-                float value = effective.get(token.toString()) == null ? 0.0F : effective.get(token.toString());
-                effective.put(token.toString(), value + ownership.get(range.left));
+                this.token = entry.getKey();
+                this.endpoint = entry.getValue();
+            }
+
+            @Override
+            public int compareTo(Node o)
+            {
+                return token.compareTo(o.token);
+            }
+
+        }
+
+        final IEndpointSnitch snitch = DatabaseDescriptor.getEndpointSnitch();
+
+        // mapping of dc's to nodes
+        SortedSetMultimap<String, Node> dcsToEndpoints = Multimaps.newSortedSetMultimap(
+                new LinkedHashMap<String, Collection<Node>>(),
+                new Supplier<SortedSet<Node>>()
+                {
+                    public SortedSet<Node> get()
+                    {
+                        return Sets.newTreeSet();
+                    }
+                });
+
+        // split the token and endpoints into separate, per dc collections (use dummy "no_dc" for
+        // dc unaware replication strategies
+        for (Map.Entry<Token, InetAddress> entry : tokensToEndpoints.entrySet())
+        {
+            if (isDcAwareReplicationStrategy(keyspace))
+                dcsToEndpoints.put(snitch.getDatacenter(entry.getValue()), new Node(entry));
+            else
+                dcsToEndpoints.put("no_dc", new Node(entry));
+        }
+
+        LinkedHashMap<String, Float> finalOwnership = Maps.newLinkedHashMap();
+
+        // calculate ownership per dc
+        for (Collection<Node> nodes : dcsToEndpoints.asMap().values())
+        {
+            List<Token> tokens = Lists.newArrayList(Iterables.transform(nodes,
+                    new Function<Node, Token>()
+                    {
+                        @Override
+                        public Token apply(Node input)
+                        {
+                            return input.token;
+                        }
+
+                    }));
+            Collections.sort(tokens);
+
+            // calculate the ownership without replication
+            Map<Token, Float> tokenOwnership = getPartitioner().describeOwnership(tokens);
+
+            Map<InetAddress, Node> perDcOwnershipByAddress = Maps.newLinkedHashMap();
+            for (Node node : nodes)
+            {
+                perDcOwnershipByAddress.put(node.endpoint, node);
+            }
+
+            // which nodes own each range
+            for (Range<Token> range : getAllRanges(tokens))
+            {
+                for (InetAddress endpoint : Table.open(keyspace).getReplicationStrategy()
+                        .getNaturalEndpoints(range.left))
+                {
+                    if (perDcOwnershipByAddress.containsKey(endpoint))
+                    {
+                        perDcOwnershipByAddress.get(endpoint).ranges.add(range);
+                    }
+                }
+
+            }
+
+            // calculate the ownership with replication and add the node to the final ownership map
+            for (Node node : nodes)
+            {
+                for (Range range : node.ranges)
+                {
+                    node.ownership += tokenOwnership.get(range.left);
+                }
+                finalOwnership.put(node.token.toString(), node.ownership);
             }
         }
-        return effective;
+
+        return finalOwnership;
     }
 
     private boolean hasSameReplication(List<String> list)
