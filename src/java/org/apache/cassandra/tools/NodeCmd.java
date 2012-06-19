@@ -115,7 +115,7 @@ public class NodeCmd
         SETCOMPACTIONTHRESHOLD,
         SETCOMPACTIONTHROUGHPUT,
         SETSTREAMTHROUGHPUT,
-        SHUTDOWN_NICELY,
+        FLUSHANDEXIT,
         SNAPSHOT,
         STATUSTHRIFT,
         STOP,
@@ -158,6 +158,7 @@ public class NodeCmd
         addCmdHelp(header, "invalidatekeycache", "Invalidate the key cache");
         addCmdHelp(header, "invalidaterowcache", "Invalidate the row cache");
         addCmdHelp(header, "resetlocalschema", "Reset node's local schema and resync");
+        addCmdHelp(header, "flushandexit", "Makes node flush all tables and exit");
 
         // One arg
         addCmdHelp(header, "netstats [host]", "Print network information on provided host (connecting node by default)");
@@ -764,7 +765,7 @@ public class NodeCmd
                 case DISABLETHRIFT   : probe.stopThriftServer(); break;
                 case ENABLETHRIFT    : probe.startThriftServer(); break;
                 case STATUSTHRIFT    : nodeCmd.printIsThriftServerRunning(System.out); break;
-                case SHUTDOWN_NICELY : probe.flushAllTablesAndExit(); break;
+                case FLUSHANDEXIT    : probe.flushAllTablesAndExit(); break;
                 case RESETLOCALSCHEMA: probe.resetLocalSchema(); break;
                 case IDS             : nodeCmd.printHostIds(System.out); break;
 
