@@ -212,6 +212,10 @@ public class NodeProbe
     {
         ssProxy.forceTableRepairRange(beginToken, endToken, tableName, isSequential, columnFamilies);
     }
+    
+    public void flushAllTablesAndExit() {
+        ssProxy.flushAllTablesAndExit();
+    }
 
     public void invalidateKeyCache() throws IOException
     {

@@ -415,21 +415,8 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
                 mutationStage.awaitTermination(3600, TimeUnit.SECONDS);
                 StorageProxy.instance.verifyNoHintsInProgress();
 
-                List<Future<?>> flushes = new ArrayList<Future<?>>();
-                for (Table table : Table.all())
-                {
-                    KSMetaData ksm = Schema.instance.getKSMetaData(table.name);
-                    if (!ksm.durableWrites)
-                    {
-                        for (ColumnFamilyStore cfs : table.getColumnFamilyStores())
-                        {
-                            Future<?> future = cfs.forceFlush();
-                            if (future != null)
-                                flushes.add(future);
-                        }
-                    }
-                }
-                FBUtilities.waitOnFutures(flushes);
+                // flush only tables with durable_writes = off
+                StorageService.instance.flushTablesBlocking(false);
 
                 CommitLog.instance.shutdownBlocking();
 
@@ -449,6 +436,42 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         {
             logger.info("Not joining ring as requested. Use JMX (StorageService->joinRing()) to initiate ring joining");
         }
+    }
+    
+    /**
+     * Flushes tables with durable_writes = off OR all tables to disk, and waits for flushes to complete.
+     * 
+     * @param flushAllTables
+     *            whether to flush all tables.
+     */
+    public void flushTablesBlocking(boolean flushAllTables)
+    {
+        List<Future<?>> flushes = new ArrayList<Future<?>>();
+        for (Table table : Table.all())
+        {
+            KSMetaData ksm = Schema.instance.getKSMetaData(table.name);
+            if (!ksm.durableWrites || flushAllTables)
+            {
+                for (ColumnFamilyStore cfs : table.getColumnFamilyStores())
+                {
+                    Future<?> future = cfs.forceFlush();
+                    if (future != null)
+                        flushes.add(future);
+                }
+            }
+        }
+        FBUtilities.waitOnFutures(flushes);
+    }
+    
+    /**
+     * Shuts down Cassandra but flushes ALL Tables first (vs. flushing only those with durable_writes=off with SIGINT).
+     */
+    public void flushAllTablesAndExit()
+    {
+        // flush ALL tables to speed up restart
+        flushTablesBlocking(true);
+        // emulate SIGINT to make shutdown hooks run
+        System.exit(0);
     }
 
     private void joinTokenRing(int delay) throws IOException, org.apache.cassandra.config.ConfigurationException

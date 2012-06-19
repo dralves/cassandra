@@ -237,6 +237,11 @@ public interface StorageServiceMBean
      * Unlike scrub, it doesn't skip bad rows and do not snapshot sstables first.
      */
     public void upgradeSSTables(String tableName, String... columnFamilies) throws IOException, ExecutionException, InterruptedException;
+    
+    /**
+     * Flushes all tables to disk and calls System.exit.
+     */
+    public void flushAllTablesAndExit();
 
     /**
      * Flush all memtables for the given column families, or all columnfamilies for the given table

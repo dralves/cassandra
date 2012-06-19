@@ -115,6 +115,7 @@ public class NodeCmd
         SETCOMPACTIONTHRESHOLD,
         SETCOMPACTIONTHROUGHPUT,
         SETSTREAMTHROUGHPUT,
+        SHUTDOWN_NICELY,
         SNAPSHOT,
         STATUSTHRIFT,
         STOP,
@@ -763,6 +764,7 @@ public class NodeCmd
                 case DISABLETHRIFT   : probe.stopThriftServer(); break;
                 case ENABLETHRIFT    : probe.startThriftServer(); break;
                 case STATUSTHRIFT    : nodeCmd.printIsThriftServerRunning(System.out); break;
+                case SHUTDOWN_NICELY : probe.flushAllTablesAndExit(); break;
                 case RESETLOCALSCHEMA: probe.resetLocalSchema(); break;
                 case IDS             : nodeCmd.printHostIds(System.out); break;
 
