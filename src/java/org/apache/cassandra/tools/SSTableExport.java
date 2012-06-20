@@ -82,8 +82,36 @@ public class SSTableExport
      */
     private static void writeKey(PrintStream out, String value)
     {
-        writeJSON(out, value);
-        out.print(": ");
+       writeJSON(out, value);
+       out.print(": ");
+    }
+    
+    
+    /**
+     * JSON ColumnFamily metadata serializer.</br>
+     * Serializes:
+     * <ul>
+     *  <li>column family deletion info (if present)</li>
+     * </ul>
+     * 
+     * @param out The output steam to write data
+     * @param columnFamily to which the metadata belongs
+     */
+    private static void writeMeta(PrintStream out,  ColumnFamily columnFamily) {
+        
+        if (!columnFamily.deletionInfo().equals(DeletionInfo.LIVE)){
+            // begin meta
+            writeKey(out, "meta");
+            
+            // deletionInfo
+            out.print("{");
+            writeKey(out, "deletionInfo");
+            writeJSON(out, columnFamily.deletionInfo());
+            out.print("}");
+            
+            // end meta
+            out.print(",");
+        }
     }
 
     /**
@@ -96,6 +124,7 @@ public class SSTableExport
      */
     private static void serializeColumns(Iterator<OnDiskAtom> columns, PrintStream out, AbstractType<?> comparator, CFMetaData cfMetaData)
     {
+        
         while (columns.hasNext())
         {
             writeJSON(out, serializeColumn(columns.next(), comparator, cfMetaData));
@@ -196,7 +225,14 @@ public class SSTableExport
         CFMetaData cfMetaData = columnFamily.metadata();
         AbstractType<?> comparator = columnFamily.getComparator();
 
-        writeKey(out, bytesToHex(key.key));
+        
+        writeKey(out, "key");
+        writeJSON(out, bytesToHex(key.key));
+        out.print(",");
+        
+        writeMeta(out, columnFamily);
+        
+        writeKey(out, "cols");
         out.print(isSuperCF ? "{" : "[");
 
         if (isSuperCF)
