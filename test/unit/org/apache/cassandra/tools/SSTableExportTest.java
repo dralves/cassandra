@@ -216,6 +216,26 @@ public class SSTableExportTest extends SchemaLoader
         cf = qf.getSSTableColumnIterator(reader).getColumnFamily();
         assert cf == null;
     }
+    
+    @Test
+    public void testDeletedRowsAreNotRevived() throws IOException{
+        
+        File tempSS = tempSSTableFile("Keyspace1", "Standard1");
+        ColumnFamily cfamily = ColumnFamily.create("Keyspace1", "Standard1");
+        SSTableWriter writer = new SSTableWriter(tempSS.getPath(), 2);
+
+        // Add rowA
+        cfamily.addColumn(new QueryPath("Standard1", null, ByteBufferUtil.bytes("name")), ByteBufferUtil.bytes("val"), System.currentTimeMillis());
+        writer.append(Util.dk("rowA"), cfamily);
+        cfamily.clear();
+
+        // Add rowExclude
+        cfamily.addColumn(new QueryPath("Standard1", null, ByteBufferUtil.bytes("name")), ByteBufferUtil.bytes("val"), System.currentTimeMillis());
+        writer.append(Util.dk("rowExclude"), cfamily);
+        cfamily.clear();
+
+        
+    }
 
     @Test
     public void testExportCounterCf() throws IOException
