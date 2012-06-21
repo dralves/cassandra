@@ -198,7 +198,7 @@ public class SSTableExport
 
         writeKey(out, bytesToHex(key.key));
         out.print(isSuperCF ? "{" : "[");
-
+        
         if (isSuperCF)
         {
             while (row.hasNext())
@@ -394,7 +394,7 @@ public class SSTableExport
      */
     public static void main(String[] args) throws IOException, ConfigurationException
     {
-        String usage = String.format("Usage: %s <sstable> [-k key [-k key [...]] -x key [-x key [...]]]%n", SSTableExport.class.getName());
+        String usage = String.format("Usage: %s <sstable> [-k key [-k key [...]] | -x key [-x key [...]]]%n", SSTableExport.class.getName());
 
         CommandLineParser parser = new PosixParser();
         try
@@ -419,9 +419,24 @@ public class SSTableExport
 
         String[] keys = cmd.getOptionValues(KEY_OPTION);
         String[] excludes = cmd.getOptionValues(EXCLUDEKEY_OPTION);
+        
+        if (keys != null && keys.length > 0 && excludes != null && excludes.length > 0)
+        {
+            System.err.println("You must supply either supply a set of keys to include or exclude, but not both");
+            System.err.println(usage);
+        }
+        
         String ssTableFileName = new File(cmd.getArgs()[0]).getAbsolutePath();
 
-        DatabaseDescriptor.loadSchemas();
+        try
+        {
+//            DatabaseDescriptor.loadSchemas();
+        }
+        catch (Exception e)
+        {
+           // schemas might be loaded already for testing, complain but don't give up
+            System.err.println("Schemas were already loaded.");
+        }
         if (Schema.instance.getNonSystemTables().size() < 1)
         {
             String msg = "no non-system tables are defined";

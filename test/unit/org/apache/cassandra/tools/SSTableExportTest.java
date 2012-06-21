@@ -18,17 +18,26 @@
 */
 package org.apache.cassandra.tools;
 
+import static org.apache.cassandra.io.sstable.SSTableUtils.tempSSTableFile;
+import static org.apache.cassandra.utils.ByteBufferUtil.bytesToHex;
+import static org.apache.cassandra.utils.ByteBufferUtil.hexToBytes;
+import static org.junit.Assert.assertTrue;
+
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.util.Collections;
 
+import org.junit.Test;
+
 import org.apache.cassandra.SchemaLoader;
+import org.apache.cassandra.Util;
+import org.apache.cassandra.config.ConfigurationException;
+import org.apache.cassandra.db.Column;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.CounterColumn;
 import org.apache.cassandra.db.ExpiringColumn;
-import org.apache.cassandra.db.Column;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.db.filter.QueryPath;
 import org.apache.cassandra.db.marshal.UTF8Type;
@@ -36,19 +45,10 @@ import org.apache.cassandra.io.sstable.Descriptor;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.sstable.SSTableWriter;
 import org.apache.cassandra.utils.ByteBufferUtil;
-
-import static org.apache.cassandra.io.sstable.SSTableUtils.tempSSTableFile;
-import static org.apache.cassandra.utils.ByteBufferUtil.bytesToHex;
-import static org.apache.cassandra.utils.ByteBufferUtil.hexToBytes;
-import static org.junit.Assert.assertTrue;
-
-import org.apache.cassandra.Util;
-
 import org.json.simple.JSONArray;
 import org.json.simple.JSONObject;
 import org.json.simple.JSONValue;
 import org.json.simple.parser.ParseException;
-import org.junit.Test;
 
 public class SSTableExportTest extends SchemaLoader
 {
@@ -56,6 +56,7 @@ public class SSTableExportTest extends SchemaLoader
     {
         return bytesToHex(ByteBufferUtil.bytes(str));
     }
+    
 
     @Test
     public void testEnumeratekeys() throws IOException
@@ -268,5 +269,42 @@ public class SSTableExportTest extends SchemaLoader
         JSONArray data = (JSONArray)rowA.get(0);
         assert hexToBytes((String)data.get(0)).equals(ByteBufferUtil.bytes("data"));
         assert data.get(1).equals("{\"foo\":\"bar\"}");
+    }
+    
+    @Test
+    public void testDontAcceptBothIncludeAndExcludeKeys() throws IOException, ConfigurationException {
+        File tempSS = tempSSTableFile("Keyspace1", "ValuesWithQuotes");
+        ColumnFamily cfamily = ColumnFamily.create("Keyspace1", "ValuesWithQuotes");
+        SSTableWriter writer = new SSTableWriter(tempSS.getPath(), 2);
+
+        // Add rowA
+        cfamily.addColumn(null, new Column(ByteBufferUtil.bytes("data"), UTF8Type.instance.fromString("{\"foo\":\"bar\"}")));
+        writer.append(Util.dk("rowA"), cfamily);
+        cfamily.clear();
+        
+        writer.closeAndOpenReader();
+        
+        SSTableExport.main(new String[] { tempSS.getPath(), "-k", "aaaa", "-x", "bbbb" });
+    }
+    
+    @Test
+    public void testUserFriendlyError() throws IOException, ConfigurationException {
+        File tempSS = tempSSTableFile("Keyspace1", "Standard1");
+        ColumnFamily cfamily = ColumnFamily.create("Keyspace1", "Standard1");
+        SSTableWriter writer = new SSTableWriter(tempSS.getPath(), 2);
+
+        // Add rowA
+        cfamily.addColumn(new QueryPath("Standard1", null, ByteBufferUtil.bytes("colA")), ByteBufferUtil.bytes("valA"), System.currentTimeMillis());
+        writer.append(Util.dk("rowA"), cfamily);
+        cfamily.clear();
+
+        // Add rowB
+        cfamily.addColumn(new QueryPath("Standard1", null, ByteBufferUtil.bytes("colB")), ByteBufferUtil.bytes("valB"), System.currentTimeMillis());
+        writer.append(Util.dk("rowB"), cfamily);
+        cfamily.clear();
+
+        writer.closeAndOpenReader();
+        
+        SSTableExport.main(new String[] { tempSS.getPath(), "-k", "aaaa" });
     }
 }
