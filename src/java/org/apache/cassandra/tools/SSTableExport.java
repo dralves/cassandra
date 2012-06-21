@@ -225,7 +225,7 @@ public class SSTableExport
         CFMetaData cfMetaData = columnFamily.metadata();
         AbstractType<?> comparator = columnFamily.getComparator();
 
-        
+        out.print("{");
         writeKey(out, "key");
         writeJSON(out, bytesToHex(key.key));
         out.print(",");
@@ -263,6 +263,7 @@ public class SSTableExport
         }
 
         out.print(isSuperCF ? "}" : "]");
+        out.print("}");
 
     }
 
@@ -313,7 +314,7 @@ public class SSTableExport
         if (excludes != null)
             toExport.removeAll(Arrays.asList(excludes));
 
-        outs.println("{");
+        outs.println("[");
 
         int i = 0;
 
@@ -346,7 +347,7 @@ public class SSTableExport
             i++;
         }
 
-        outs.println("\n}");
+        outs.println("\n]");
         outs.flush();
 
         scanner.close();
@@ -365,7 +366,7 @@ public class SSTableExport
         SSTableIdentityIterator row;
         SSTableScanner scanner = reader.getDirectScanner();
 
-        outs.println("{");
+        outs.println("[");
 
         int i = 0;
 
@@ -386,7 +387,7 @@ public class SSTableExport
             i++;
         }
 
-        outs.println("\n}");
+        outs.println("\n]");
         outs.flush();
 
         scanner.close();
