@@ -17,37 +17,46 @@
  */
 package org.apache.cassandra.tools;
 
+import static org.apache.cassandra.utils.ByteBufferUtil.hexToBytes;
+
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.List;
+import java.util.Map;
+import java.util.SortedMap;
+import java.util.TreeMap;
 
-import com.google.common.annotations.VisibleForTesting;
-
-import org.apache.cassandra.config.Schema;
-import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.db.marshal.BytesType;
-import org.apache.cassandra.db.marshal.MarshalException;
-import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.commons.cli.*;
-
-import org.codehaus.jackson.map.ObjectMapper;
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.PosixParser;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.db.*;
+import org.apache.cassandra.config.Schema;
+import org.apache.cassandra.db.ColumnFamily;
+import org.apache.cassandra.db.ColumnFamilyType;
+import org.apache.cassandra.db.CounterColumn;
+import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.DeletionInfo;
+import org.apache.cassandra.db.ExpiringColumn;
+import org.apache.cassandra.db.RangeTombstone;
 import org.apache.cassandra.db.filter.QueryPath;
+import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.BytesType;
+import org.apache.cassandra.db.marshal.MarshalException;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.io.sstable.SSTableWriter;
-import org.codehaus.jackson.type.TypeReference;
-
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.codehaus.jackson.JsonFactory;
-import org.codehaus.jackson.map.MappingJsonFactory;
-
 import org.codehaus.jackson.JsonParser;
-
-import static org.apache.cassandra.utils.ByteBufferUtil.hexToBytes;
+import org.codehaus.jackson.JsonToken;
+import org.codehaus.jackson.map.MappingJsonFactory;
+import org.codehaus.jackson.type.TypeReference;
 
 /**
  * Create SSTables from JSON input
@@ -62,10 +71,10 @@ public class SSTableImport
     private static final Options options = new Options();
     private static CommandLine cmd;
 
-    private static Integer keyCountToImport = null;
-    private static boolean isSorted = false;
-
     private static final JsonFactory factory = new MappingJsonFactory().configure(JsonParser.Feature.INTERN_FIELD_NAMES, false);
+    
+    private Integer keyCountToImport;
+    private final boolean isSorted;
 
     static
     {
@@ -178,8 +187,24 @@ public class SSTableImport
             return value.duplicate();
         }
     }
+    
+    public SSTableImport()
+    {
+        this(null,false);
+    }
+    
+    public SSTableImport(boolean isSorted)
+    {
+        this(null,isSorted);
+    }
 
-    private static void addToStandardCF(List<?> row, ColumnFamily cfamily)
+    public SSTableImport(Integer keyCountToImport, boolean isSorted)
+    {
+        this.keyCountToImport = keyCountToImport;
+        this.isSorted = isSorted;
+    }
+
+    private void addToStandardCF(List<?> row, ColumnFamily cfamily)
     {
         addColumnsToCF(row, null, cfamily);
     }
@@ -191,7 +216,7 @@ public class SSTableImport
      * @param superName name of the super column if any
      * @param cfamily the column family to add columns to
      */
-    private static void addColumnsToCF(List<?> row, ByteBuffer superName, ColumnFamily cfamily)
+    private void addColumnsToCF(List<?> row, ByteBuffer superName, ColumnFamily cfamily)
     {
         CFMetaData cfm = cfamily.metadata();
         assert cfm != null;
@@ -224,13 +249,14 @@ public class SSTableImport
         }
     }
     
-    private static void parseCFMetadata(Map<?, ?> map, ColumnFamily columnFamily){
+    private void parseCFMetadata(Map<?, ?> map, ColumnFamily columnFamily){
         
         // deletionInfo is the only metadata we store for now
         if (map.containsKey("deletionInfo"))
         {
             Map<?, ?> unparsedDeletionInfo = (Map<?, ?>) map.get("deletionInfo");
-            long markedForDeleteAt = (Long) unparsedDeletionInfo.get("markedForDeleteAt");
+            Number number = (Number)unparsedDeletionInfo.get("markedForDeleteAt");
+            long markedForDeleteAt = number instanceof Long ? (Long)number : ((Integer)number).longValue();
             int localDeletionTime = (Integer) unparsedDeletionInfo.get("localDeletionTime");
             columnFamily.setDeletionInfo(new DeletionInfo(markedForDeleteAt, localDeletionTime));
         }
@@ -242,7 +268,7 @@ public class SSTableImport
      * @param row the super columns associated with a row
      * @param cfamily the column family to add columns to
      */
-    private static void addToSuperCF(Map<?, ?> row, ColumnFamily cfamily)
+    private void addToSuperCF(Map<?, ?> row, ColumnFamily cfamily)
     {
         CFMetaData metaData = cfamily.metadata();
         assert metaData != null;
@@ -273,7 +299,7 @@ public class SSTableImport
      *
      * @throws IOException for errors reading/writing input/output
      */
-    public static int importJson(String jsonFile, String keyspace, String cf, String ssTablePath) throws IOException
+    public int importJson(String jsonFile, String keyspace, String cf, String ssTablePath) throws IOException
     {
         ColumnFamily columnFamily = ColumnFamily.create(keyspace, cf);
         IPartitioner<?> partitioner = DatabaseDescriptor.getPartitioner();
@@ -287,7 +313,7 @@ public class SSTableImport
         return importedKeys;
     }
 
-    private static int importUnsorted(String jsonFile, ColumnFamily columnFamily, String ssTablePath, IPartitioner<?> partitioner) throws IOException
+    private int importUnsorted(String jsonFile, ColumnFamily columnFamily, String ssTablePath, IPartitioner<?> partitioner) throws IOException
     {
         int importedKeys = 0;
         long start = System.currentTimeMillis();
@@ -318,13 +344,10 @@ public class SSTableImport
             
             Object columns = row.getValue().get("cols");
             if (columnFamily.getType() == ColumnFamilyType.Super)
-            {
-                addToSuperCF((Map<?, ?>)columns, columnFamily);
-            }
+                addToSuperCF((Map<?, ?>) columns, columnFamily);
             else
-            {
-                addToStandardCF((List<?>)columns, columnFamily);
-            }
+                addToStandardCF((List<?>) columns, columnFamily);
+            
 
             writer.append(row.getKey(), columnFamily);
             columnFamily.clear();
@@ -351,7 +374,8 @@ public class SSTableImport
         return importedKeys;
     }
 
-    private static int importSorted(String jsonFile, ColumnFamily columnFamily, String ssTablePath, IPartitioner<?> partitioner) throws IOException
+    private int importSorted(String jsonFile, ColumnFamily columnFamily, String ssTablePath,
+            IPartitioner<?> partitioner) throws IOException
     {
         int importedKeys = 0; // already imported keys count
         long start = System.currentTimeMillis();
@@ -363,12 +387,12 @@ public class SSTableImport
             keyCountToImport = 0;
             System.out.println("Counting keys to import, please wait... (NOTE: to skip this use -n <num_keys>)");
 
-            parser.nextToken(); // START_OBJECT
+            parser.nextToken(); // START_ARRAY
             while (parser.nextToken() != null)
             {
-                parser.nextToken();
                 parser.skipChildren();
-                if (parser.getCurrentName() == null) continue;
+                if (parser.getCurrentToken() == JsonToken.END_ARRAY)
+                    break;
 
                 keyCountToImport++;
             }
@@ -382,66 +406,51 @@ public class SSTableImport
         int lineNumber = 1;
         DecoratedKey prevStoredKey = null;
 
+        parser.nextToken(); // START_ARRAY
         while (parser.nextToken() != null)
         {
             String key = parser.getCurrentName();
+            Map<?, ?> row = parser.readValueAs(new TypeReference<Map<?, ?>>(){});
+            DecoratedKey currentKey = partitioner.decorateKey(hexToBytes((String) row.get("key")));
+            
+            if (row.containsKey("meta")) 
+                parseCFMetadata((Map<?, ?>) row.get("meta"), columnFamily);
+            
 
-            if (key != null)
+            if (columnFamily.getType() == ColumnFamilyType.Super)
+                addToSuperCF((Map<?, ?>)row.get("cols"), columnFamily);
+            else
+                addToStandardCF((List<?>)row.get("cols"), columnFamily);
+            
+            
+
+            if (prevStoredKey != null && prevStoredKey.compareTo(currentKey) != -1)
             {
-                String tokenName = parser.nextToken().name();
-
-                if (tokenName.equals("START_ARRAY"))
-                {
-                    if (columnFamily.getType() == ColumnFamilyType.Super)
-                    {
-                        throw new RuntimeException("Can't write Standard columns to the Super Column Family.");
-                    }
-
-                    List<?> columns = parser.readValueAs(new TypeReference<List<?>>() {});
-                    addToStandardCF(columns, columnFamily);
-                }
-                else if (tokenName.equals("START_OBJECT"))
-                {
-                    if (columnFamily.getType() == ColumnFamilyType.Standard)
-                    {
-                        throw new RuntimeException("Can't write Super columns to the Standard Column Family.");
-                    }
-
-                    Map<?, ?> columns = parser.readValueAs(new TypeReference<Map<?, ?>>() {});
-                    addToSuperCF(columns, columnFamily);
-                }
-                else
-                {
-                    throw new UnsupportedOperationException("Only Array or Hash allowed as row content.");
-                }
-
-                DecoratedKey currentKey = partitioner.decorateKey(hexToBytes(key));
-
-                if (prevStoredKey != null && prevStoredKey.compareTo(currentKey) != -1)
-                {
-                    System.err.printf("Line %d: Key %s is greater than previous, collection is not sorted properly. Aborting import. You might need to delete SSTables manually.%n", lineNumber, key);
-                    return -1;
-                }
-
-                // saving decorated key
-                writer.append(currentKey, columnFamily);
-                columnFamily.clear();
-
-                prevStoredKey = currentKey;
-                importedKeys++;
-                lineNumber++;
-
-                long current = System.currentTimeMillis();
-
-                if (current - start >= 5000) // 5 secs.
-                {
-                    System.out.printf("Currently imported %d keys.%n", importedKeys);
-                    start = current;
-                }
-
-                if (keyCountToImport == importedKeys)
-                    break;
+                System.err
+                        .printf("Line %d: Key %s is greater than previous, collection is not sorted properly. Aborting import. You might need to delete SSTables manually.%n",
+                                lineNumber, key);
+                return -1;
             }
+
+            // saving decorated key
+            writer.append(currentKey, columnFamily);
+            columnFamily.clear();
+
+            prevStoredKey = currentKey;
+            importedKeys++;
+            lineNumber++;
+
+            long current = System.currentTimeMillis();
+
+            if (current - start >= 5000) // 5 secs.
+            {
+                System.out.printf("Currently imported %d keys.%n", importedKeys);
+                start = current;
+            }
+
+            if (keyCountToImport == importedKeys)
+                break;   
+            
         }
 
         writer.closeAndOpenReader();
@@ -455,7 +464,7 @@ public class SSTableImport
      * @return json parser instance for given file
      * @throws IOException if any I/O error.
      */
-    private static JsonParser getParser(String fileName) throws IOException
+    private JsonParser getParser(String fileName) throws IOException
     {
         return factory.createJsonParser(new File(fileName));
     }
@@ -494,6 +503,9 @@ public class SSTableImport
         String ssTable  = cmd.getArgs()[1];
         String keyspace = cmd.getOptionValue(KEYSPACE_OPTION);
         String cfamily  = cmd.getOptionValue(COLUMN_FAMILY_OPTION);
+        
+        Integer keyCountToImport = null;
+        boolean isSorted = false;
 
         if (cmd.hasOption(KEY_COUNT_OPTION))
         {
@@ -515,7 +527,7 @@ public class SSTableImport
 
         try
         {
-            importJson(json, keyspace, cfamily, ssTable);
+           new SSTableImport(keyCountToImport,isSorted).importJson(json, keyspace, cfamily, ssTable);
         }
         catch (Exception e)
         {
@@ -538,21 +550,6 @@ public class SSTableImport
             Option opt = (Option) o;
             System.out.println("  -" +opt.getOpt() + " - " + opt.getDescription());
         }
-    }
-
-    /**
-     * Used by test framework to set key count
-     * @param keyCount numbers of keys to import
-     */
-    public static void setKeyCountToImport(Integer keyCount)
-    {
-        keyCountToImport = keyCount;
-    }
-    
-    @VisibleForTesting
-    public static void setSorted(boolean isSorted)
-    {
-        SSTableImport.isSorted = isSorted;
     }
 
     /**
