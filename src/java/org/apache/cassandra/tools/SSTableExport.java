@@ -106,7 +106,8 @@ public class SSTableExport
             // deletionInfo
             out.print("{");
             writeKey(out, "deletionInfo");
-            writeJSON(out, columnFamily.deletionInfo());
+            // only store topLevelDeletion (serializeForSSTable only uses this)
+            writeJSON(out, columnFamily.deletionInfo().getTopLevelDeletion());
             out.print("}");
             
             // end meta

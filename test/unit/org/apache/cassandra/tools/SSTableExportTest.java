@@ -319,6 +319,7 @@ public class SSTableExportTest extends SchemaLoader
         SSTableExport.export(reader, new PrintStream(tempJson.getPath()), new String[0]);
 
         JSONArray json = (JSONArray)JSONValue.parseWithException(new FileReader(tempJson));
+        System.out.println(json.toJSONString());
         assertEquals("unexpected number of rows", 1, json.size());
         
         JSONObject row = (JSONObject)json.get(0);
@@ -338,13 +339,11 @@ public class SSTableExportTest extends SchemaLoader
 
         JSONObject serializedDeletionInfo = (JSONObject) meta.get("deletionInfo");
         assertNotNull("expecing deletionInfo to be present", serializedDeletionInfo);
-        Boolean live = (Boolean) serializedDeletionInfo.get("live");
-        assertTrue(!live);
-        JSONObject topLevelDeletion = (JSONObject) serializedDeletionInfo.get("topLevelDeletion");
+        
         assertEquals(
                 "unexpected serialization format for topLevelDeletion",
                 "{\"markedForDeleteAt\":0,\"localDeletionTime\":0}",
-                topLevelDeletion.toJSONString());
+                serializedDeletionInfo.toJSONString());
 
         // check the colums are what we put in
         JSONArray cols = (JSONArray) row.get("cols");

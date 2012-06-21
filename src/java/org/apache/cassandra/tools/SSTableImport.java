@@ -22,12 +22,16 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.BytesType;
 import org.apache.cassandra.db.marshal.MarshalException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.commons.cli.*;
+
+import org.codehaus.jackson.map.ObjectMapper;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ConfigurationException;
@@ -219,6 +223,18 @@ public class SSTableImport
             }
         }
     }
+    
+    private static void parseCFMetadata(Map<?, ?> map, ColumnFamily columnFamily){
+        
+        // deletionInfo is the only metadata we store for now
+        if (map.containsKey("deletionInfo"))
+        {
+            Map<?, ?> unparsedDeletionInfo = (Map<?, ?>) map.get("deletionInfo");
+            long markedForDeleteAt = (Long) unparsedDeletionInfo.get("markedForDeleteAt");
+            int localDeletionTime = (Integer) unparsedDeletionInfo.get("localDeletionTime");
+            columnFamily.setDeletionInfo(new DeletionInfo(markedForDeleteAt, localDeletionTime));
+        }
+    }
 
     /**
      * Add super columns to a column family.
@@ -257,51 +273,64 @@ public class SSTableImport
      *
      * @throws IOException for errors reading/writing input/output
      */
-    public static void importJson(String jsonFile, String keyspace, String cf, String ssTablePath) throws IOException
+    public static int importJson(String jsonFile, String keyspace, String cf, String ssTablePath) throws IOException
     {
         ColumnFamily columnFamily = ColumnFamily.create(keyspace, cf);
         IPartitioner<?> partitioner = DatabaseDescriptor.getPartitioner();
 
         int importedKeys = (isSorted) ? importSorted(jsonFile, columnFamily, ssTablePath, partitioner)
-                                      : importUnsorted(getParser(jsonFile), columnFamily, ssTablePath, partitioner);
+                                      : importUnsorted(jsonFile, columnFamily, ssTablePath, partitioner);
 
         if (importedKeys != -1)
             System.out.printf("%d keys imported successfully.%n", importedKeys);
+        
+        return importedKeys;
     }
 
-    private static int importUnsorted(JsonParser parser, ColumnFamily columnFamily, String ssTablePath, IPartitioner<?> partitioner) throws IOException
+    private static int importUnsorted(String jsonFile, ColumnFamily columnFamily, String ssTablePath, IPartitioner<?> partitioner) throws IOException
     {
         int importedKeys = 0;
         long start = System.currentTimeMillis();
-        Map<?, ?> data = parser.readValueAs(new TypeReference<Map<?, ?>>() {});
+        
+        JsonParser parser = getParser(jsonFile);
+        
+        Object[] data = parser.readValueAs(new TypeReference<Object[]>() {});
 
-        keyCountToImport = (keyCountToImport == null) ? data.size() : keyCountToImport;
+        keyCountToImport = (keyCountToImport == null) ? data.length : keyCountToImport;
         SSTableWriter writer = new SSTableWriter(ssTablePath, keyCountToImport);
 
         System.out.printf("Importing %s keys...%n", keyCountToImport);
 
         // sort by dk representation, but hold onto the hex version
-        SortedMap<DecoratedKey,String> decoratedKeys = new TreeMap<DecoratedKey,String>();
+        SortedMap<DecoratedKey,Map<?, ?>> decoratedKeys = new TreeMap<DecoratedKey,Map<?, ?>>();
 
-        for (Object keyObject : data.keySet())
+        for (Object row : data)
         {
-            String key = (String) keyObject;
-            decoratedKeys.put(partitioner.decorateKey(hexToBytes(key)), key);
+            Map<?,?> rowAsMap = (Map<?, ?>)row;
+            decoratedKeys.put(partitioner.decorateKey(hexToBytes((String)rowAsMap.get("key"))), rowAsMap);
         }
 
-        for (Map.Entry<DecoratedKey, String> rowKey : decoratedKeys.entrySet())
+        for (Map.Entry<DecoratedKey, Map<?, ?>> row : decoratedKeys.entrySet())
         {
+            if (row.getValue().containsKey("meta")) {
+                parseCFMetadata((Map<?, ?>) row.getValue().get("meta"), columnFamily);
+            }
+            
+            Object columns = row.getValue().get("cols");
             if (columnFamily.getType() == ColumnFamilyType.Super)
             {
-                addToSuperCF((Map<?, ?>) data.get(rowKey.getValue()), columnFamily);
+                addToSuperCF((Map<?, ?>)columns, columnFamily);
             }
             else
             {
-                addToStandardCF((List<?>) data.get(rowKey.getValue()), columnFamily);
+                addToStandardCF((List<?>)columns, columnFamily);
             }
 
-            writer.append(rowKey.getKey(), columnFamily);
+            writer.append(row.getKey(), columnFamily);
             columnFamily.clear();
+            
+            // ready the column family for the next row since we might have read deletionInfo metadata
+            columnFamily.delete(DeletionInfo.LIVE);
 
             importedKeys++;
 
@@ -322,7 +351,7 @@ public class SSTableImport
         return importedKeys;
     }
 
-    public static int importSorted(String jsonFile, ColumnFamily columnFamily, String ssTablePath, IPartitioner<?> partitioner) throws IOException
+    private static int importSorted(String jsonFile, ColumnFamily columnFamily, String ssTablePath, IPartitioner<?> partitioner) throws IOException
     {
         int importedKeys = 0; // already imported keys count
         long start = System.currentTimeMillis();
@@ -518,6 +547,12 @@ public class SSTableImport
     public static void setKeyCountToImport(Integer keyCount)
     {
         keyCountToImport = keyCount;
+    }
+    
+    @VisibleForTesting
+    public static void setSorted(boolean isSorted)
+    {
+        SSTableImport.isSorted = isSorted;
     }
 
     /**

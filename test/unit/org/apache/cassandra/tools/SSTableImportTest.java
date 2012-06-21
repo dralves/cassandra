@@ -56,6 +56,7 @@ public class SSTableImportTest extends SchemaLoader
         // Import JSON to temp SSTable file
         String jsonUrl = resourcePath("SimpleCF.json");
         File tempSS = tempSSTableFile("Keyspace1", "Standard1");
+        SSTableImport.setSorted(true);
         SSTableImport.importJson(jsonUrl, "Keyspace1", "Standard1", tempSS.getPath());
 
         // Verify results
@@ -85,6 +86,7 @@ public class SSTableImportTest extends SchemaLoader
         // Import JSON to temp SSTable file
         String jsonUrl = resourcePath("SimpleCF.oldformat.json");
         File tempSS = tempSSTableFile("Keyspace1", "Standard1");
+        SSTableImport.setSorted(true);
         SSTableImport.importJson(jsonUrl, "Keyspace1", "Standard1", tempSS.getPath());
 
         // Verify results
@@ -106,6 +108,7 @@ public class SSTableImportTest extends SchemaLoader
     {
         String jsonUrl = resourcePath("SuperCF.json");
         File tempSS = tempSSTableFile("Keyspace1", "Super4");
+        SSTableImport.setSorted(true);
         SSTableImport.importJson(jsonUrl, "Keyspace1", "Super4", tempSS.getPath());
 
         // Verify results
@@ -126,11 +129,9 @@ public class SSTableImportTest extends SchemaLoader
         String jsonUrl = resourcePath("UnsortedSuperCF.json");
         File tempSS = tempSSTableFile("Keyspace1", "Super4");
 
-        ColumnFamily columnFamily = ColumnFamily.create("Keyspace1", "Super4");
-        IPartitioner<?> partitioner = DatabaseDescriptor.getPartitioner();
-
         SSTableImport.setKeyCountToImport(3);
-        int result = SSTableImport.importSorted(jsonUrl, columnFamily, tempSS.getPath(), partitioner);
+        SSTableImport.setSorted(false);
+        int result = SSTableImport.importJson(jsonUrl, "Keyspace1","Super4", tempSS.getPath());
         assert result == -1;
     }
 
@@ -140,6 +141,7 @@ public class SSTableImportTest extends SchemaLoader
         // Import JSON to temp SSTable file
         String jsonUrl = resourcePath("CounterCF.json");
         File tempSS = tempSSTableFile("Keyspace1", "Counter1");
+        SSTableImport.setSorted(true);
         SSTableImport.importJson(jsonUrl, "Keyspace1", "Counter1", tempSS.getPath());
 
         // Verify results
