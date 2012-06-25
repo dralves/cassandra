@@ -88,28 +88,31 @@ public class SSTableExport
     
     
     /**
-     * JSON ColumnFamily metadata serializer.</br>
-     * Serializes:
+     * JSON ColumnFamily metadata serializer.</br> Serializes:
      * <ul>
-     *  <li>column family deletion info (if present)</li>
+     * <li>column family deletion info (if present)</li>
      * </ul>
      * 
-     * @param out The output steam to write data
-     * @param columnFamily to which the metadata belongs
+     * @param out
+     *            The output steam to write data
+     * @param columnFamily
+     *            to which the metadata belongs
      */
-    private static void writeMeta(PrintStream out,  ColumnFamily columnFamily) {
-        
-        if (!columnFamily.deletionInfo().equals(DeletionInfo.LIVE)){
+    private static void writeMeta(PrintStream out, ColumnFamily columnFamily)
+    {
+
+        if (!columnFamily.deletionInfo().equals(DeletionInfo.LIVE))
+        {
             // begin meta
             writeKey(out, "meta");
-            
+
             // deletionInfo
             out.print("{");
             writeKey(out, "deletionInfo");
             // only store topLevelDeletion (serializeForSSTable only uses this)
             writeJSON(out, columnFamily.deletionInfo().getTopLevelDeletion());
             out.print("}");
-            
+
             // end meta
             out.print(",");
         }
@@ -265,7 +268,6 @@ public class SSTableExport
 
         out.print(isSuperCF ? "}" : "]");
         out.print("}");
-
     }
 
     /**
