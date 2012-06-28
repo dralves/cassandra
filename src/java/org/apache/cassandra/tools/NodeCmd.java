@@ -37,6 +37,7 @@ import java.util.Map.Entry;
 import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
+import com.google.common.collect.ImmutableBiMap;
 import com.google.common.collect.Maps;
 import org.apache.commons.cli.CommandLine;
 import org.apache.commons.cli.CommandLineParser;
@@ -229,11 +230,11 @@ public class NodeCmd
      */
     public void printRing(PrintStream outs, String keyspace)
     {
-        Map<String, String> tokenToEndpoint = probe.getTokenToEndpointMap();
+        Map<String, String> endpointsToTokens = ImmutableBiMap.copyOf(probe.getTokenToEndpointMap()).inverse();
         String format = "%-16s%-12s%-7s%-8s%-16s%-20s%-44s%n";
 
         // Calculate per-token ownership of the ring
-        Map<String, Float> ownerships;
+        Map<InetAddress, Float> ownerships;
         boolean keyspaceSelected;
         try
         {
@@ -249,18 +250,18 @@ public class NodeCmd
         try
         {
             outs.println();
-            Map<String,Map<String,Float>> perDcOwnerships = Maps.newLinkedHashMap();
+            Map<String,Map<InetAddress,Float>> perDcOwnerships = Maps.newLinkedHashMap();
             // get the different datasets and map to tokens
-            for (Map.Entry<String,Float> ownership : ownerships.entrySet())
+            for (Map.Entry<InetAddress,Float> ownership : ownerships.entrySet())
             {
-                String dc = probe.getEndpointSnitchInfoProxy().getDatacenter(tokenToEndpoint.get(ownership.getKey()));
+                String dc = probe.getEndpointSnitchInfoProxy().getDatacenter(endpointsToTokens.get(ownership.getKey()));
                 if (!perDcOwnerships.containsKey(dc)){
-                    perDcOwnerships.put(dc, new LinkedHashMap<String, Float>());
+                    perDcOwnerships.put(dc, new LinkedHashMap<InetAddress, Float>());
                 }
                 perDcOwnerships.get(dc).put(ownership.getKey(), ownership.getValue());
             }
-            for (Map.Entry<String,Map<String,Float>> entry : perDcOwnerships.entrySet()){
-                printDc(outs, format, entry.getKey(), tokenToEndpoint, keyspaceSelected, entry.getValue());
+            for (Map.Entry<String,Map<InetAddress,Float>> entry : perDcOwnerships.entrySet()){
+                printDc(outs, format, entry.getKey(), endpointsToTokens, keyspaceSelected, entry.getValue());
             }
         }
         catch (UnknownHostException e)
@@ -269,8 +270,8 @@ public class NodeCmd
         }
     }
     
-    private void printDc(PrintStream outs, String format, String dc, Map<String, String> tokenToEndpoint,
-            boolean keyspaceSelected, Map<String, Float> filteredOwnerships)
+    private void printDc(PrintStream outs, String format, String dc, Map<String, String> endpointsToTokens,
+            boolean keyspaceSelected, Map<InetAddress, Float> filteredOwnerships)
     {
         Collection<String> liveNodes = probe.getLiveNodes();
         Collection<String> deadNodes = probe.getUnreachableNodes();
@@ -285,8 +286,8 @@ public class NodeCmd
         // get the total amount of replicas for this dc and the last token in this dc's ring
         float totalReplicas = 0f;
         String lastToken = "";
-        for (Map.Entry<String, Float> entry : filteredOwnerships.entrySet()){
-            lastToken = entry.getKey();
+        for (Map.Entry<InetAddress, Float> entry : filteredOwnerships.entrySet()){
+            lastToken = endpointsToTokens.get(entry.getKey().toString());
             totalReplicas += entry.getValue();
         }
         
@@ -300,8 +301,8 @@ public class NodeCmd
         else
             outs.println();
         
-        for (Map.Entry<String, Float> entry : filteredOwnerships.entrySet()){
-            String primaryEndpoint = tokenToEndpoint.get(entry.getKey());
+        for (Map.Entry<InetAddress, Float> entry : filteredOwnerships.entrySet()){
+            String primaryEndpoint = endpointsToTokens.get(entry.getKey());
             String rack;
             try
             {
