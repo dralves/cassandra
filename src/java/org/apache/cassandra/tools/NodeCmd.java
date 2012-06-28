@@ -255,7 +255,7 @@ public class NodeCmd
             // get the different datasets and map to tokens
             for (Map.Entry<InetAddress, Float> ownership : ownerships.entrySet())
             {
-                String dc = probe.getEndpointSnitchInfoProxy().getDatacenter(endpointsToTokens.get(ownership.getKey()));
+                String dc = probe.getEndpointSnitchInfoProxy().getDatacenter(ownership.getKey().getHostAddress());
                 if (!perDcOwnerships.containsKey(dc))
                 {
                     perDcOwnerships.put(dc, new LinkedHashMap<InetAddress, Float>());
@@ -291,9 +291,10 @@ public class NodeCmd
         String lastToken = "";
         for (Map.Entry<InetAddress, Float> entry : filteredOwnerships.entrySet())
         {
-            lastToken = endpointsToTokens.get(entry.getKey().toString());
+            lastToken = endpointsToTokens.get(entry.getKey().getHostAddress());
             totalReplicas += entry.getValue();
         }
+        
 
         if (keyspaceSelected)
             outs.print("Replicas: " + (int) totalReplicas + "\n\n");
@@ -301,42 +302,43 @@ public class NodeCmd
         outs.printf(format, "Address", "Rack", "Status", "State", "Load", "Owns", "Token");
 
         if (filteredOwnerships.size() > 1)
-            outs.printf(format, "", "", "", "", "", "", "", lastToken);
+            outs.printf(format, "", "", "", "", "", "", lastToken);
         else
             outs.println();
 
         for (Map.Entry<InetAddress, Float> entry : filteredOwnerships.entrySet())
         {
-            String primaryEndpoint = endpointsToTokens.get(entry.getKey());
+            String endpoint = entry.getKey().getHostAddress();
+            String token = endpointsToTokens.get(entry.getKey().getHostAddress());
             String rack;
             try
             {
-                rack = probe.getEndpointSnitchInfoProxy().getRack(primaryEndpoint);
+                rack = probe.getEndpointSnitchInfoProxy().getRack(endpoint);
             }
             catch (UnknownHostException e)
             {
                 rack = "Unknown";
             }
-            String status = liveNodes.contains(primaryEndpoint)
+            String status = liveNodes.contains(endpoint)
                     ? "Up"
-                    : deadNodes.contains(primaryEndpoint)
+                    : deadNodes.contains(endpoint)
                             ? "Down"
                             : "?";
 
             String state = "Normal";
 
-            if (joiningNodes.contains(primaryEndpoint))
+            if (joiningNodes.contains(endpoint))
                 state = "Joining";
-            else if (leavingNodes.contains(primaryEndpoint))
+            else if (leavingNodes.contains(endpoint))
                 state = "Leaving";
-            else if (movingNodes.contains(primaryEndpoint))
+            else if (movingNodes.contains(endpoint))
                 state = "Moving";
 
-            String load = loadMap.containsKey(primaryEndpoint)
-                    ? loadMap.get(primaryEndpoint)
+            String load = loadMap.containsKey(endpoint)
+                    ? loadMap.get(endpoint)
                     : "?";
             String owns = new DecimalFormat("##0.00%").format(entry.getValue());
-            outs.printf(format, primaryEndpoint, rack, status, state, load, owns, entry.getKey());
+            outs.printf(format, entry.getKey(), rack, status, state, load, owns, token);
         }
         outs.println();
     }
