@@ -2763,7 +2763,7 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         if (isDcAwareReplicationStrategy(keyspace))
         {
             // mapping of dc's to nodes, use sorted map so that we get dcs sorted
-            SortedMap<String,Collection<InetAddress>> sortedDcsToEndpoints = new TreeMap<String,Collection<InetAddress>>();
+            SortedMap<String, Collection<InetAddress>> sortedDcsToEndpoints = new TreeMap<String, Collection<InetAddress>>();
             sortedDcsToEndpoints.putAll(tokenMetadata.getTopology().getDatacenterEndpoints().asMap());
             for (Collection<InetAddress> endpoints : sortedDcsToEndpoints.values())
                 endpointsGroupedByDc.add(endpoints);
@@ -2789,7 +2789,7 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
                     return endpointsToTokens.get(o1).compareTo(endpointsToTokens.get(o2));
                 }
             });
-            
+
             // calculate the ownership without replication
             Map<Token, Float> tokenOwnership = getPartitioner().describeOwnership(
                     Lists.transform(sortedEndpoints, new Function<InetAddress, Token>()
