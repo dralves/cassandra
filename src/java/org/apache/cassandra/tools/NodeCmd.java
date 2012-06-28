@@ -225,8 +225,9 @@ public class NodeCmd
 
     /**
      * Write a textual representation of the Cassandra ring.
-     *
-     * @param outs the stream to write to
+     * 
+     * @param outs
+     *            the stream to write to
      */
     public void printRing(PrintStream outs, String keyspace)
     {
@@ -250,23 +251,25 @@ public class NodeCmd
         try
         {
             outs.println();
-            Map<String,Map<InetAddress,Float>> perDcOwnerships = Maps.newLinkedHashMap();
+            Map<String, Map<InetAddress, Float>> perDcOwnerships = Maps.newLinkedHashMap();
             // get the different datasets and map to tokens
-            for (Map.Entry<InetAddress,Float> ownership : ownerships.entrySet())
+            for (Map.Entry<InetAddress, Float> ownership : ownerships.entrySet())
             {
                 String dc = probe.getEndpointSnitchInfoProxy().getDatacenter(endpointsToTokens.get(ownership.getKey()));
-                if (!perDcOwnerships.containsKey(dc)){
+                if (!perDcOwnerships.containsKey(dc))
+                {
                     perDcOwnerships.put(dc, new LinkedHashMap<InetAddress, Float>());
                 }
                 perDcOwnerships.get(dc).put(ownership.getKey(), ownership.getValue());
             }
-            for (Map.Entry<String,Map<InetAddress,Float>> entry : perDcOwnerships.entrySet()){
+            for (Map.Entry<String, Map<InetAddress, Float>> entry : perDcOwnerships.entrySet())
+            {
                 printDc(outs, format, entry.getKey(), endpointsToTokens, keyspaceSelected, entry.getValue());
             }
         }
         catch (UnknownHostException e)
         {
-           throw new RuntimeException(e);
+            throw new RuntimeException(e);
         }
     }
     
@@ -279,29 +282,31 @@ public class NodeCmd
         Collection<String> leavingNodes = probe.getLeavingNodes();
         Collection<String> movingNodes = probe.getMovingNodes();
         Map<String, String> loadMap = probe.getLoadMap();
-        
-        outs.println("Datacenter: "+dc);
+
+        outs.println("Datacenter: " + dc);
         outs.println("==========");
-        
+
         // get the total amount of replicas for this dc and the last token in this dc's ring
         float totalReplicas = 0f;
         String lastToken = "";
-        for (Map.Entry<InetAddress, Float> entry : filteredOwnerships.entrySet()){
+        for (Map.Entry<InetAddress, Float> entry : filteredOwnerships.entrySet())
+        {
             lastToken = endpointsToTokens.get(entry.getKey().toString());
             totalReplicas += entry.getValue();
         }
-        
+
         if (keyspaceSelected)
-            outs.print("Replicas: " + (int) totalReplicas+"\n\n");
-        
+            outs.print("Replicas: " + (int) totalReplicas + "\n\n");
+
         outs.printf(format, "Address", "Rack", "Status", "State", "Load", "Owns", "Token");
-        
+
         if (filteredOwnerships.size() > 1)
             outs.printf(format, "", "", "", "", "", "", "", lastToken);
         else
             outs.println();
-        
-        for (Map.Entry<InetAddress, Float> entry : filteredOwnerships.entrySet()){
+
+        for (Map.Entry<InetAddress, Float> entry : filteredOwnerships.entrySet())
+        {
             String primaryEndpoint = endpointsToTokens.get(entry.getKey());
             String rack;
             try
@@ -313,10 +318,10 @@ public class NodeCmd
                 rack = "Unknown";
             }
             String status = liveNodes.contains(primaryEndpoint)
-                            ? "Up"
-                            : deadNodes.contains(primaryEndpoint)
-                              ? "Down"
-                              : "?";
+                    ? "Up"
+                    : deadNodes.contains(primaryEndpoint)
+                            ? "Down"
+                            : "?";
 
             String state = "Normal";
 
@@ -328,8 +333,8 @@ public class NodeCmd
                 state = "Moving";
 
             String load = loadMap.containsKey(primaryEndpoint)
-                          ? loadMap.get(primaryEndpoint)
-                          : "?";
+                    ? loadMap.get(primaryEndpoint)
+                    : "?";
             String owns = new DecimalFormat("##0.00%").format(entry.getValue());
             outs.printf(format, primaryEndpoint, rack, status, state, load, owns, entry.getKey());
         }
