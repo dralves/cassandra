@@ -36,16 +36,18 @@ public class Config
     public SeedProviderDef seed_provider;
     public DiskAccessMode disk_access_mode = DiskAccessMode.auto;
 
-    /* Address where to run the job tracker */
-    public String job_tracker_host;
-
-    /* Job Jar Location */
-    public String job_jar_file_location;
-
     /* initial token in the ring */
     public String initial_token;
 
-    public Long rpc_timeout_in_ms = new Long(2000);
+    public Long rpc_timeout_in_ms = new Long(10000);
+
+    public Long read_rpc_timeout_in_ms = new Long(10000);
+
+    public Long range_rpc_timeout_in_ms = new Long(10000);
+
+    public Long write_rpc_timeout_in_ms = new Long(10000);
+
+    public Long truncate_rpc_timeout_in_ms = new Long(300000);
 
     public Integer streaming_socket_timeout_in_ms = new Integer(0);
 
@@ -112,12 +114,15 @@ public class Config
 
     public EncryptionOptions encryption_options = new EncryptionOptions();
 
+    public InternodeCompression internode_compression = InternodeCompression.none;
+
     public Integer index_interval = 128;
 
     public Double flush_largest_memtables_at = 1.0;
     public Double reduce_cache_sizes_at = 1.0;
     public double reduce_cache_capacity_to = 0.6;
-    public int hinted_handoff_throttle_delay_in_ms = 0;
+    public int hinted_handoff_throttle_in_kb = 1024;
+    public int max_hints_delivery_threads = 1;
     public boolean compaction_preheat_key_cache = true;
 
     public boolean incremental_backups = false;
@@ -158,12 +163,19 @@ public class Config
         loadYaml = value;
     }
 
-    public static enum CommitLogSync {
+    public static enum CommitLogSync
+    {
         periodic,
         batch
     }
 
-    public static enum DiskAccessMode {
+    public static enum InternodeCompression
+    {
+        all, none, dc
+    }
+
+    public static enum DiskAccessMode
+    {
         auto,
         mmap,
         mmap_index_only,

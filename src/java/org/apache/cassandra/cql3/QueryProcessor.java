@@ -27,6 +27,7 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.cql3.statements.*;
 import org.apache.cassandra.config.*;
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.filter.*;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.TypeParser;
 import org.apache.cassandra.service.ClientState;
@@ -75,28 +76,27 @@ public class QueryProcessor
         validateColumnNames(Collections.singletonList(column));
     }
 
-    public static void validateSlicePredicate(CFMetaData metadata, SlicePredicate predicate)
+    public static void validateFilter(CFMetaData metadata, IFilter filter)
     throws InvalidRequestException
     {
-        if (predicate.slice_range != null)
-            validateSliceRange(metadata, predicate.slice_range);
+        if (filter instanceof SliceQueryFilter)
+            validateSliceFilter(metadata, (SliceQueryFilter)filter);
         else
-            validateColumnNames(predicate.column_names);
+            validateColumnNames(((NamesQueryFilter)filter).columns);
     }
 
-    public static void validateSliceRange(CFMetaData metadata, SliceRange range)
+    public static void validateSliceFilter(CFMetaData metadata, SliceQueryFilter range)
     throws InvalidRequestException
     {
-        validateSliceRange(metadata, range.start, range.finish, range.reversed);
-    }
-
-    public static void validateSliceRange(CFMetaData metadata, ByteBuffer start, ByteBuffer finish, boolean reversed)
-    throws InvalidRequestException
-    {
-        AbstractType<?> comparator = metadata.getComparatorFor(null);
-        Comparator<ByteBuffer> orderedComparator = reversed ? comparator.reverseComparator: comparator;
-        if (start.remaining() > 0 && finish.remaining() > 0 && orderedComparator.compare(start, finish) > 0)
-            throw new InvalidRequestException("Range finish must come after start in traversal order");
+        try
+        {
+            AbstractType<?> comparator = metadata.getComparatorFor(null);
+            ColumnSlice.validate(range.slices, comparator, range.reversed);
+        }
+        catch (IllegalArgumentException e)
+        {
+            throw new InvalidRequestException(e.getMessage());
+        }
     }
 
     private static CqlResult processStatement(CQLStatement statement, ClientState clientState, List<ByteBuffer> variables)
@@ -120,33 +120,53 @@ public class QueryProcessor
         return processStatement(getStatement(queryString, clientState).statement, clientState, Collections.<ByteBuffer>emptyList());
     }
 
-    public static UntypedResultSet resultify(String queryString, Row row)
+    public static UntypedResultSet processInternal(String query)
+    {
+        try
+        {
+            ClientState state = new ClientState();
+            CqlResult result = processStatement(getStatement(query, state).statement, state, Collections.<ByteBuffer>emptyList());
+            return new UntypedResultSet(result.rows);
+        }
+        catch (UnavailableException e)
+        {
+            throw new RuntimeException(e);
+        }
+        catch (InvalidRequestException e)
+        {
+            throw new AssertionError(e);
+        }
+        catch (RecognitionException e)
+        {
+            throw new AssertionError(e);
+        }
+        catch (TimedOutException e)
+        {
+            throw new RuntimeException(e);
+        }
+        catch (SchemaDisagreementException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
+    public static UntypedResultSet resultify(String query, Row row)
     {
         SelectStatement ss;
         try
         {
-            ss = (SelectStatement) getStatement(queryString, null).statement;
+            ss = (SelectStatement) getStatement(query, null).statement;
+            List<CqlRow> cqlRows = ss.process(Collections.singletonList(row));
+            return new UntypedResultSet(cqlRows);
         }
         catch (InvalidRequestException e)
         {
-            throw new RuntimeException(e);
+            throw new AssertionError(e);
         }
         catch (RecognitionException e)
         {
-            throw new RuntimeException(e);
+            throw new AssertionError(e);
         }
-
-        List<CqlRow> cqlRows;
-        try
-        {
-            cqlRows = ss.process(Collections.singletonList(row));
-        }
-        catch (InvalidRequestException e)
-        {
-            throw new RuntimeException(e);
-        }
-
-        return new UntypedResultSet(cqlRows);
     }
 
     public static CqlPreparedResult prepare(String queryString, ClientState clientState)
@@ -214,7 +234,7 @@ public class QueryProcessor
         return statement.prepare();
     }
 
-    private static ParsedStatement parseStatement(String queryStr) throws InvalidRequestException, RecognitionException
+    public static ParsedStatement parseStatement(String queryStr) throws InvalidRequestException, RecognitionException
     {
         try
         {
@@ -241,5 +261,4 @@ public class QueryProcessor
             throw ire;
         }
     }
-
 }

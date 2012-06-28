@@ -54,6 +54,7 @@ import org.slf4j.LoggerFactory;
 
 import com.google.common.base.Predicates;
 import com.google.common.collect.Iterators;
+import com.google.common.primitives.Longs;
 
 /**
  * A singleton which manages a private executor of ongoing compactions. A readwrite lock
@@ -248,7 +249,18 @@ public class CompactionManager implements CompactionManagerMBean
         {
             public void perform(ColumnFamilyStore store, Collection<SSTableReader> sstables) throws IOException
             {
-                doCleanupCompaction(store, sstables, renewer);
+                // Sort the column families in order of SSTable size, so cleanup of smaller CFs
+                // can free up space for larger ones
+                List<SSTableReader> sortedSSTables = new ArrayList<SSTableReader>(sstables);
+                Collections.sort(sortedSSTables, new Comparator<SSTableReader>()
+                {
+                    public int compare(SSTableReader o1, SSTableReader o2)
+                    {
+                        return Longs.compare(o1.onDiskLength(), o2.onDiskLength());
+                    }
+                });
+
+                doCleanupCompaction(store, sortedSSTables, renewer);
             }
         });
     }
@@ -684,16 +696,19 @@ public class CompactionManager implements CompactionManagerMBean
         assert !cfs.isIndex();
         Table table = cfs.table;
         Collection<Range<Token>> ranges = StorageService.instance.getLocalRanges(table.name);
-        boolean isCommutative = cfs.metadata.getDefaultValidator().isCommutative();
         if (ranges.isEmpty())
         {
             logger.info("Cleanup cannot run before a node has joined the ring");
             return;
         }
 
+        boolean isCommutative = cfs.metadata.getDefaultValidator().isCommutative();
+        Collection<ByteBuffer> indexedColumns = cfs.indexManager.getIndexedColumns();
+
         for (SSTableReader sstable : sstables)
         {
-            if (!new Bounds<Token>(sstable.first.token, sstable.last.token).intersects(ranges))
+            if (indexedColumns.isEmpty()
+                && !new Bounds<Token>(sstable.first.token, sstable.last.token).intersects(ranges))
             {
                 cfs.replaceCompactedSSTables(Arrays.asList(sstable), Collections.<SSTableReader>emptyList(), OperationType.CLEANUP);
                 continue;
@@ -721,7 +736,6 @@ public class CompactionManager implements CompactionManagerMBean
 
             SSTableScanner scanner = sstable.getDirectScanner();
             long rowsRead = 0;
-            Collection<ByteBuffer> indexedColumns = cfs.indexManager.getIndexedColumns();
             List<IColumn> indexedColumnsInRow = null;
 
             CleanupInfo ci = new CleanupInfo(sstable, scanner);
@@ -1209,7 +1223,8 @@ public class CompactionManager implements CompactionManagerMBean
         {
             try
             {
-                return new CompactionInfo(OperationType.CLEANUP,
+                return new CompactionInfo(sstable.metadata,
+                                          OperationType.CLEANUP,
                                           scanner.getCurrentPosition(),
                                           scanner.getLengthInBytes());
             }
@@ -1234,7 +1249,8 @@ public class CompactionManager implements CompactionManagerMBean
         {
             try
             {
-                return new CompactionInfo(OperationType.SCRUB,
+                return new CompactionInfo(sstable.metadata,
+                                          OperationType.SCRUB,
                                           dataFile.getFilePointer(),
                                           dataFile.length());
             }

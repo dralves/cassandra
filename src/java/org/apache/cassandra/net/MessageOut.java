@@ -27,6 +27,8 @@ import java.util.Map;
 import com.google.common.collect.ImmutableMap;
 
 import org.apache.cassandra.concurrent.Stage;
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.db.TypeSizes;
 import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.utils.FBUtilities;
 
@@ -86,6 +88,11 @@ public class MessageOut<T>
         return MessagingService.verbStages.get(verb);
     }
 
+    public long getTimeout()
+    {
+        return DatabaseDescriptor.getTimeout(verb);
+    }
+
     public String toString()
     {
         StringBuilder sbuf = new StringBuilder("");
@@ -111,5 +118,25 @@ public class MessageOut<T>
         out.writeInt((int) longSize);
         if (payload != null)
             serializer.serialize(payload, out, version);
+    }
+
+    public int serializedSize(int version)
+    {
+        int size = CompactEndpointSerializationHelper.serializedSize(from);
+
+        size += TypeSizes.NATIVE.sizeof(verb.ordinal());
+        size += TypeSizes.NATIVE.sizeof(parameters.size());
+        for (Map.Entry<String, byte[]> entry : parameters.entrySet())
+        {
+            TypeSizes.NATIVE.sizeof(entry.getKey());
+            TypeSizes.NATIVE.sizeof(entry.getValue().length);
+            size += entry.getValue().length;
+        }
+
+        long longSize = payload == null ? 0 : serializer.serializedSize(payload, version);
+        assert longSize <= Integer.MAX_VALUE; // larger values are supported in sstables but not messages
+        size += TypeSizes.NATIVE.sizeof((int) longSize);
+        size += longSize;
+        return size;
     }
 }
