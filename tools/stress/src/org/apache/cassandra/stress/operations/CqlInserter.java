@@ -31,7 +31,6 @@ import org.apache.cassandra.stress.Session;
 import org.apache.cassandra.stress.util.CassandraClient;
 import org.apache.cassandra.stress.util.Operation;
 import org.apache.cassandra.thrift.Compression;
-import org.apache.cassandra.utils.Hex;
 import org.apache.cassandra.utils.UUIDGen;
 
 public class CqlInserter extends Operation
@@ -68,21 +67,21 @@ public class CqlInserter extends Operation
             cqlQuery = query.toString();
         }
 
-        List<ByteBuffer> queryParms = new ArrayList<ByteBuffer>();
+        List<String> queryParms = new ArrayList<String>();
         for (int i = 0; i < session.getColumnsPerKey(); i++)
         {
             // Column name
             if (session.timeUUIDComparator)
-                queryParms.add(ByteBuffer.wrap(UUIDGen.makeType1UUIDFromHost(Session.getLocalAddress()).toString().getBytes()));
+                queryParms.add(UUIDGen.makeType1UUIDFromHost(Session.getLocalAddress()).toString());
             else
-                queryParms.add(ByteBuffer.wrap(new String("C" + i).getBytes()));
+                queryParms.add(new String("C" + i));
 
             // Column value
-            queryParms.add(ByteBuffer.wrap(new String(getUnQuotedCqlBlob(values.get(i % values.size()).array())).getBytes()));
+            queryParms.add(new String(getUnQuotedCqlBlob(values.get(i % values.size()).array())));
         }
 
         String key = String.format("%0" + session.getTotalKeysLength() + "d", index);
-        queryParms.add(ByteBuffer.wrap(new String(getUnQuotedCqlBlob(key)).getBytes()));
+        queryParms.add(new String(getUnQuotedCqlBlob(key)));
 
         String formattedQuery = null;
 
@@ -101,7 +100,7 @@ public class CqlInserter extends Operation
                 if (session.usePreparedStatements())
                 {
                     Integer stmntId = getPreparedStatement(client, cqlQuery);
-                    client.execute_prepared_cql_query(stmntId, queryParms);
+                    client.execute_prepared_cql_query(stmntId, queryParamsAsByteBuffer(queryParms));
                 }
                 else
                 {

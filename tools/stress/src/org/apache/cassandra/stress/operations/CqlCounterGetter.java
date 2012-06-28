@@ -32,6 +32,7 @@ import org.apache.cassandra.stress.util.Operation;
 import org.apache.cassandra.thrift.Compression;
 import org.apache.cassandra.thrift.CqlResult;
 import org.apache.cassandra.thrift.CqlResultType;
+import org.apache.cassandra.utils.ByteBufferUtil;
 
 public class CqlCounterGetter extends Operation
 {
@@ -76,7 +77,7 @@ public class CqlCounterGetter extends Operation
                 {
                     Integer stmntId = getPreparedStatement(client, cqlQuery);
                     result = client.execute_prepared_cql_query(stmntId,
-                                                               Collections.singletonList(getUnQuotedCqlBlob(key)));
+                            Collections.singletonList(ByteBufferUtil.bytes(getUnQuotedCqlBlob(key))));
                 }
                 else
                 {

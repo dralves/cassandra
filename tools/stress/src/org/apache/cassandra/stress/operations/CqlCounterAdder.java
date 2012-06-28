@@ -30,6 +30,7 @@ import org.apache.cassandra.stress.Session;
 import org.apache.cassandra.stress.util.CassandraClient;
 import org.apache.cassandra.stress.util.Operation;
 import org.apache.cassandra.thrift.Compression;
+import org.apache.cassandra.utils.ByteBufferUtil;
 
 public class CqlCounterAdder extends Operation
 {
@@ -52,7 +53,9 @@ public class CqlCounterAdder extends Operation
 
             for (int i = 0; i < session.getColumnsPerKey(); i++)
             {
-                if (i > 0) query.append(",");
+                if (i > 0)
+                    query.append(",");
+                
                 query.append('C').append(i).append("=C").append(i).append("+1");
 
             }
@@ -78,7 +81,8 @@ public class CqlCounterAdder extends Operation
                 if (session.usePreparedStatements())
                 {
                     Integer stmntId = getPreparedStatement(client, cqlQuery);
-                    client.execute_prepared_cql_query(stmntId, Collections.singletonList(getUnQuotedCqlBlob(key)));
+                    client.execute_prepared_cql_query(stmntId,
+                            Collections.singletonList(ByteBufferUtil.bytes(getUnQuotedCqlBlob(key))));
                 }
                 else
                 {

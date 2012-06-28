@@ -25,6 +25,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Collections;
 
+import org.apache.cassandra.utils.ByteBufferUtil;
+
 import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.stress.Session;
 import org.apache.cassandra.stress.util.CassandraClient;
@@ -76,7 +78,7 @@ public class CqlRangeSlicer extends Operation
                 {
                     Integer stmntId = getPreparedStatement(client, cqlQuery);
                     result = client.execute_prepared_cql_query(stmntId,
-                                                               Collections.singletonList(getUnQuotedCqlBlob(key)));
+                            Collections.singletonList(ByteBufferUtil.bytes(getUnQuotedCqlBlob(key))));
                 }
                 else
                 {

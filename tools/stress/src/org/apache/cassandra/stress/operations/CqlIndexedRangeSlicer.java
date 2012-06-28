@@ -88,7 +88,7 @@ public class CqlIndexedRangeSlicer extends Operation
                     if (session.usePreparedStatements())
                     {
                         Integer stmntId = getPreparedStatement(client, cqlQuery);
-                        results = client.execute_prepared_cql_query(stmntId, queryParms);
+                        results = client.execute_prepared_cql_query(stmntId, queryParamsAsByteBuffer(queryParms));
                     }
                     else
                     {

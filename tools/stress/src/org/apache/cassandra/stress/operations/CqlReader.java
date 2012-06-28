@@ -95,7 +95,7 @@ public class CqlReader extends Operation
                 if (session.usePreparedStatements())
                 {
                     Integer stmntId = getPreparedStatement(client, cqlQuery);
-                    result = client.execute_prepared_cql_query(stmntId, queryParams);
+                    result = client.execute_prepared_cql_query(stmntId, queryParamsAsByteBuffer(queryParams));
                 }
                 else
                 {

@@ -17,6 +17,8 @@
  */
 package org.apache.cassandra.stress.util;
 
+import static com.google.common.base.Charsets.UTF_8;
+
 import java.io.IOException;
 import java.math.BigInteger;
 import java.nio.ByteBuffer;
@@ -25,21 +27,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
 
-import static com.google.common.base.Charsets.UTF_8;
+import com.google.common.base.Function;
+import com.google.common.collect.Lists;
 
 import org.apache.cassandra.db.marshal.TimeUUIDType;
 import org.apache.cassandra.stress.Session;
 import org.apache.cassandra.stress.Stress;
-import org.apache.cassandra.thrift.Cassandra;
 import org.apache.cassandra.thrift.Compression;
 import org.apache.cassandra.thrift.CqlPreparedResult;
-import org.apache.cassandra.thrift.CqlResult;
 import org.apache.cassandra.thrift.InvalidRequestException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
-import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.Hex;
-import org.apache.thrift.TException;
+import org.apache.cassandra.utils.UUIDGen;
 
 public abstract class Operation
 {
@@ -238,6 +238,18 @@ public abstract class Operation
     protected String getUnQuotedCqlBlob(byte[] term)
     {
         return Hex.bytesToHex(term);
+    }
+    
+    protected List<ByteBuffer> queryParamsAsByteBuffer(List<String> queryParams)
+    {
+        return Lists.transform(queryParams, new Function<String, ByteBuffer>()
+        {
+            @Override
+            public ByteBuffer apply(String param)
+            {
+                return ByteBufferUtil.bytes(param);
+            }
+        });
     }
 
     /**
