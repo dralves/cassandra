@@ -239,7 +239,7 @@ public abstract class Operation
     {
         return Hex.bytesToHex(term);
     }
-    
+
     protected List<ByteBuffer> queryParamsAsByteBuffer(List<String> queryParams)
     {
         return Lists.transform(queryParams, new Function<String, ByteBuffer>()

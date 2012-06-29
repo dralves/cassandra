@@ -55,7 +55,7 @@ public class CqlCounterAdder extends Operation
             {
                 if (i > 0)
                     query.append(",");
-                
+
                 query.append('C').append(i).append("=C").append(i).append("+1");
 
             }
