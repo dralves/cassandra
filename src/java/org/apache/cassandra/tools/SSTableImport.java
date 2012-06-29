@@ -346,7 +346,8 @@ public class SSTableImport
 
         for (Map.Entry<DecoratedKey, Map<?, ?>> row : decoratedKeys.entrySet())
         {
-            if (row.getValue().containsKey("meta")) {
+            if (row.getValue().containsKey("meta"))
+            {
                 parseMeta((Map<?, ?>) row.getValue().get("meta"), columnFamily);
             }
 
