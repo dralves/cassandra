@@ -36,16 +36,18 @@ public class Config
     public SeedProviderDef seed_provider;
     public DiskAccessMode disk_access_mode = DiskAccessMode.auto;
 
-    /* Address where to run the job tracker */
-    public String job_tracker_host;
-
-    /* Job Jar Location */
-    public String job_jar_file_location;
-
     /* initial token in the ring */
     public String initial_token;
 
-    public Long rpc_timeout_in_ms = new Long(2000);
+    public Long rpc_timeout_in_ms = new Long(10000);
+
+    public Long read_rpc_timeout_in_ms = new Long(10000);
+
+    public Long range_rpc_timeout_in_ms = new Long(10000);
+
+    public Long write_rpc_timeout_in_ms = new Long(10000);
+
+    public Long truncate_rpc_timeout_in_ms = new Long(300000);
 
     public Integer streaming_socket_timeout_in_ms = new Integer(0);
 

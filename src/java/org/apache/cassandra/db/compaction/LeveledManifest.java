@@ -176,7 +176,7 @@ public class LeveledManifest
             return;
 
         int newLevel;
-        if (minimumLevel == 0 && maximumLevel == 0 && SSTable.getTotalBytes(removed) < maxSSTableSizeInBytes)
+        if (minimumLevel == 0 && maximumLevel == 0 && SSTable.getTotalBytes(removed) <= maxSSTableSizeInBytes)
         {
             // special case for tiny L0 sstables; see CASSANDRA-4341
             newLevel = 0;
@@ -194,12 +194,16 @@ public class LeveledManifest
         for (SSTableReader ssTableReader : added)
             add(ssTableReader, newLevel);
 
-        DecoratedKey last = null;
-        Collections.sort(generations[newLevel], SSTable.sstableComparator);
-        for (SSTableReader sstable : generations[newLevel])
+        if (newLevel != 0)
         {
-            assert last == null || sstable.first.compareTo(last) > 0;
-            last = sstable.last;
+            // Integerity check
+            DecoratedKey last = null;
+            Collections.sort(generations[newLevel], SSTable.sstableComparator);
+            for (SSTableReader sstable : generations[newLevel])
+            {
+                assert last == null || sstable.first.compareTo(last) > 0;
+                last = sstable.last;
+            }
         }
 
         serialize();
@@ -278,7 +282,7 @@ public class LeveledManifest
             logger.debug("Compaction score for level {} is {}", i, score);
 
             // L0 gets a special case that if we don't have anything more important to do,
-            // we'll go ahead and compact even just one sstable
+            // we'll go ahead and compact if we have more than one sstable
             if (score > 1.001 || (i == 0 && sstables.size() > 1))
             {
                 Collection<SSTableReader> candidates = getCandidatesFor(i);
@@ -355,9 +359,9 @@ public class LeveledManifest
         sstableGenerations.put(sstable, Integer.valueOf(level));
     }
 
-    private static List<SSTableReader> overlapping(SSTableReader sstable, Iterable<SSTableReader> candidates)
+    private static Set<SSTableReader> overlapping(SSTableReader sstable, Iterable<SSTableReader> candidates)
     {
-        List<SSTableReader> overlapped = new ArrayList<SSTableReader>();
+        Set<SSTableReader> overlapped = new HashSet<SSTableReader>();
         overlapped.add(sstable);
 
         Range<Token> promotedRange = new Range<Token>(sstable.first.token, sstable.last.token);
@@ -383,7 +387,7 @@ public class LeveledManifest
             // 1a. add sstables to the candidate set until we have at least maxSSTableSizeInMB
             // 1b. prefer choosing older sstables as candidates, to newer ones
             // 1c. any L0 sstables that overlap a candidate, will also become candidates
-            // 2. At most MAX_COMPACTING_L0 sstables will be compacted at once
+            // 2. At most MAX_COMPACTING_L0 sstables from L0 will be compacted at once
             // 3. If total candidate size is less than maxSSTableSizeInMB, we won't bother compacting with L1,
             //    and the result of the compaction will stay in L0 instead of being promoted (see promote())
             //
@@ -413,7 +417,14 @@ public class LeveledManifest
                     // limit to only the MAX_COMPACTING_L0 oldest candidates
                     List<SSTableReader> ageSortedCandidates = new ArrayList<SSTableReader>(candidates);
                     Collections.sort(ageSortedCandidates, SSTable.maxTimestampComparator);
-                    return ageSortedCandidates.subList(0, MAX_COMPACTING_L0);
+                    candidates = new HashSet<SSTableReader>(ageSortedCandidates.subList(0, MAX_COMPACTING_L0));
+                    if (SSTable.getTotalBytes(candidates) > maxSSTableSizeInBytes)
+                    {
+                        // add sstables from L1 that overlap candidates
+                        for (SSTableReader candidate : new ArrayList<SSTableReader>(candidates))
+                            candidates.addAll(overlapping(candidate, generations[1]));
+                    }
+                    return candidates;
                 }
 
                 if (SSTable.getTotalBytes(candidates) > maxSSTableSizeInBytes)
@@ -448,7 +459,7 @@ public class LeveledManifest
         while (true)
         {
             SSTableReader sstable = generations[level].get(i);
-            List<SSTableReader> candidates = overlapping(sstable, generations[(level + 1)]);
+            Set<SSTableReader> candidates = overlapping(sstable, generations[(level + 1)]);
             for (SSTableReader candidate : candidates)
             {
                 if (candidate.isMarkedSuspect())
