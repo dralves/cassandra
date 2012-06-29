@@ -422,7 +422,7 @@ public class SSTableImport
             Map<?, ?> row = parser.readValueAs(new TypeReference<Map<?, ?>>(){});
             DecoratedKey currentKey = partitioner.decorateKey(hexToBytes((String) row.get("key")));
 
-            if (row.containsKey("meta")) 
+            if (row.containsKey("meta"))
                 parseMeta((Map<?, ?>) row.get("meta"), columnFamily);
 
 
