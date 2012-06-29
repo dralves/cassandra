@@ -126,7 +126,7 @@ public class SSTableExportTest extends SchemaLoader
 
         JSONArray json = (JSONArray)JSONValue.parseWithException(new FileReader(tempJson));
         assertEquals("unexpected number of rows", 2, json.size());
-        
+
         JSONObject rowA = (JSONObject)json.get(0);
         assertEquals("unexpected number of keys", 2, rowA.keySet().size());
         assertEquals("unexpected row key",asHex("rowA"),rowA.get("key"));
@@ -138,7 +138,7 @@ public class SSTableExportTest extends SchemaLoader
         JSONArray colExp = (JSONArray)colsA.get(1);
         assert ((Long)colExp.get(4)) == 42;
         assert ((Long)colExp.get(5)) == nowInSec;
-        
+
         JSONObject rowB = (JSONObject)json.get(1);
         assertEquals("unexpected number of keys", 2, rowB.keySet().size());
         assertEquals("unexpected row key",asHex("rowB"),rowB.get("key"));
@@ -257,11 +257,11 @@ public class SSTableExportTest extends SchemaLoader
         SSTableExport.export(reader, new PrintStream(tempJson.getPath()), new String[0]);
         JSONArray json = (JSONArray)JSONValue.parseWithException(new FileReader(tempJson));
         assertEquals("unexpected number of rows", 1, json.size());
-        
+
         JSONObject row = (JSONObject)json.get(0);
         assertEquals("unexpected number of keys", 2, row.keySet().size());
         assertEquals("unexpected row key",asHex("rowA"),row.get("key"));
-        
+
         JSONArray cols = (JSONArray)row.get("cols");
         JSONArray colA = (JSONArray)cols.get(0);
         assert hexToBytes((String)colA.get(0)).equals(ByteBufferUtil.bytes("colA"));
@@ -289,7 +289,7 @@ public class SSTableExportTest extends SchemaLoader
 
         JSONArray json = (JSONArray)JSONValue.parseWithException(new FileReader(tempJson));
         assertEquals("unexpected number of rows", 1, json.size());
-        
+
         JSONObject row = (JSONObject)json.get(0);
         assertEquals("unexpected number of keys", 2, row.keySet().size());
         assertEquals("unexpected row key",asHex("rowA"),row.get("key"));
@@ -299,7 +299,7 @@ public class SSTableExportTest extends SchemaLoader
         assert hexToBytes((String)colA.get(0)).equals(ByteBufferUtil.bytes("data"));
         assert colA.get(1).equals("{\"foo\":\"bar\"}");
     }
-    
+
     @Test
     public void testExportColumnsWithMetadata() throws IOException, ParseException
     {
@@ -324,7 +324,7 @@ public class SSTableExportTest extends SchemaLoader
         JSONArray json = (JSONArray)JSONValue.parseWithException(new FileReader(tempJson));
         System.out.println(json.toJSONString());
         assertEquals("unexpected number of rows", 1, json.size());
-        
+
         JSONObject row = (JSONObject)json.get(0);
         assertEquals("unexpected number of keys", 3, row.keySet().size());
         assertEquals("unexpected row key",asHex("rowA"),row.get("key"));
@@ -342,7 +342,7 @@ public class SSTableExportTest extends SchemaLoader
 
         JSONObject serializedDeletionInfo = (JSONObject) meta.get("deletionInfo");
         assertNotNull("expecing deletionInfo to be present", serializedDeletionInfo);
-        
+
         assertEquals(
                 "unexpected serialization format for topLevelDeletion",
                 "{\"markedForDeleteAt\":0,\"localDeletionTime\":0}",

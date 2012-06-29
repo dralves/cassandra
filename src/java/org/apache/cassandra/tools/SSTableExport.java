@@ -101,11 +101,9 @@ public class SSTableExport
 
     /**
      * JSON Hash Key serializer
-     * 
-     * @param out
-     *            The output steam to write data
-     * @param value
-     *            value to set as a key
+     *
+     * @param out The output steam to write data
+     * @param value value to set as a key
      */
     private static void writeKey(PrintStream out, String value)
     {
@@ -118,7 +116,7 @@ public class SSTableExport
      * <ul>
      * <li>column family deletion info (if present)</li>
      * </ul>
-     * 
+     *
      * @param out
      *            The output steam to write data
      * @param columnFamily

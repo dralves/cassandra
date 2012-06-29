@@ -130,30 +130,32 @@ public class SSTableImportTest extends SchemaLoader
         int result = new SSTableImport(3,true).importJson(jsonUrl, "Keyspace1","Super4", tempSS.getPath());
         assert result == -1;
     }
-    
+
     @Test
     public void testImportUnsortedMode() throws IOException, URISyntaxException
     {
         String jsonUrl = resourcePath("UnsortedCF.json");
         File tempSS = tempSSTableFile("Keyspace1", "Standard1");
 
-        new SSTableImport().importJson(jsonUrl, "Keyspace1","Standard1", tempSS.getPath());
-        
+        new SSTableImport().importJson(jsonUrl, "Keyspace1", "Standard1", tempSS.getPath());
+
         SSTableReader reader = SSTableReader.open(Descriptor.fromFilename(tempSS.getPath()));
         QueryFilter qf = QueryFilter.getIdentityFilter(Util.dk("rowA"), new QueryPath("Standard1"));
         OnDiskAtomIterator iter = qf.getSSTableColumnIterator(reader);
         ColumnFamily cf = iter.getColumnFamily();
-        while (iter.hasNext()) cf.addAtom(iter.next());
+        while (iter.hasNext())
+            cf.addAtom(iter.next());
         assert cf.getColumn(ByteBufferUtil.bytes("colAA")).value().equals(hexToBytes("76616c4141"));
         assert !(cf.getColumn(ByteBufferUtil.bytes("colAA")) instanceof DeletedColumn);
         IColumn expCol = cf.getColumn(ByteBufferUtil.bytes("colAC"));
         assert expCol.value().equals(hexToBytes("76616c4143"));
         assert expCol instanceof ExpiringColumn;
-        assert ((ExpiringColumn)expCol).getTimeToLive() == 42 && expCol.getLocalDeletionTime() == 2000000000;
+        assert ((ExpiringColumn) expCol).getTimeToLive() == 42 && expCol.getLocalDeletionTime() == 2000000000;
     }
-    
+
     @Test
-    public void testImportWithDeletionInfoMetadata() throws IOException, URISyntaxException {
+    public void testImportWithDeletionInfoMetadata() throws IOException, URISyntaxException
+    {
         // Import JSON to temp SSTable file
         String jsonUrl = resourcePath("SimpleCFWithDeletionInfo.json");
         File tempSS = tempSSTableFile("Keyspace1", "Standard1");
@@ -164,14 +166,15 @@ public class SSTableImportTest extends SchemaLoader
         QueryFilter qf = QueryFilter.getIdentityFilter(Util.dk("rowA"), new QueryPath("Standard1"));
         OnDiskAtomIterator iter = qf.getSSTableColumnIterator(reader);
         ColumnFamily cf = iter.getColumnFamily();
-        assertEquals(cf.deletionInfo(), new DeletionInfo(0,0));
-        while (iter.hasNext()) cf.addAtom(iter.next());
+        assertEquals(cf.deletionInfo(), new DeletionInfo(0, 0));
+        while (iter.hasNext())
+            cf.addAtom(iter.next());
         assert cf.getColumn(ByteBufferUtil.bytes("colAA")).value().equals(hexToBytes("76616c4141"));
         assert !(cf.getColumn(ByteBufferUtil.bytes("colAA")) instanceof DeletedColumn);
         IColumn expCol = cf.getColumn(ByteBufferUtil.bytes("colAC"));
         assert expCol.value().equals(hexToBytes("76616c4143"));
         assert expCol instanceof ExpiringColumn;
-        assert ((ExpiringColumn)expCol).getTimeToLive() == 42 && expCol.getLocalDeletionTime() == 2000000000;
+        assert ((ExpiringColumn) expCol).getTimeToLive() == 42 && expCol.getLocalDeletionTime() == 2000000000;
     }
 
     @Test

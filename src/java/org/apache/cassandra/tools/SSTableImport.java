@@ -74,7 +74,7 @@ public class SSTableImport
 
     private static final Options options = new Options();
     private static CommandLine cmd;
-    
+
     private Integer keyCountToImport;
     private final boolean isSorted;
 
@@ -192,7 +192,7 @@ public class SSTableImport
             return value.duplicate();
         }
     }
-    
+
     public SSTableImport()
     {
         this(null, false);
@@ -317,7 +317,7 @@ public class SSTableImport
 
         if (importedKeys != -1)
             System.out.printf("%d keys imported successfully.%n", importedKeys);
-        
+
         return importedKeys;
     }
 
@@ -349,17 +349,17 @@ public class SSTableImport
             if (row.getValue().containsKey("meta")) {
                 parseMeta((Map<?, ?>) row.getValue().get("meta"), columnFamily);
             }
-            
+
             Object columns = row.getValue().get("cols");
             if (columnFamily.getType() == ColumnFamilyType.Super)
                 addToSuperCF((Map<?, ?>) columns, columnFamily);
             else
                 addToStandardCF((List<?>) columns, columnFamily);
-            
+
 
             writer.append(row.getKey(), columnFamily);
             columnFamily.clear();
-            
+
             // ready the column family for the next row since we might have read deletionInfo metadata
             columnFamily.delete(DeletionInfo.LIVE);
 
@@ -420,17 +420,15 @@ public class SSTableImport
             String key = parser.getCurrentName();
             Map<?, ?> row = parser.readValueAs(new TypeReference<Map<?, ?>>(){});
             DecoratedKey currentKey = partitioner.decorateKey(hexToBytes((String) row.get("key")));
-            
+
             if (row.containsKey("meta")) 
                 parseMeta((Map<?, ?>) row.get("meta"), columnFamily);
-            
+
 
             if (columnFamily.getType() == ColumnFamilyType.Super)
                 addToSuperCF((Map<?, ?>)row.get("cols"), columnFamily);
             else
                 addToStandardCF((List<?>)row.get("cols"), columnFamily);
-            
-            
 
             if (prevStoredKey != null && prevStoredKey.compareTo(currentKey) != -1)
             {
@@ -457,8 +455,8 @@ public class SSTableImport
             }
 
             if (keyCountToImport == importedKeys)
-                break;   
-            
+                break;
+
         }
 
         writer.closeAndOpenReader();
@@ -511,7 +509,7 @@ public class SSTableImport
         String ssTable  = cmd.getArgs()[1];
         String keyspace = cmd.getOptionValue(KEYSPACE_OPTION);
         String cfamily  = cmd.getOptionValue(COLUMN_FAMILY_OPTION);
-        
+
         Integer keyCountToImport = null;
         boolean isSorted = false;
 
