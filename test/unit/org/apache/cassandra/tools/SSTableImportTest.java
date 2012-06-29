@@ -30,15 +30,15 @@ import java.util.Collections;
 
 import org.junit.Test;
 
-import org.apache.cassandra.db.DeletionInfo;
-
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.CounterColumn;
 import org.apache.cassandra.db.DeletedColumn;
+import org.apache.cassandra.db.DeletionInfo;
 import org.apache.cassandra.db.ExpiringColumn;
 import org.apache.cassandra.db.IColumn;
+import org.apache.cassandra.db.SuperColumn;
 import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.db.filter.QueryPath;
@@ -113,6 +113,8 @@ public class SSTableImportTest extends SchemaLoader
         ColumnFamily cf = qf.getSSTableColumnIterator(reader).getColumnFamily();
         qf.collateOnDiskAtom(cf, Collections.singletonList(qf.getSSTableColumnIterator(reader)), Integer.MIN_VALUE);
         IColumn superCol = cf.getColumn(ByteBufferUtil.bytes("superA"));
+        assertEquals("supercolumn deletion time did not match the expected time", new DeletionInfo(0, 0),
+                ((SuperColumn) superCol).deletionInfo());
         assert superCol != null;
         assert superCol.getSubColumns().size() > 0;
         IColumn subColumn = superCol.getSubColumn(ByteBufferUtil.bytes("636f6c4141"));

@@ -25,6 +25,7 @@ import static org.apache.cassandra.utils.ByteBufferUtil.bytesToHex;
 import static org.apache.cassandra.utils.ByteBufferUtil.hexToBytes;
 import static org.junit.Assert.assertTrue;
 
+import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
@@ -40,6 +41,7 @@ import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.CounterColumn;
 import org.apache.cassandra.db.DeletionInfo;
 import org.apache.cassandra.db.ExpiringColumn;
+import org.apache.cassandra.db.SuperColumn;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.db.filter.QueryPath;
 import org.apache.cassandra.db.marshal.UTF8Type;
@@ -156,6 +158,8 @@ public class SSTableExportTest extends SchemaLoader
 
         // Add rowA
         cfamily.addColumn(new QueryPath("Super4", ByteBufferUtil.bytes("superA"), ByteBufferUtil.bytes("colA")), ByteBufferUtil.bytes("valA"), System.currentTimeMillis());
+        // set deletion info on the super col
+        ((SuperColumn) cfamily.getColumn(ByteBufferUtil.bytes("superA"))).setDeletionInfo(new DeletionInfo(0, 0));
         writer.append(Util.dk("rowA"), cfamily);
         cfamily.clear();
 

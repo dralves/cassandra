@@ -34,10 +34,13 @@ import org.apache.commons.cli.Options;
 import org.apache.commons.cli.ParseException;
 import org.apache.commons.cli.PosixParser;
 
+import org.apache.pig.parser.AliasMasker.cond_return;
+
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.config.Schema;
+import org.apache.cassandra.db.AbstractColumnContainer;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.db.CounterColumn;
@@ -45,6 +48,7 @@ import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.DeletionInfo;
 import org.apache.cassandra.db.ExpiringColumn;
 import org.apache.cassandra.db.RangeTombstone;
+import org.apache.cassandra.db.SuperColumn;
 import org.apache.cassandra.db.filter.QueryPath;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.BytesType;
@@ -249,7 +253,10 @@ public class SSTableImport
         }
     }
     
-    private void parseCFMetadata(Map<?, ?> map, ColumnFamily columnFamily){
+    private void parseMeta(Map<?, ?> map, AbstractColumnContainer columnContainer){
+        
+        System.out.println(map);
+        System.out.println(columnContainer);
         
         // deletionInfo is the only metadata we store for now
         if (map.containsKey("deletionInfo"))
@@ -258,7 +265,7 @@ public class SSTableImport
             Number number = (Number)unparsedDeletionInfo.get("markedForDeleteAt");
             long markedForDeleteAt = number instanceof Long ? (Long)number : ((Integer)number).longValue();
             int localDeletionTime = (Integer) unparsedDeletionInfo.get("localDeletionTime");
-            columnFamily.setDeletionInfo(new DeletionInfo(markedForDeleteAt, localDeletionTime));
+            columnContainer.setDeletionInfo(new DeletionInfo(markedForDeleteAt, localDeletionTime));
         }
     }
 
@@ -280,8 +287,15 @@ public class SSTableImport
         {
             Map<?, ?> data = (Map<?, ?>) entry.getValue();
 
-            addColumnsToCF((List<?>) data.get("subColumns"), stringAsType((String) entry.getKey(), comparator), cfamily);
-
+            ByteBuffer superName = stringAsType((String) entry.getKey(), comparator);
+            
+            addColumnsToCF((List<?>) data.get("subColumns"), superName, cfamily);
+            
+            if (data.containsKey("meta"))
+            {   
+                parseMeta((Map<?, ?>) data.get("meta"), (SuperColumn) cfamily.getColumn(superName));
+            }
+            
             // *WARNING* markForDeleteAt has been DEPRECATED at Cassandra side
             //BigInteger deletedAt = (BigInteger) data.get("deletedAt");
             //SuperColumn superColumn = (SuperColumn) cfamily.getColumn(superName);
@@ -339,7 +353,7 @@ public class SSTableImport
         for (Map.Entry<DecoratedKey, Map<?, ?>> row : decoratedKeys.entrySet())
         {
             if (row.getValue().containsKey("meta")) {
-                parseCFMetadata((Map<?, ?>) row.getValue().get("meta"), columnFamily);
+                parseMeta((Map<?, ?>) row.getValue().get("meta"), columnFamily);
             }
             
             Object columns = row.getValue().get("cols");
@@ -414,7 +428,7 @@ public class SSTableImport
             DecoratedKey currentKey = partitioner.decorateKey(hexToBytes((String) row.get("key")));
             
             if (row.containsKey("meta")) 
-                parseCFMetadata((Map<?, ?>) row.get("meta"), columnFamily);
+                parseMeta((Map<?, ?>) row.get("meta"), columnFamily);
             
 
             if (columnFamily.getType() == ColumnFamilyType.Super)
