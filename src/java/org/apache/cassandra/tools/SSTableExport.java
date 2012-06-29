@@ -107,11 +107,10 @@ public class SSTableExport
      */
     private static void writeKey(PrintStream out, String value)
     {
-       writeJSON(out, value);
-       out.print(": ");
+        writeJSON(out, value);
+        out.print(": ");
     }
-    
-    
+
     /**
      * JSON ColumnFamily metadata serializer.</br> Serializes:
      * <ul>
@@ -152,7 +151,7 @@ public class SSTableExport
             return;
         }
     }
-    
+
     private static void writeDeletionInfo(PrintStream out, DeletionTime deletionTime)
     {
         out.print("{");
@@ -160,8 +159,7 @@ public class SSTableExport
         // only store topLevelDeletion (serializeForSSTable only uses this)
         writeJSON(out, deletionTime);
         out.print("}");
-    }    
-    
+    }
 
     /**
      * Serialize columns using given column iterator
@@ -173,7 +171,6 @@ public class SSTableExport
      */
     private static void serializeColumns(Iterator<OnDiskAtom> columns, PrintStream out, AbstractType<?> comparator, CFMetaData cfMetaData)
     {
-        
         while (columns.hasNext())
         {
             writeJSON(out, serializeColumn(columns.next(), comparator, cfMetaData));
@@ -278,9 +275,9 @@ public class SSTableExport
         writeKey(out, "key");
         writeJSON(out, bytesToHex(key.key));
         out.print(",");
-        
+
         writeMeta(out, columnFamily);
-        
+
         writeKey(out, "cols");
         out.print(isSuperCF ? "{" : "[");
 

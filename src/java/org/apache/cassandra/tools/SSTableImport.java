@@ -74,11 +74,12 @@ public class SSTableImport
 
     private static final Options options = new Options();
     private static CommandLine cmd;
-
-    private static final JsonFactory factory = new MappingJsonFactory().configure(JsonParser.Feature.INTERN_FIELD_NAMES, false);
     
     private Integer keyCountToImport;
     private final boolean isSorted;
+
+    private static final JsonFactory factory = new MappingJsonFactory().configure(
+            JsonParser.Feature.INTERN_FIELD_NAMES, false);
 
     static
     {
@@ -194,12 +195,12 @@ public class SSTableImport
     
     public SSTableImport()
     {
-        this(null,false);
+        this(null, false);
     }
-    
+
     public SSTableImport(boolean isSorted)
     {
-        this(null,isSorted);
+        this(null, isSorted);
     }
 
     public SSTableImport(Integer keyCountToImport, boolean isSorted)
@@ -252,18 +253,16 @@ public class SSTableImport
             }
         }
     }
-    
-    private void parseMeta(Map<?, ?> map, AbstractColumnContainer columnContainer){
-        
-        System.out.println(map);
-        System.out.println(columnContainer);
-        
+
+    private void parseMeta(Map<?, ?> map, AbstractColumnContainer columnContainer)
+    {
+
         // deletionInfo is the only metadata we store for now
         if (map.containsKey("deletionInfo"))
         {
             Map<?, ?> unparsedDeletionInfo = (Map<?, ?>) map.get("deletionInfo");
-            Number number = (Number)unparsedDeletionInfo.get("markedForDeleteAt");
-            long markedForDeleteAt = number instanceof Long ? (Long)number : ((Integer)number).longValue();
+            Number number = (Number) unparsedDeletionInfo.get("markedForDeleteAt");
+            long markedForDeleteAt = number instanceof Long ? (Long) number : ((Integer) number).longValue();
             int localDeletionTime = (Integer) unparsedDeletionInfo.get("localDeletionTime");
             columnContainer.setDeletionInfo(new DeletionInfo(markedForDeleteAt, localDeletionTime));
         }
@@ -288,18 +287,13 @@ public class SSTableImport
             Map<?, ?> data = (Map<?, ?>) entry.getValue();
 
             ByteBuffer superName = stringAsType((String) entry.getKey(), comparator);
-            
+
             addColumnsToCF((List<?>) data.get("subColumns"), superName, cfamily);
-            
+
             if (data.containsKey("meta"))
-            {   
+            {
                 parseMeta((Map<?, ?>) data.get("meta"), (SuperColumn) cfamily.getColumn(superName));
             }
-            
-            // *WARNING* markForDeleteAt has been DEPRECATED at Cassandra side
-            //BigInteger deletedAt = (BigInteger) data.get("deletedAt");
-            //SuperColumn superColumn = (SuperColumn) cfamily.getColumn(superName);
-            //superColumn.markForDeleteAt((int) (System.currentTimeMillis()/1000), deletedAt);
         }
     }
 
@@ -331,10 +325,10 @@ public class SSTableImport
     {
         int importedKeys = 0;
         long start = System.currentTimeMillis();
-        
+
         JsonParser parser = getParser(jsonFile);
-        
-        Object[] data = parser.readValueAs(new TypeReference<Object[]>() {});
+
+        Object[] data = parser.readValueAs(new TypeReference<Object[]>(){});
 
         keyCountToImport = (keyCountToImport == null) ? data.length : keyCountToImport;
         SSTableWriter writer = new SSTableWriter(ssTablePath, keyCountToImport);
