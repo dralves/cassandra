@@ -765,7 +765,7 @@ public class NodeCmd
                 case DISABLETHRIFT   : probe.stopThriftServer(); break;
                 case ENABLETHRIFT    : probe.startThriftServer(); break;
                 case STATUSTHRIFT    : nodeCmd.printIsThriftServerRunning(System.out); break;
-                case FLUSHANDEXIT    : probe.flushAllTablesAndExit(); break;
+                case FLUSHANDEXIT    : flushAllTablesAndExit(probe); break;
                 case RESETLOCALSCHEMA: probe.resetLocalSchema(); break;
                 case IDS             : nodeCmd.printHostIds(System.out); break;
 
@@ -1000,6 +1000,10 @@ public class NodeCmd
             printUsage();
             System.exit(1);
         }
+    }
+    
+    public static void flushAllTablesAndExit(NodeProbe probe) {
+        
     }
 
     private static void handleSnapshots(NodeCommand nc, String tag, String[] cmdArgs, String columnFamily, NodeProbe probe) throws InterruptedException, IOException
