@@ -29,51 +29,52 @@ help: |
     quit;                   Exit this utility.
 
     Commands:
-	ring                    Print information about the token ring
-	join                    Join the token ring
-	info                    Print node information (uptime, load, ...)
-	cfstats                 Print statistics on column families
-	ids                     Print list of unique host IDs
-	version                 Print cassandra version
-	tpstats                 Print usage statistics on thread pools
-	proxyhistograms         Print statistic histograms for network operations
-	drain                   Drain the node (stop accepting writes and flush all column families)
-	decommission            Decommission the *node I am connecting to*
-	compactionstats         Print statistics on compactions
-	disablegossip           Disable gossip (effectively marking the node dead)
-	enablegossip            Reenable gossip
-	disablethrift           Disable thrift server
-	enablethrift            Reenable thrift server
-	statusthrift            Status of thrift server
-	gossipinfo              Shows the gossip information for the cluster
-	invalidatekeycache      Invalidate the key cache
-	invalidaterowcache      Invalidate the row cache
-	resetlocalschema        Reset node's local schema and resync
-	netstats                Print network information on provided host (connecting node by default)
-	move                    Move node on the token ring to a new token
-	removenode              Show status of current node removal, force completion of pending removal or remove provided ID
-	setcompactionthroughput Set the MB/s throughput cap for compaction in the system, or 0 to disable throttling.
-	setstreamthroughput     Set the MB/s throughput cap for streaming in the system, or 0 to disable throttling.
-	describering            Shows the token ranges info of a given keyspace.
-	rangekeysample          Shows the sampled keys held across all keyspaces.
-	rebuild                 Rebuild data by streaming from other nodes (similarly to bootstraping)
-    snapshot                Take a snapshot of the optionally specified column family of the specified keyspaces
-	clearsnapshot           Remove snapshots for the specified keyspaces
-	flush                   Flush one or more column families
-	repair                  Repair one or more column families
-	cleanup                 Run cleanup on one or more column families
-	compact                 Force a (major) compaction on one or more column families
-	scrub                   Scrub (rebuild sstables for) one or more column families
-	upgradesstables         Scrub (rebuild sstables for) one or more column families
-	getcompactionthreshold  Print min and max compaction thresholds for a given column family
-	cfhistograms            Print statistic histograms for a given column family
-	refresh                 Load newly placed SSTables onto the system without restart.
-	rebuild_index           Rebuild native secondary index for a given column family.
-    getendpoints            Print the end points that owns the key
-	getsstables             Print the sstable filenames that own the key
-    setcachecapacity        Set the key and row cache capacities of a given column family
-	setcompactionthreshold  Set the min and max compaction thresholds for a given column family
-	stop                    Stop a compaction
+    
+    cfhistograms            Print statistic histograms for a given column family.
+    cfstats                 Print statistics on column families.
+    cleanup                 Run cleanup on one or more column families.
+    clearsnapshot           Remove snapshots for the specified keyspaces.
+    compact                 Force a (major) compaction on one or more column families.
+    compactionstats         Print statistics on compactions.
+    decommission            Decommission the *node I am connecting to*.
+    describering            Shows the token ranges info of a given keyspace.
+    disablegossip           Disable gossip (effectively marking the node dead).
+    disablethrift           Disable thrift server.
+    drain                   Drain the node (stop accepting writes and flush all column families).
+    enablegossip            Reenable gossip.
+    enablethrift            Reenable thrift server.
+    flush                   Flush one or more column families.
+    gossipinfo              Shows the gossip information for the cluster.
+    getendpoints            Print the end points that owns the key.
+    getcompactionthreshold  Print min and max compaction thresholds for a given column family.
+    getsstables             Print the sstable filenames that own the key.
+    ids                     Print list of unique host IDs.
+    info                    Print node information (uptime, load, ...).
+    invalidatekeycache      Invalidate the key cache.
+    invalidaterowcache      Invalidate the row cache.
+    join                    Join the token ring.
+    move                    Move node on the token ring to a new token.
+    netstats                Print network information on provided host (connecting node by default).
+    proxyhistograms         Print statistic histograms for network operations.
+    rangekeysample          Shows the sampled keys held across all keyspaces
+    rebuild                 Rebuild data by streaming from other nodes (similarly to bootstrapping).
+    rebuild_index           Rebuild native secondary index for a given column family.
+    refresh                 Load newly placed SSTables onto the system without restart.
+    removenode              Show status of current node removal, force completion of pending removal or remove provided ID.
+    repair                  Repair one or more column families.
+    resetlocalschema        Reset node's local schema and resync.
+    ring                    Print information about the token ring.
+    scrub                   Scrub (rebuild sstables for) one or more column families.
+    setcachecapacity        Set the key and row cache capacities of a given column family.
+    setcompactionthreshold  Set the min and max compaction thresholds for a given column family.
+    setcompactionthroughput Set the MB/s throughput cap for compaction in the system, or 0 to disable throttling.
+    setstreamthroughput     Set the MB/s throughput cap for streaming in the system, or 0 to disable throttling.
+    statusthrift            Status of thrift server.
+    stop                    Stop a compaction.
+    snapshot                Take a snapshot of the optionally specified column family of the specified keyspaces.
+    tpstats                 Print usage statistics on thread pools.
+    upgradesstables         Scrub (rebuild sstables for) one or more column families.
+    version                 Print cassandra version.
 
 commands:
     - name: NODE_HELP
