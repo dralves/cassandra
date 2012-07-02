@@ -14,7 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Help file for online commands in Yaml.
+# Help file for nodetool in Yaml.
 
 banner: |
     Type 'help;' or '?' for help.
@@ -29,31 +29,51 @@ help: |
     quit;                   Exit this utility.
 
     Commands:
-    assume                  Apply client side validation.
-    connect                 Connect to a Cassandra node.
-    consistencylevel        Sets consisteny level for the client to use.
-    count                   Count columns or super columns.
-    create column family    Add a column family to an existing keyspace.
-    create keyspace         Add a keyspace to the cluster.
-    del                     Delete a column, super column or row.
-    decr                    Decrements a counter column.
-    describe cluster        Describe the cluster configuration.
-    describe                Describe a keyspace and it's column families or column family in current keyspace.
-    drop column family      Remove a column family and it's data.
-    drop keyspace           Remove a keyspace and it's data.
-    drop index              Remove an existing index from specific column.
-    get                     Get rows and columns.
-    incr                    Increments a counter column.
-    list                    List rows in a column family.
-    set                     Set columns.
-    show api version        Show the server API version.
-    show cluster name       Show the cluster name.
-    show keyspaces          Show all keyspaces and their column families.
-    show schema             Show a cli script to create keyspaces and column families.
-    truncate                Drop the data in a column family.
-    update column family    Update the settings for a column family.
-    update keyspace         Update the settings for a keyspace.
-    use                     Switch to a keyspace.
+	ring                    Print information about the token ring
+	join                    Join the token ring
+	info                    Print node information (uptime, load, ...)
+	cfstats                 Print statistics on column families
+	ids                     Print list of unique host IDs
+	version                 Print cassandra version
+	tpstats                 Print usage statistics on thread pools
+	proxyhistograms         Print statistic histograms for network operations
+	drain                   Drain the node (stop accepting writes and flush all column families)
+	decommission            Decommission the *node I am connecting to*
+	compactionstats         Print statistics on compactions
+	disablegossip           Disable gossip (effectively marking the node dead)
+	enablegossip            Reenable gossip
+	disablethrift           Disable thrift server
+	enablethrift            Reenable thrift server
+	statusthrift            Status of thrift server
+	gossipinfo              Shows the gossip information for the cluster
+	invalidatekeycache      Invalidate the key cache
+	invalidaterowcache      Invalidate the row cache
+	resetlocalschema        Reset node's local schema and resync
+	netstats                Print network information on provided host (connecting node by default)
+	move                    Move node on the token ring to a new token
+	removenode              Show status of current node removal, force completion of pending removal or remove provided ID
+	setcompactionthroughput Set the MB/s throughput cap for compaction in the system, or 0 to disable throttling.
+	setstreamthroughput     Set the MB/s throughput cap for streaming in the system, or 0 to disable throttling.
+	describering            Shows the token ranges info of a given keyspace.
+	rangekeysample          Shows the sampled keys held across all keyspaces.
+	rebuild                 Rebuild data by streaming from other nodes (similarly to bootstraping)
+    snapshot                Take a snapshot of the optionally specified column family of the specified keyspaces
+	clearsnapshot           Remove snapshots for the specified keyspaces
+	flush                   Flush one or more column families
+	repair                  Repair one or more column families
+	cleanup                 Run cleanup on one or more column families
+	compact                 Force a (major) compaction on one or more column families
+	scrub                   Scrub (rebuild sstables for) one or more column families
+	upgradesstables         Scrub (rebuild sstables for) one or more column families
+	getcompactionthreshold  Print min and max compaction thresholds for a given column family
+	cfhistograms            Print statistic histograms for a given column family
+	refresh                 Load newly placed SSTables onto the system without restart.
+	rebuild_index           Rebuild native secondary index for a given column family.
+    getendpoints            Print the end points that owns the key
+	getsstables             Print the sstable filenames that own the key
+    setcachecapacity        Set the key and row cache capacities of a given column family
+	setcompactionthreshold  Set the min and max compaction thresholds for a given column family
+	stop                    Stop a compaction
 
 commands:
     - name: NODE_HELP
