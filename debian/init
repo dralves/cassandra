@@ -21,6 +21,7 @@ SCRIPTNAME=/etc/init.d/$NAME
 CONFDIR=/etc/cassandra
 JSVC=/usr/bin/jsvc
 WAIT_FOR_START=10
+WAIT_FOR_STOP=10
 CASSANDRA_HOME=/usr/share/cassandra
 FD_LIMIT=100000
 
@@ -167,7 +168,14 @@ do_stop()
     is_running || return 1
     $JSVC -stop -home $JAVA_HOME -pidfile $PIDFILE \
             org.apache.cassandra.thrift.CassandraDaemon
-    is_running && return 2 || return 0
+            
+    is_running || return 0
+    for tries in `seq $WAIT_FOR_STOP`; do
+        sleep 1
+        is_running || return 0
+    done
+    
+    kill -9 $PIDFILE
 }
 
 case "$1" in

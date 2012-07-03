@@ -17,20 +17,37 @@
  */
 package org.apache.cassandra.tools;
 
+import java.io.EOFException;
 import java.io.IOException;
 import java.io.PrintStream;
 import java.lang.management.MemoryUsage;
+import java.lang.reflect.UndeclaredThrowableException;
 import java.net.ConnectException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
+import java.rmi.UnmarshalException;
 import java.text.DecimalFormat;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
 import java.util.Map.Entry;
+import java.util.Set;
 import java.util.concurrent.ExecutionException;
 
-import org.apache.cassandra.service.CacheServiceMBean;
-import org.apache.cassandra.service.StorageProxyMBean;
-import org.apache.commons.cli.*;
+import com.google.common.base.Throwables;
+
+import org.apache.commons.cli.CommandLine;
+import org.apache.commons.cli.CommandLineParser;
+import org.apache.commons.cli.HelpFormatter;
+import org.apache.commons.cli.Option;
+import org.apache.commons.cli.Options;
+import org.apache.commons.cli.ParseException;
+import org.apache.commons.cli.PosixParser;
 
 import org.apache.cassandra.concurrent.JMXEnabledThreadPoolExecutorMBean;
 import org.apache.cassandra.config.ConfigurationException;
@@ -38,6 +55,8 @@ import org.apache.cassandra.db.ColumnFamilyStoreMBean;
 import org.apache.cassandra.db.compaction.CompactionManagerMBean;
 import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.net.MessagingServiceMBean;
+import org.apache.cassandra.service.CacheServiceMBean;
+import org.apache.cassandra.service.StorageProxyMBean;
 import org.apache.cassandra.thrift.InvalidRequestException;
 import org.apache.cassandra.utils.EstimatedHistogram;
 import org.apache.cassandra.utils.Pair;
@@ -92,6 +111,7 @@ public class NodeCmd
         ENABLEGOSSIP,
         ENABLETHRIFT,
         FLUSH,
+        FLUSHANDEXIT,
         GETCOMPACTIONTHRESHOLD,
         GETENDPOINTS,
         GETSSTABLES,
@@ -115,7 +135,6 @@ public class NodeCmd
         SETCOMPACTIONTHRESHOLD,
         SETCOMPACTIONTHROUGHPUT,
         SETSTREAMTHROUGHPUT,
-        FLUSHANDEXIT,
         SNAPSHOT,
         STATUSTHRIFT,
         STOP,
@@ -1002,8 +1021,21 @@ public class NodeCmd
         }
     }
     
-    public static void flushAllTablesAndExit(NodeProbe probe) {
-        
+    public static void flushAllTablesAndExit(NodeProbe probe)
+    {
+        try
+        {
+            probe.flushAllTablesAndExit();
+        }
+        catch (Exception e)
+        {
+            // we're expecting this as thrift was shutdown on the other side, if not propagate
+            if (e instanceof UndeclaredThrowableException && e.getCause() instanceof UnmarshalException)
+            {
+                return;
+            }
+            Throwables.propagate(e);
+        }
     }
 
     private static void handleSnapshots(NodeCommand nc, String tag, String[] cmdArgs, String columnFamily, NodeProbe probe) throws InterruptedException, IOException
