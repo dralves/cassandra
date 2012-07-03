@@ -23,6 +23,11 @@
  * stream compressed sstables directly with java nio (CASSANDRA-4297)
  * Support multiple ranges in SliceQueryFilter (CASSANDRA-3885)
  * Add column metadata to system column families (CASSANDRA-4018)
+ * (cql3) always use composite types by default (CASSANDRA-4329)
+
+
+1.1.3
+ * (stress) support for CQL prepared statements (CASSANDRA-3633)
 
 
 1.1.2
@@ -49,6 +54,13 @@
  * add strategy_options to the KSMetaData.toString() output (CASSANDRA-4248)
  * (cql3) fix range queries containing unqueried results (CASSANDRA-4372)
  * (cql3) allow updating column_alias types (CASSANDRA-4041)
+ * (cql3) Fix deletion bug (CASSANDRA-4193)
+ * Fix computation of overlapping sstable for leveled compaction (CASSANDRA-4321)
+ * Improve scrub and allow to run it offline (CASSANDRA-4321)
+ * Fix assertionError in StorageService.bulkLoad (CASSANDRA-4368)
+ * (cqlsh) add option to authenticate to a keyspace at startup (CASSANDRA-4108)
+ * (cqlsh) fix ASSUME functionality (CASSANDRA-4352)
+ * Fix ColumnFamilyRecordReader to not return progress > 100% (CASSANDRA-3942)
 Merged from 1.0:
  * Set gc_grace on index CF to 0 (CASSANDRA-4314)
 
