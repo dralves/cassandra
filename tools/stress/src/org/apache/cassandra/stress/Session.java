@@ -622,6 +622,12 @@ public class Session implements Serializable
             {
                 client.set_keyspace("Keyspace1");
             }
+            
+            // set CLQ 3.0
+            if (enable_cql)
+            {
+                client.set_cql_version("3.0.0");
+            }
         }
         catch (InvalidRequestException e)
         {
