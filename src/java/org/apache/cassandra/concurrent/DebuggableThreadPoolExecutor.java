@@ -33,7 +33,7 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.service.QueryContext;
+import org.apache.cassandra.service.TraceSessionContext;
 
 /**
  * This class encorporates some Executor best practices for Cassandra.  Most of the executors in the system
@@ -144,10 +144,10 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
     {
         super.afterExecute(r,t);
         
-        if (r instanceof QueryContextWrapper)
+        if (r instanceof TraceSessionWrapper)
         {
             // we modified the QueryContext when this task started, so reset it
-            QueryContext.reset();
+            TraceSessionContext.reset();
         }
 
         logExceptionsAfterExecute(r, t);
@@ -216,80 +216,81 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
 
     protected void beforeExecute(Thread t, Runnable r)
     {
-        if (r instanceof QueryContextWrapper)
+        if (r instanceof TraceSessionWrapper)
         {
-            ((QueryContextWrapper) r).setupContext();
+            ((TraceSessionWrapper) r).setupContext();
         }
         super.beforeExecute(t, r);
     }
 
     public void execute(Runnable command)
     {
-        if (command instanceof QueryContextWrapper)
+        if (command instanceof TraceSessionWrapper)
         {
             super.execute(command);
         }
         else
         {
-            final FutureTask<?> ft = new QueryContextWrapper<Object>(command, null);
+            final FutureTask<?> ft = new TraceSessionWrapper<Object>(command, null);
             super.execute(ft);
         }
     }
 
     public Future<?> submit(Runnable task)
     {
-        final FutureTask<Object> ft = (task instanceof QueryContextWrapper)
+        final FutureTask<Object> ft = (task instanceof TraceSessionWrapper)
                                       ? (FutureTask<Object>)task
-                                      : new QueryContextWrapper<Object>(task, null);
+                                      : new TraceSessionWrapper<Object>(task, null);
         execute(ft);
         return ft;
     }
 
     public <T> Future<T> submit(Runnable task, T result)
     {
-        final FutureTask<T> ft = (task instanceof QueryContextWrapper)
+        final FutureTask<T> ft = (task instanceof TraceSessionWrapper)
                                  ? (FutureTask<T>)task
-                                 : new QueryContextWrapper<T>(task, result);
+                                 : new TraceSessionWrapper<T>(task, result);
         execute(ft);
         return ft;
     }
 
     public <T> Future<T> submit(Callable<T> task)
     {
-        final FutureTask<T> ft = (task instanceof QueryContextWrapper)
+        final FutureTask<T> ft = (task instanceof TraceSessionWrapper)
                                  ? (FutureTask<T>)task
-                                 : new QueryContextWrapper<T>(task);
+                                 : new TraceSessionWrapper<T>(task);
         execute(ft);
         return ft;
     }
 
     /**
-     * Used to wrap a Runnable or Callable passed to submit or execute so we can clone the QueryContext and
-     * move it into the worker thread.
+     * Used to wrap a Runnable or Callable passed to submit or execute so we can clone the TraceSessionContext and move it into
+     * the worker thread.
+     * 
      * @param <T>
      */
-    private static class QueryContextWrapper<T> extends FutureTask<T>
+    private static class TraceSessionWrapper<T> extends FutureTask<T>
     {
-        private final QueryContext.QueryContextTLS queryContextTLS;
+        private final TraceSessionContext.TraceSessionContextThreadLocalState traceSessionThreadLocalState;
 
-        //Using initializer because the ctor's provided by the FutureTask<> are all we need
+        // Using initializer because the ctor's provided by the FutureTask<> are all we need
         {
-            queryContextTLS = QueryContext.copy();
+            traceSessionThreadLocalState = TraceSessionContext.copy();
         }
 
-        public QueryContextWrapper(Runnable runnable, T result)
+        public TraceSessionWrapper(Runnable runnable, T result)
         {
             super(runnable, result);
         }
 
-        public QueryContextWrapper(Callable<T> callable)
+        public TraceSessionWrapper(Callable<T> callable)
         {
-           super(callable);
+            super(callable);
         }
 
         private void setupContext()
         {
-            QueryContext.update(queryContextTLS);
+            TraceSessionContext.update(traceSessionThreadLocalState);
         }
     }
 }

@@ -20,7 +20,7 @@ package org.apache.cassandra.net;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.service.QueryContext;
+import org.apache.cassandra.service.TraceSessionContext;
 
 public class MessageDeliveryTask implements Runnable
 {
@@ -47,9 +47,9 @@ public class MessageDeliveryTask implements Runnable
             return;
         }
 
-        final byte[] queryContextBytes = (byte[]) message.parameters.get(QueryContext.QUERY_CONTEXT_HEADER);
+        final byte[] queryContextBytes = (byte[]) message.parameters.get(TraceSessionContext.SESSION_CONTEXT_HEADER);
         if (queryContextBytes != null)
-            QueryContext.update(message, queryContextBytes, id);
+            TraceSessionContext.update(message, queryContextBytes, id);
 
         IVerbHandler verbHandler = MessagingService.instance().getVerbHandler(verb);
         if (verbHandler == null)
@@ -65,7 +65,7 @@ public class MessageDeliveryTask implements Runnable
         finally
         {
             if (queryContextBytes != null)
-                QueryContext.reset();
+                TraceSessionContext.reset();
         }
     }
 }

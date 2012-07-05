@@ -34,9 +34,9 @@ import org.slf4j.helpers.MarkerIgnoringBase;
 import org.slf4j.helpers.MessageFormatter;
 import org.slf4j.spi.LocationAwareLogger;
 
-import org.apache.cassandra.service.QueryContext;
+import org.apache.cassandra.service.TraceSessionContext;
 
-import org.apache.cassandra.service.QueryContext;
+import org.apache.cassandra.service.TraceSessionContext;
 
 /**
  * A wrapper over {@link org.apache.log4j.Logger org.apache.log4j.Logger} in
@@ -86,7 +86,7 @@ public final class Log4jLoggerAdapter extends MarkerIgnoringBase implements
    * Prefixes the log message with the query detail
    */
   private String addQueryDetail(final String msg){
-    final String prefix = QueryContext.logMessagePrefix();
+    final String prefix = TraceSessionContext.logMessagePrefix();
     return (prefix == null) ? msg : String.format("%s%s", prefix, msg);
   }
 
@@ -96,7 +96,7 @@ public final class Log4jLoggerAdapter extends MarkerIgnoringBase implements
 
   private Level mapLevel(final Level original){
     if ((original == Level.DEBUG) || (original == Level.TRACE))
-        return QueryContext.isQueryDetail() ? Level.INFO : original;
+        return TraceSessionContext.isQueryDetail() ? Level.INFO : original;
     return original;
   }
 
@@ -116,7 +116,7 @@ public final class Log4jLoggerAdapter extends MarkerIgnoringBase implements
    */
   public boolean isTraceEnabled() {
     if (traceCapable) {
-      return QueryContext.isQueryDetail() ? true : logger.isTraceEnabled();
+      return TraceSessionContext.isQueryDetail() ? true : logger.isTraceEnabled();
     } else {
       return logger.isDebugEnabled();
     }
@@ -215,7 +215,7 @@ public final class Log4jLoggerAdapter extends MarkerIgnoringBase implements
    * @return True if this Logger is enabled for level DEBUG, false otherwise.
    */
   public boolean isDebugEnabled() {
-    return QueryContext.isQueryDetail() ? true : logger.isDebugEnabled();
+    return TraceSessionContext.isQueryDetail() ? true : logger.isDebugEnabled();
   }
 
   /**
