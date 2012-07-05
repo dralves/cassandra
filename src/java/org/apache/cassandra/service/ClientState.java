@@ -47,6 +47,8 @@ public class ClientState
     // Current user for the session
     private AuthenticatedUser user;
     private String keyspace;
+    private boolean queryDetails = false;
+
     // Reusable array for authorization
     private final List<Object> resource = new ArrayList<Object>();
     private SemanticVersion cqlVersion = DEFAULT_CQL_VERSION;
@@ -103,6 +105,18 @@ public class ClientState
         keyspace = ks;
     }
 
+    public boolean getQueryDetails()
+    {
+        return queryDetails;
+    }
+
+    public void setQueryDetails(boolean value)
+    {
+        queryDetails = value;
+        if (logger.isDebugEnabled())
+            logger.debug("query details set " + value);
+    }
+
     public String getSchedulingValue()
     {
         switch(DatabaseDescriptor.getRequestSchedulerId())
@@ -141,6 +155,7 @@ public class ClientState
     {
         user = DatabaseDescriptor.getAuthenticator().defaultUser();
         keyspace = null;
+        queryDetails = false;
         resourceClear();
         prepared.clear();
         cql3Prepared.clear();

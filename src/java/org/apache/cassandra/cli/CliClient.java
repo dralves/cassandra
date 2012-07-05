@@ -266,6 +266,12 @@ public class CliClient
                 case CliParser.NODE_USE_TABLE:
                     executeUseKeySpace(tree);
                     break;
+                case CliParser.NODE_ENABLE:
+                    executeEnable(tree);
+                    break;
+                case CliParser.NODE_DISABLE:
+                    executeDisable(tree);
+                    break;
                 case CliParser.NODE_CONNECT:
                     executeConnect(tree);
                     break;
@@ -1988,6 +1994,36 @@ public class CliClient
                 e.printStackTrace(sessionState.err);
 
             sessionState.err.println("Login failure. Did you specify 'keyspace', 'username' and 'password'?");
+        }
+    }
+
+    private void executeEnable(final Tree statement) throws TException
+    {
+        if (!CliMain.isConnected())
+            return;
+
+        final int optionType = statement.getChild(0).getType();
+
+        switch(optionType)
+        {
+            case CliParser.NODE_QUERY_DETAILS:
+                thriftClient.system_enable_query_details(true);
+                break;
+        }
+    }
+
+    private void executeDisable(final Tree statement) throws TException
+    {
+        if (!CliMain.isConnected())
+            return;
+
+        final int optionType = statement.getChild(0).getType();
+
+        switch(optionType)
+        {
+            case CliParser.NODE_QUERY_DETAILS:
+                thriftClient.system_enable_query_details(false);
+                break;
         }
     }
 

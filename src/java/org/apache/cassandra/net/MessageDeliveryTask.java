@@ -20,7 +20,7 @@ package org.apache.cassandra.net;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.service.QueryContext;
 
 public class MessageDeliveryTask implements Runnable
 {
@@ -41,11 +41,15 @@ public class MessageDeliveryTask implements Runnable
     {
         MessagingService.Verb verb = message.verb;
         if (MessagingService.DROPPABLE_VERBS.contains(verb)
-            && System.currentTimeMillis() > constructionTime + message.getTimeout())
+                && System.currentTimeMillis() > constructionTime + message.getTimeout())
         {
             MessagingService.instance().incrementDroppedMessages(verb);
             return;
         }
+
+        final byte[] queryContextBytes = (byte[]) message.parameters.get(QueryContext.QUERY_CONTEXT_HEADER);
+        if (queryContextBytes != null)
+            QueryContext.update(message, queryContextBytes, id);
 
         IVerbHandler verbHandler = MessagingService.instance().getVerbHandler(verb);
         if (verbHandler == null)
@@ -54,6 +58,14 @@ public class MessageDeliveryTask implements Runnable
             return;
         }
 
-        verbHandler.doVerb(message, id);
+        try
+        {
+            verbHandler.doVerb(message, id);
+        }
+        finally
+        {
+            if (queryContextBytes != null)
+                QueryContext.reset();
+        }
     }
 }

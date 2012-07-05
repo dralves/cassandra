@@ -38,6 +38,9 @@ tokens {
     NODE_DESCRIBE;
     NODE_DESCRIBE_CLUSTER;
     NODE_USE_TABLE;
+    NODE_ENABLE;
+    NODE_DISABLE;
+    NODE_QUERY_DETAILS;
     NODE_EXIT;
     NODE_HELP;
     NODE_NO_OP;
@@ -145,6 +148,8 @@ statement
     | delColumnFamily
     | delKeyspace
     | useKeyspace
+    | enableStatement
+    | disableStatement
     | delStatement
     | getStatement
     | helpStatement
@@ -173,6 +178,10 @@ helpStatement
         -> ^(NODE_HELP NODE_CONNECT)
     | HELP USE 
         -> ^(NODE_HELP NODE_USE_TABLE)
+    | HELP ENABLE QUERY DETAILS
+        -> ^(NODE_HELP NODE_ENABLE)
+    | HELP DISABLE QUERY DETAILS
+        -> ^(NODE_HELP NODE_DISABLE)
     | HELP DESCRIBE
         -> ^(NODE_HELP NODE_DESCRIBE)
     | HELP DESCRIBE 'CLUSTER'
@@ -373,6 +382,15 @@ useKeyspace
         -> ^(NODE_USE_TABLE keyspace ( username )? ( password )?)
     ;
 
+enableStatement
+    : ENABLE QUERY DETAILS
+        -> ^(NODE_ENABLE NODE_QUERY_DETAILS)
+    ;
+
+disableStatement
+    : DISABLE QUERY DETAILS
+        -> ^(NODE_DISABLE NODE_QUERY_DETAILS)
+    ;
 
 keyValuePairExpr
     : entityName ( (AND | WITH) keyValuePair )*
@@ -552,13 +570,17 @@ incrementValue
 //
 // CLI is case-insensitive with respect to these keywords.
 // However, they MUST be listed in upper case here.
-// 
+//
 CONFIG:      'CONFIG';
 CONNECT:     'CONNECT';
 COUNT:       'COUNT';
 DEL:         'DEL';
 DESCRIBE:    'DESCRIBE';
 USE:         'USE';
+ENABLE:     'ENABLE';
+DISABLE:    'DISABLE';
+QUERY:      'QUERY';
+DETAILS:    'DETAILS';
 GET:         'GET';
 HELP:        'HELP';
 EXIT:        'EXIT';

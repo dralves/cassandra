@@ -17,10 +17,23 @@
  */
 package org.apache.cassandra.concurrent;
 
-import java.util.concurrent.*;
+import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.Callable;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Future;
+import java.util.concurrent.FutureTask;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.RejectedExecutionHandler;
+import java.util.concurrent.ThreadFactory;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.cassandra.service.QueryContext;
 
 /**
  * This class encorporates some Executor best practices for Cassandra.  Most of the executors in the system
@@ -130,6 +143,13 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
     protected void afterExecute(Runnable r, Throwable t)
     {
         super.afterExecute(r,t);
+        
+        if (r instanceof QueryContextWrapper)
+        {
+            // we modified the QueryContext when this task started, so reset it
+            QueryContext.reset();
+        }
+
         logExceptionsAfterExecute(r, t);
     }
 
@@ -192,5 +212,84 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
         }
 
         return null;
+    }
+
+    protected void beforeExecute(Thread t, Runnable r)
+    {
+        if (r instanceof QueryContextWrapper)
+        {
+            ((QueryContextWrapper) r).setupContext();
+        }
+        super.beforeExecute(t, r);
+    }
+
+    public void execute(Runnable command)
+    {
+        if (command instanceof QueryContextWrapper)
+        {
+            super.execute(command);
+        }
+        else
+        {
+            final FutureTask<?> ft = new QueryContextWrapper<Object>(command, null);
+            super.execute(ft);
+        }
+    }
+
+    public Future<?> submit(Runnable task)
+    {
+        final FutureTask<Object> ft = (task instanceof QueryContextWrapper)
+                                      ? (FutureTask<Object>)task
+                                      : new QueryContextWrapper<Object>(task, null);
+        execute(ft);
+        return ft;
+    }
+
+    public <T> Future<T> submit(Runnable task, T result)
+    {
+        final FutureTask<T> ft = (task instanceof QueryContextWrapper)
+                                 ? (FutureTask<T>)task
+                                 : new QueryContextWrapper<T>(task, result);
+        execute(ft);
+        return ft;
+    }
+
+    public <T> Future<T> submit(Callable<T> task)
+    {
+        final FutureTask<T> ft = (task instanceof QueryContextWrapper)
+                                 ? (FutureTask<T>)task
+                                 : new QueryContextWrapper<T>(task);
+        execute(ft);
+        return ft;
+    }
+
+    /**
+     * Used to wrap a Runnable or Callable passed to submit or execute so we can clone the QueryContext and
+     * move it into the worker thread.
+     * @param <T>
+     */
+    private static class QueryContextWrapper<T> extends FutureTask<T>
+    {
+        private final QueryContext.QueryContextTLS queryContextTLS;
+
+        //Using initializer because the ctor's provided by the FutureTask<> are all we need
+        {
+            queryContextTLS = QueryContext.copy();
+        }
+
+        public QueryContextWrapper(Runnable runnable, T result)
+        {
+            super(runnable, result);
+        }
+
+        public QueryContextWrapper(Callable<T> callable)
+        {
+           super(callable);
+        }
+
+        private void setupContext()
+        {
+            QueryContext.update(queryContextTLS);
+        }
     }
 }

@@ -709,6 +709,9 @@ service Cassandra {
                                4:required i32 keys_per_split)
     throws (1:InvalidRequestException ire),
 
+  /** Enables detailed logging for all queries sent on this connection.*/
+  void system_enable_query_details(1: required bool enabled=0,),
+
   /** adds a column family. returns the new schema id. */
   string system_add_column_family(1:required CfDef cf_def)
     throws (1:InvalidRequestException ire, 2:SchemaDisagreementException sde),
