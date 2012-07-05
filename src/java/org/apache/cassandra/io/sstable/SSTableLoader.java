@@ -34,8 +34,7 @@ import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.streaming.*;
-import org.apache.cassandra.utils.FBUtilities;
-import org.apache.cassandra.utils.Pair;
+import org.apache.cassandra.utils.*;
 
 /**
  * Cassandra SSTable bulk loader.
@@ -251,15 +250,6 @@ public class SSTableLoader
         }
     }
 
-    public interface OutputHandler
-    {
-        // called when an important info need to be displayed
-        public void output(String msg);
-
-        // called when a less important info need to be displayed
-        public void debug(String msg);
-    }
-
     public static abstract class Client
     {
         private final Map<InetAddress, Collection<Range<Token>>> endpointToRanges = new HashMap<InetAddress, Collection<Range<Token>>>();
@@ -294,7 +284,12 @@ public class SSTableLoader
 
         protected void setPartitioner(String partclass) throws ConfigurationException
         {
-            this.partitioner = FBUtilities.newPartitioner(partclass);
+            setPartitioner(FBUtilities.newPartitioner(partclass));
+        }
+
+        protected void setPartitioner(IPartitioner partitioner) throws ConfigurationException
+        {
+            this.partitioner = partitioner;
             DatabaseDescriptor.setPartitioner(partitioner);
         }
 

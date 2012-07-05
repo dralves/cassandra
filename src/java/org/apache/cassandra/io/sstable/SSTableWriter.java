@@ -133,8 +133,8 @@ public class SSTableWriter extends SSTable
     private long beforeAppend(DecoratedKey decoratedKey) throws IOException
     {
         assert decoratedKey != null : "Keys must not be null";
-        assert lastWrittenKey == null || lastWrittenKey.compareTo(decoratedKey) < 0
-               : "Last written key " + lastWrittenKey + " >= current key " + decoratedKey + " writing into " + getFilename();
+        if (lastWrittenKey != null && lastWrittenKey.compareTo(decoratedKey) >= 0)
+            throw new RuntimeException("Last written key " + lastWrittenKey + " >= current key " + decoratedKey + " writing into " + getFilename());
         return (lastWrittenKey == null) ? 0 : dataFile.getFilePointer();
     }
 
@@ -371,6 +371,11 @@ public class SSTableWriter extends SSTable
     public long getFilePointer()
     {
         return dataFile.getFilePointer();
+    }
+
+    public long getOnDiskFilePointer() throws IOException
+    {
+        return dataFile.getOnDiskFilePointer();
     }
 
     /**

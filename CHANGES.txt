@@ -1,10 +1,12 @@
 1.2-dev
+ * update NTS calculateNaturalEndpoints to be O(N log N) (CASSANDRA-3881)
+ * add UseCondCardMark XX jvm settings on jdk 1.7 (CASSANDRA-4366)
+ * split up rpc timeout by operation type (CASSANDRA-2819)
  * rewrite key cache save/load to use only sequential i/o (CASSANDRA-3762)
  * update MS protocol with a version handshake + broadcast address id
    (CASSANDRA-4311)
  * multithreaded hint replay (CASSANDRA-4189)
  * add inter-node message compression (CASSANDRA-3127)
- * enforce 1m min keycache for auto (CASSANDRA-4306)
  * remove COPP (CASSANDRA-2479)
  * Track tombstone expiration and compact when tombstone content is
    higher than a configurable threshold, default 20% (CASSANDRA-3442)
@@ -12,20 +14,34 @@
  * (CLI) track elapsed time for `delete' operation (CASSANDRA-4060)
  * (CLI) jline version is bumped to 1.0 to properly  support
    'delete' key function (CASSANDRA-4132)
- * Save IndexSummary into new SSTable 'Summary' component (CASSANDRA-2392)
+ * Save IndexSummary into new SSTable 'Summary' component (CASSANDRA-2392, 4289)
  * Add support for range tombstones (CASSANDRA-3708)
  * Improve MessagingService efficiency (CASSANDRA-3617)
  * Avoid ID conflicts from concurrent schema changes (CASSANDRA-3794)
  * Set thrift HSHA server thread limit to unlimited by default (CASSANDRA-4277)
  * Avoids double serialization of CF id in RowMutation messages
    (CASSANDRA-4293)
- * fix Summary component and caches to use correct partitioner (CASSANDRA-4289)
  * stream compressed sstables directly with java nio (CASSANDRA-4297)
  * Support multiple ranges in SliceQueryFilter (CASSANDRA-3885)
  * Add column metadata to system column families (CASSANDRA-4018)
+ * (cql3) always use composite types by default (CASSANDRA-4329)
+
+
+1.1.3
+ * avoid using global partitioner to estimate ranges in index sstables
+   (CASSANDRA-4403)
+ * restore pre-CASSANDRA-3862 approach to removing expired tombstones
+   from row cache during compaction (CASSANDRA-4364)
+ * (stress) support for CQL prepared statements (CASSANDRA-3633)
+Merged from 1.0:
+ * allow dropping columns shadowed by not-yet-expired supercolumn or row
+   tombstones in PrecompactedRow (CASSANDRA-4396)
 
 
 1.1.2
+ * Fix cleanup not deleting index entries (CASSANDRA-4379)
+ * Use correct partitioner when saving + loading caches (CASSANDRA-4331)
+ * Check schema before trying to export sstable (CASSANDRA-2760)
  * Raise a meaningful exception instead of NPE when PFS encounters
    an unconfigured node + no default (CASSANDRA-4349)
  * fix bug in sstable blacklisting with LCS (CASSANDRA-4343)
@@ -34,17 +50,31 @@
  * fix NPE in compactionstats (CASSANDRA-4318)
  * enforce 1m min keycache for auto (CASSANDRA-4306)
  * Have DeletedColumn.isMFD always return true (CASSANDRA-4307)
- * ex msg for cql3 order by constraints says primary filter can be an IN clause 
-   which is misleading (CASSANDRA-4319)
+ * (cql3) exeption message for ORDER BY constraints said primary filter can be
+    an IN clause, which is misleading (CASSANDRA-4319)
  * (cql3) Reject (not yet supported) creation of 2ndardy indexes on tables with
    composite primary keys (CASSANDRA-4328)
  * Set JVM stack size to 160k for java 7 (CASSANDRA-4275)
  * cqlsh: add COPY command to load data from CSV flat files (CASSANDRA-4012)
+ * CFMetaData.fromThrift to throw ConfigurationException upon error (CASSANDRA-4353)
+ * Use CF comparator to sort indexed columns in SecondaryIndexManager
+   (CASSANDRA-4365)
+ * add strategy_options to the KSMetaData.toString() output (CASSANDRA-4248)
+ * (cql3) fix range queries containing unqueried results (CASSANDRA-4372)
+ * (cql3) allow updating column_alias types (CASSANDRA-4041)
+ * (cql3) Fix deletion bug (CASSANDRA-4193)
+ * Fix computation of overlapping sstable for leveled compaction (CASSANDRA-4321)
+ * Improve scrub and allow to run it offline (CASSANDRA-4321)
+ * Fix assertionError in StorageService.bulkLoad (CASSANDRA-4368)
+ * (cqlsh) add option to authenticate to a keyspace at startup (CASSANDRA-4108)
+ * (cqlsh) fix ASSUME functionality (CASSANDRA-4352)
+ * Fix ColumnFamilyRecordReader to not return progress > 100% (CASSANDRA-3942)
 Merged from 1.0:
  * Set gc_grace on index CF to 0 (CASSANDRA-4314)
 
 
 1.1.1
+ * allow larger cache capacities than 2GB (CASSANDRA-4150)
  * add getsstables command to nodetool (CASSANDRA-4199)
  * apply parent CF compaction settings to secondary index CFs (CASSANDRA-4280)
  * preserve commitlog size cap when recycling segments at startup

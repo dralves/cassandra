@@ -115,7 +115,7 @@ public class LeaveAndBootstrapTest
             {
                 int replicationFactor = strategy.getReplicationFactor();
 
-                HashSet<InetAddress> actual = new HashSet<InetAddress>(tmd.getWriteEndpoints(token, table, strategy.calculateNaturalEndpoints(token, tmd)));
+                HashSet<InetAddress> actual = new HashSet<InetAddress>(tmd.getWriteEndpoints(token, table, strategy.calculateNaturalEndpoints(token, tmd.cloneOnlyTokenMap())));
                 HashSet<InetAddress> expected = new HashSet<InetAddress>();
 
                 for (int i = 0; i < replicationFactor; i++)
@@ -162,9 +162,11 @@ public class LeaveAndBootstrapTest
 
         // boot two new nodes with keyTokens.get(5) and keyTokens.get(7)
         InetAddress boot1 = InetAddress.getByName("127.0.1.1");
+        Gossiper.instance.initializeNodeUnsafe(boot1, 1);
         UUID boot1Id = UUID.randomUUID();
         ss.onChange(boot1, ApplicationState.STATUS, valueFactory.bootstrapping(keyTokens.get(5), boot1Id));
         InetAddress boot2 = InetAddress.getByName("127.0.1.2");
+        Gossiper.instance.initializeNodeUnsafe(boot2, 1);
         ss.onChange(boot2, ApplicationState.STATUS, valueFactory.bootstrapping(keyTokens.get(7), UUID.randomUUID()));
 
         Collection<InetAddress> endpoints = null;
