@@ -1,5 +1,3 @@
-package org.apache.cassandra.service;
-
 /*
  *
  * Licensed to the Apache Software Foundation (ASF) under one
@@ -20,6 +18,7 @@ package org.apache.cassandra.service;
  * under the License.
  *
  */
+package org.apache.cassandra.service;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
