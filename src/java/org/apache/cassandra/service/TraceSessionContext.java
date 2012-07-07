@@ -300,6 +300,16 @@ public class TraceSessionContext
         }
     }
 
+    /**
+     * Stores a "new session" event in the sessions table. This will allow to track all the subsequent "trace" events.
+     * 
+     * @param sessionId
+     *            the sessionId - unique in a per-host basis
+     * @param coordinator
+     *            the node that initiated the sesssion
+     * @param request
+     *            the request that initiated the session (usually the user operation)
+     */
     public void newSessionEvent(int sessionId, InetAddress coordinator, String request)
     {
         long currentTime = System.currentTimeMillis();
@@ -321,6 +331,16 @@ public class TraceSessionContext
         }
     }
 
+    /**
+     * Adds a "trace" event to the events table. All events belong to a given session
+     * 
+     * @param sessionId
+     * @param coordinator
+     * @param source
+     * @param traceEvent
+     * @param duration
+     * @param happenedAt
+     */
     public void newTraceEvent(int sessionId, InetAddress coordinator, InetAddress source,
             TraceEvent traceEvent, long duration, long happenedAt)
     {

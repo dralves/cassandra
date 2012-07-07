@@ -24,6 +24,7 @@ package org.apache.cassandra.service;
 import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
+import org.apache.cassandra.db.Table;
 
 public class TraceSessionContextTest extends SchemaLoader
 {
