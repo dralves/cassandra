@@ -24,7 +24,7 @@
 
 package org.slf4j.impl;
 
-import static org.apache.cassandra.service.TraceSessionContext.getContext;
+import static org.apache.cassandra.service.TraceSessionContext.traceCtx;
 
 import java.io.Serializable;
 
@@ -87,7 +87,7 @@ public final class Log4jLoggerAdapter extends MarkerIgnoringBase implements
      */
     private String addQueryDetail(final String msg)
     {
-        final String prefix = getContext().logMessagePrefix();
+        final String prefix = traceCtx().logMessagePrefix();
         return (prefix == null) ? msg : String.format("%s%s", prefix, msg);
     }
 
@@ -99,7 +99,7 @@ public final class Log4jLoggerAdapter extends MarkerIgnoringBase implements
     private Level mapLevel(final Level original)
     {
         if ((original == Level.DEBUG) || (original == Level.TRACE))
-            return getContext().isTracing() ? Level.INFO : original;
+            return traceCtx().isTracing() ? Level.INFO : original;
         return original;
     }
 
@@ -125,7 +125,7 @@ public final class Log4jLoggerAdapter extends MarkerIgnoringBase implements
     {
         if (traceCapable)
         {
-            return getContext().isTracing() ? true : logger.isTraceEnabled();
+            return traceCtx().isTracing() ? true : logger.isTraceEnabled();
         }
         else
         {
@@ -229,7 +229,7 @@ public final class Log4jLoggerAdapter extends MarkerIgnoringBase implements
      */
     public boolean isDebugEnabled()
     {
-        return getContext().isTracing() ? true : logger.isDebugEnabled();
+        return traceCtx().isTracing() ? true : logger.isDebugEnabled();
     }
 
     /**

@@ -29,6 +29,9 @@ import java.io.DataInputStream;
 import java.io.IOError;
 import java.io.IOException;
 import java.net.InetAddress;
+import java.nio.ByteBuffer;
+import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.base.Stopwatch;
@@ -36,26 +39,60 @@ import com.google.common.base.Stopwatch;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.Schema;
+import org.apache.cassandra.db.Column;
+import org.apache.cassandra.db.ColumnFamily;
+import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.Table;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.net.MessageIn;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.UUIDGen;
 
 /**
  * A container for per-query thread-local state. Tracks if the current query should be logged in detail.
  */
 public class TraceSessionContext
 {
+    /* column names */
+    public static final String SESSION = "session";
+    public static final String COORDINATOR = "coordinator";
+    public static final String REQUEST = "request";
+    public static final String EVENT_ID = "id";
+    public static final String SOURCE = "source";
+    public static final String EVENT = "event";
+    public static final String HAPPENED = "event";
+    public static final String DURATION = "event";
+
+    /* keyspace and column families */
+    public static final String TRACE_TABLE = "trace";
+    public static final String TRACE_SESSIONS_CF_NAME = "trace_sessions";
+    public static final String TRACE_EVENTS_CF_NAME = "trace_events";
+
+    /* cql definitions */
+    public static final String TRACE_SESSIONS_CFDEF = "CREATE TABLE trace.trace_sessions (" +
+            "  session int," +
+            "  coordinator inetaddr," +
+            "  request text," +
+            "  PRIMARY KEY (session, coordinator));";
+
+    public static final String TRACE_EVENTS_CFDEF = "CREATE TABLE trace.trace_events (" +
+            "  session     int," +
+            "  coordinator inetaddr," +
+            "  id     uuid," +
+            "  source inetaddr," +
+            "  event  text," +
+            "  duration long," +
+            "  happened_at long," +
+            "  PRIMARY KEY (session, coordinator, id));";
 
     /**
      * Trace session meta events.
      */
-    public enum TraceMetaEvents
+    public enum TraceEvent
     {
-        /**
-         * Signals a locally initiated trace session's beginning.
-         */
-        TRACE_SESSION_BEGIN,
         /**
          * Signals a remotely initiated trace session's beginning.
          */
@@ -69,46 +106,41 @@ public class TraceSessionContext
          */
         TRACE_SESSION_END;
 
+        private UUID uuid;
+
+        TraceEvent()
+        {
+            uuid = UUID.nameUUIDFromBytes(ByteBufferUtil.bytes(name()).array());
+        }
+
+        public UUID uuid()
+        {
+            return uuid;
+        }
+
     }
 
     public static final String SESSION_CONTEXT_HEADER = "SessionContext";
-
-    public static final String TRACE_TABLE = "trace";
-
-    public static final String TRACE_SESSIONS_CF_NAME = "trace_sessions";
-
-    public static final String TRACE_SESSIONS_CFDEF = "CREATE TABLE trace.trace_sessions (" +
-            "  session int," +
-            "  coordinator inetaddr," +
-            "  request text," +
-            "  PRIMARY KEY (session, coordinator));";
-
-    public static final String TRACE_EVENTS_CF_NAME = "trace_events";
-
-    public static final String TRACE_EVENTS_CFDEF = "CREATE TABLE trace.trace_events (" +
-            "  session     int," +
-            "  coordinator inetaddr," +
-            "  id     uuid," +
-            "  source inetaddr," +
-            "  event  text," +
-            "  happened_at timestamp," +
-            "  duration int," +
-            "  PRIMARY KEY (session, coordinator, id));";
 
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
     private static final TraceSessionContext instance = new TraceSessionContext();
 
     private final AtomicInteger idGenerator = new AtomicInteger(0);
     private ThreadLocal<TraceSessionContextThreadLocalState> sessionContextThreadLocalState = new ThreadLocal<TraceSessionContextThreadLocalState>();
+    private Table traceTable;
+    private CFMetaData sessionsCfm;
+    private CFMetaData eventsCfm;
 
     private TraceSessionContext()
     {
-        Table traceTable = Table.open(TRACE_TABLE);
+        this.traceTable = Table.open(TRACE_TABLE);
         if (traceTable.getColumnFamilyStores().size() != 2)
         {
             processInternal(TRACE_EVENTS_CFDEF);
             processInternal(TRACE_SESSIONS_CFDEF);
         }
+        this.sessionsCfm = Schema.instance.getCFMetaData(TRACE_TABLE, TRACE_SESSIONS_CF_NAME);
+        this.eventsCfm = Schema.instance.getCFMetaData(TRACE_TABLE, TRACE_EVENTS_CF_NAME);
     }
 
     /**
@@ -118,15 +150,20 @@ public class TraceSessionContext
      * @param cs
      * @return if the connection wide queryDetails was set, returns true and begins tracking the query. false otherwise.
      */
-    public boolean startSession(final ClientState cs)
+    public boolean startSession(final ClientState cs, String request)
     {
         assert sessionContextThreadLocalState.get() == null;
-        if (cs.getQueryDetails() == false)
+        if (!cs.getQueryDetails())
             return false;
 
-        sessionContextThreadLocalState.set(new TraceSessionContextThreadLocalState(FBUtilities.getLocalAddress(),
-                idGenerator
-                        .incrementAndGet()));
+        int sessionId = idGenerator.incrementAndGet();
+
+        TraceSessionContextThreadLocalState tsctls = new TraceSessionContextThreadLocalState(
+                FBUtilities.getLocalAddress(), sessionId);
+
+        sessionContextThreadLocalState.set(tsctls);
+
+        newSessionEvent(sessionId, tsctls.origin, request);
         return true;
     }
 
@@ -137,6 +174,12 @@ public class TraceSessionContext
     {
         if (isTracing())
             logger.info("returning to client, async processing may continue");
+
+        TraceSessionContextThreadLocalState tsctls = sessionContextThreadLocalState.get();
+
+        newTraceEvent(tsctls.sessionId, tsctls.origin, tsctls.origin, TraceEvent.TRACE_SESSION_END,
+                tsctls.watch.elapsedTime(TimeUnit.MILLISECONDS), System.currentTimeMillis());
+
         reset();
     }
 
@@ -257,7 +300,85 @@ public class TraceSessionContext
         }
     }
 
-    public static TraceSessionContext getContext()
+    public void newSessionEvent(int sessionId, InetAddress coordinator, String request)
+    {
+        long currentTime = System.currentTimeMillis();
+        RowMutation mutation = new RowMutation(TRACE_TABLE, ByteBufferUtil.bytes(sessionId));
+        // TODO add TTL
+        ColumnFamily family = ColumnFamily.create(sessionsCfm);
+        family.addColumn(column(SESSION, sessionId, currentTime));
+        family.addColumn(column(COORDINATOR, coordinator, currentTime));
+        family.addColumn(column(REQUEST, request, currentTime));
+        mutation.add(family);
+        try
+        {
+            mutation.apply();
+        }
+        // log but tracing errors shouldn't affect the caller
+        catch (IOException e)
+        {
+            logger.error("error while storing trace event", e);
+        }
+    }
+
+    public void newTraceEvent(int sessionId, InetAddress coordinator, InetAddress source,
+            TraceEvent traceEvent, long duration, long happenedAt)
+    {
+        newTraceEvent(sessionId, coordinator, source, traceEvent.name(), traceEvent.uuid(), duration, happenedAt);
+    }
+
+    public void newTraceEvent(int sessionId, InetAddress coordinator, InetAddress source,
+            String traceEvent, UUID id, long duration, long happenedAt)
+    {
+        long currentTime = System.currentTimeMillis();
+        RowMutation mutation = new RowMutation(TRACE_TABLE, ByteBufferUtil.bytes(sessionId));
+        // TODO add TTL
+        ColumnFamily family = ColumnFamily.create(eventsCfm);
+        family.addColumn(column(SESSION, sessionId, currentTime));
+        family.addColumn(column(COORDINATOR, coordinator, currentTime));
+        family.addColumn(column(EVENT_ID, id, currentTime));
+        family.addColumn(column(SOURCE, source, currentTime));
+        family.addColumn(column(EVENT, traceEvent, currentTime));
+        family.addColumn(column(DURATION, duration, currentTime));
+        family.addColumn(column(HAPPENED, happenedAt, currentTime));
+        mutation.add(family);
+        try
+        {
+            mutation.apply();
+        }
+        // log but tracing errors shouldn't affect the caller
+        catch (IOException e)
+        {
+            logger.error("error while storing trace event", e);
+        }
+    }
+
+    private static Column column(String columnName, int value, long timestamp)
+    {
+        return new Column(ByteBufferUtil.bytes(columnName), ByteBufferUtil.bytes(value), timestamp);
+    }
+
+    private static Column column(String columnName, long value, long timestamp)
+    {
+        return new Column(ByteBufferUtil.bytes(columnName), ByteBufferUtil.bytes(value), timestamp);
+    }
+
+    private static Column column(String columnName, InetAddress address, long timestamp)
+    {
+        return new Column(ByteBufferUtil.bytes(columnName), ByteBuffer.wrap(address.getAddress()), timestamp);
+    }
+
+    private static Column column(String columnName, UUID uuid, long timestamp)
+    {
+        return new Column(ByteBufferUtil.bytes(columnName), ByteBuffer.wrap(UUIDGen.decompose(uuid)), timestamp);
+    }
+
+    private static Column column(String columnName, String value, long timestamp)
+    {
+        return new Column(ByteBufferUtil.bytes(columnName), ByteBufferUtil.bytes(value), timestamp);
+    }
+
+    public static TraceSessionContext traceCtx()
     {
         return instance;
     }

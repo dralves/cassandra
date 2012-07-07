@@ -17,7 +17,7 @@
  */
 package org.apache.cassandra.concurrent;
 
-import static org.apache.cassandra.service.TraceSessionContext.getContext;
+import static org.apache.cassandra.service.TraceSessionContext.traceCtx;
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
@@ -149,7 +149,7 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
         if (r instanceof TraceSessionWrapper)
         {
             // we modified the QueryContext when this task started, so reset it
-            getContext().reset();
+            traceCtx().reset();
         }
 
         logExceptionsAfterExecute(r, t);
@@ -277,7 +277,7 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
 
         // Using initializer because the ctor's provided by the FutureTask<> are all we need
         {
-            traceSessionThreadLocalState = getContext().copy();
+            traceSessionThreadLocalState = traceCtx().copy();
         }
 
         public TraceSessionWrapper(Runnable runnable, T result)
@@ -292,7 +292,7 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
 
         private void setupContext()
         {
-            getContext().update(traceSessionThreadLocalState);
+            traceCtx().update(traceSessionThreadLocalState);
         }
     }
 }
