@@ -21,6 +21,7 @@
 package org.apache.cassandra.service;
 
 import static com.google.common.base.Preconditions.checkNotNull;
+import static com.google.common.base.Preconditions.checkState;
 import static org.apache.cassandra.cql3.QueryProcessor.processInternal;
 
 import java.io.ByteArrayInputStream;
@@ -29,6 +30,8 @@ import java.io.IOError;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.util.concurrent.atomic.AtomicInteger;
+
+import com.google.common.base.Stopwatch;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -43,6 +46,31 @@ import org.apache.cassandra.utils.FBUtilities;
  */
 public class TraceSessionContext
 {
+
+    /**
+     * Trace session meta events.
+     */
+    public enum TraceMetaEvents
+    {
+        /**
+         * Signals a locally initiated trace session's beginning.
+         */
+        TRACE_SESSION_BEGIN,
+        /**
+         * Signals a remotely initiated trace session's beginning.
+         */
+        REMOTE_TRACE_SESSION_BEGIN,
+        /**
+         * Signals a remotely initiated trace session's end.
+         */
+        REMOTE_TRACE_SESSION_END,
+        /**
+         * Signals a locally initiated trace session's end.
+         */
+        TRACE_SESSION_END;
+
+    }
+
     public static final String SESSION_CONTEXT_HEADER = "SessionContext";
 
     public static final String TRACE_TABLE = "trace";
@@ -68,10 +96,10 @@ public class TraceSessionContext
             "  PRIMARY KEY (session, coordinator, id));";
 
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
+    private static final TraceSessionContext instance = new TraceSessionContext();
 
-    private static final AtomicInteger idGenerator = new AtomicInteger(0);
-
-    private static ThreadLocal<TraceSessionContextThreadLocalState> sessionContextThreadLocalState = new ThreadLocal<TraceSessionContextThreadLocalState>();
+    private final AtomicInteger idGenerator = new AtomicInteger(0);
+    private ThreadLocal<TraceSessionContextThreadLocalState> sessionContextThreadLocalState = new ThreadLocal<TraceSessionContextThreadLocalState>();
 
     private TraceSessionContext()
     {
@@ -90,7 +118,7 @@ public class TraceSessionContext
      * @param cs
      * @return if the connection wide queryDetails was set, returns true and begins tracking the query. false otherwise.
      */
-    public static boolean startSession(final ClientState cs)
+    public boolean startSession(final ClientState cs)
     {
         assert sessionContextThreadLocalState.get() == null;
         if (cs.getQueryDetails() == false)
@@ -105,9 +133,9 @@ public class TraceSessionContext
     /**
      * Clears the thread local state for the current query.
      */
-    public static void stopSession()
+    public void stopSession()
     {
-        if (isQueryDetail())
+        if (isTracing())
             logger.info("returning to client, async processing may continue");
         reset();
     }
@@ -117,7 +145,7 @@ public class TraceSessionContext
      * 
      * @return
      */
-    public static boolean isQueryDetail()
+    public boolean isTracing()
     {
         return sessionContextThreadLocalState.get() == null ? false : true;
     }
@@ -127,23 +155,23 @@ public class TraceSessionContext
      * 
      * @return
      */
-    public static boolean isLocalQuery()
+    public boolean isLocalTraceSession()
     {
         final TraceSessionContextThreadLocalState tls = sessionContextThreadLocalState.get();
         return ((tls != null) && tls.origin.equals(FBUtilities.getLocalAddress())) ? true : false;
     }
 
-    public static Integer getQueryId()
+    public Integer getSessionId()
     {
-        return isQueryDetail() ? sessionContextThreadLocalState.get().sessionId : null;
+        return isTracing() ? sessionContextThreadLocalState.get().sessionId : null;
     }
 
-    public static InetAddress getOrigin()
+    public InetAddress getOrigin()
     {
-        return isQueryDetail() ? sessionContextThreadLocalState.get().origin : null;
+        return isTracing() ? sessionContextThreadLocalState.get().origin : null;
     }
 
-    public static String logMessagePrefix()
+    public String logMessagePrefix()
     {
         final TraceSessionContextThreadLocalState tls = sessionContextThreadLocalState.get();
         if (tls == null)
@@ -160,7 +188,7 @@ public class TraceSessionContext
      * Copies the thread local state, if any. Used when the QueryContext needs to be copied into another thread. Use the
      * update() function to update the thread local state.
      */
-    public static TraceSessionContextThreadLocalState copy()
+    public TraceSessionContextThreadLocalState copy()
     {
         final TraceSessionContextThreadLocalState tls = sessionContextThreadLocalState.get();
         return tls == null ? null : new TraceSessionContextThreadLocalState(tls);
@@ -169,12 +197,12 @@ public class TraceSessionContext
     /**
      * Updates the Query Context for this thread. Call copy() to obtain a copy of a threads query context.
      */
-    public static void update(final TraceSessionContextThreadLocalState tls)
+    public void update(final TraceSessionContextThreadLocalState tls)
     {
         sessionContextThreadLocalState.set(tls);
     }
 
-    public static void reset()
+    public void reset()
     {
         sessionContextThreadLocalState.set(null);
     }
@@ -187,10 +215,9 @@ public class TraceSessionContext
      * @param bytes
      *            Bytes used in the header, returned from call getMessageBytes()
      */
-    public static void update(final MessageIn<?> message, final byte[] bytes, String id)
+    public void update(final MessageIn<?> message, final byte[] bytes, String id)
     {
-        assert ((bytes != null) && bytes.length > 0);
-
+        checkState((bytes != null) && bytes.length > 0);
         final DataInputStream dis = new DataInputStream(new ByteArrayInputStream(bytes));
         final Integer sessionId;
         try
@@ -210,9 +237,9 @@ public class TraceSessionContext
      * 
      * @return
      */
-    public static byte[] getMessageBytes()
+    public byte[] getMessageBytes()
     {
-        if (!isLocalQuery())
+        if (!isLocalTraceSession())
             return null;
 
         // this uses a FBA so no need to close()
@@ -230,13 +257,18 @@ public class TraceSessionContext
         }
     }
 
+    public static TraceSessionContext getContext()
+    {
+        return instance;
+    }
+
     public static class TraceSessionContextThreadLocalState
 
     {
         public final Integer sessionId;
         public final InetAddress origin;
         public final String messageId;
-        
+        public final Stopwatch watch;
 
         public TraceSessionContextThreadLocalState(final TraceSessionContextThreadLocalState other)
         {
@@ -257,6 +289,8 @@ public class TraceSessionContext
             this.origin = origin;
             this.sessionId = sessionId;
             this.messageId = ((messageId == null) || (messageId.length() == 0)) ? null : messageId;
+            this.watch = new Stopwatch();
+            this.watch.start();
         }
     }
 }
