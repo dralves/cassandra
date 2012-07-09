@@ -22,7 +22,6 @@ package org.apache.cassandra.service;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
-import static org.apache.cassandra.cql3.QueryProcessor.processInternal;
 
 import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
@@ -34,25 +33,38 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.google.common.base.Predicate;
 import com.google.common.base.Stopwatch;
+import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.config.Schema;
+import org.apache.cassandra.config.ConfigurationException;
+import org.apache.cassandra.config.KSMetaData;
+import org.apache.cassandra.cql3.QueryProcessor;
+import org.apache.cassandra.cql3.statements.CreateColumnFamilyStatement;
 import org.apache.cassandra.db.Column;
 import org.apache.cassandra.db.ColumnFamily;
+import org.apache.cassandra.db.ColumnFamilyType;
+import org.apache.cassandra.db.DefsTable;
 import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.Table;
 import org.apache.cassandra.io.util.DataOutputBuffer;
+import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.net.MessageIn;
+import org.apache.cassandra.thrift.InvalidRequestException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
 
 /**
- * A container for per-query thread-local state. Tracks if the current query should be logged in detail.
+ * A trace session context. Able to track and store trace sessions. A session is usually a user initiated query, and may
+ * have multiple local and remote events before it is completed. All events and sessions are stored at table.
  */
 public class TraceSessionContext
 {
@@ -67,26 +79,13 @@ public class TraceSessionContext
     public static final String DURATION = "event";
 
     /* keyspace and column families */
-    public static final String TRACE_TABLE = "trace";
+    public static final String TRACE_KEYSPACE = "trace";
     public static final String TRACE_SESSIONS_CF_NAME = "trace_sessions";
     public static final String TRACE_EVENTS_CF_NAME = "trace_events";
 
-    /* cql definitions */
-    public static final String TRACE_SESSIONS_CFDEF = "CREATE TABLE trace.trace_sessions (" +
-            "  session int," +
-            "  coordinator inetaddr," +
-            "  request text," +
-            "  PRIMARY KEY (session, coordinator));";
+    private CFMetaData sessionsCfm;
 
-    public static final String TRACE_EVENTS_CFDEF = "CREATE TABLE trace.trace_events (" +
-            "  session     int," +
-            "  coordinator inetaddr," +
-            "  id     uuid," +
-            "  source inetaddr," +
-            "  event  text," +
-            "  duration long," +
-            "  happened_at long," +
-            "  PRIMARY KEY (session, coordinator, id));";
+    private CFMetaData eventsCfm;
 
     /**
      * Trace session meta events.
@@ -127,20 +126,46 @@ public class TraceSessionContext
 
     private final AtomicInteger idGenerator = new AtomicInteger(0);
     private ThreadLocal<TraceSessionContextThreadLocalState> sessionContextThreadLocalState = new ThreadLocal<TraceSessionContextThreadLocalState>();
-    private Table traceTable;
-    private CFMetaData sessionsCfm;
-    private CFMetaData eventsCfm;
 
     private TraceSessionContext()
     {
-        this.traceTable = Table.open(TRACE_TABLE);
-        if (traceTable.getColumnFamilyStores().size() != 2)
+
+        if (!Iterables.tryFind(Table.all(), new Predicate<Table>()
         {
-            processInternal(TRACE_EVENTS_CFDEF);
-            processInternal(TRACE_SESSIONS_CFDEF);
+            public boolean apply(Table table)
+            {
+                return table.name.equals(TRACE_KEYSPACE);
+            }
+
+        }).isPresent())
+        {
+            try
+            {
+                KSMetaData traceKs = KSMetaData.newKeyspace(TRACE_KEYSPACE, SimpleStrategy.class.getName(),
+                        ImmutableMap.of("replication_factor", "1"));
+                MigrationManager.announceNewKeyspace(traceKs);
+            }
+            catch (ConfigurationException e)
+            {
+                Throwables.propagate(e);
+            }
         }
-        this.sessionsCfm = Schema.instance.getCFMetaData(TRACE_TABLE, TRACE_SESSIONS_CF_NAME);
-        this.eventsCfm = Schema.instance.getCFMetaData(TRACE_TABLE, TRACE_EVENTS_CF_NAME);
+
+        sessionsCfm = compile("CREATE TABLE trace.trace_sessions (" +
+                "  coordinator inet," +
+                "  session int," +
+                "  request text," +
+                "  PRIMARY KEY (coordinator, session));");
+
+        eventsCfm = compile("CREATE TABLE trace.trace_events (" +
+                "  coordinator inet," +
+                "  session     int," +
+                "  id     uuid," +
+                "  source inet," +
+                "  event  text," +
+                "  duration bigint," +
+                "  happened_at bigint," +
+                "  PRIMARY KEY (coordinator, session, id));");
     }
 
     /**
@@ -184,7 +209,7 @@ public class TraceSessionContext
     }
 
     /**
-     * Indicates if this query should have it's details logged.
+     * Indicates if the current thread's execution is being traced.
      * 
      * @return
      */
@@ -313,7 +338,7 @@ public class TraceSessionContext
     public void newSessionEvent(int sessionId, InetAddress coordinator, String request)
     {
         long currentTime = System.currentTimeMillis();
-        RowMutation mutation = new RowMutation(TRACE_TABLE, ByteBufferUtil.bytes(sessionId));
+        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBufferUtil.bytes(sessionId));
         // TODO add TTL
         ColumnFamily family = ColumnFamily.create(sessionsCfm);
         family.addColumn(column(SESSION, sessionId, currentTime));
@@ -351,7 +376,7 @@ public class TraceSessionContext
             String traceEvent, UUID id, long duration, long happenedAt)
     {
         long currentTime = System.currentTimeMillis();
-        RowMutation mutation = new RowMutation(TRACE_TABLE, ByteBufferUtil.bytes(sessionId));
+        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBufferUtil.bytes(sessionId));
         // TODO add TTL
         ColumnFamily family = ColumnFamily.create(eventsCfm);
         family.addColumn(column(SESSION, sessionId, currentTime));
@@ -370,6 +395,36 @@ public class TraceSessionContext
         catch (IOException e)
         {
             logger.error("error while storing trace event", e);
+        }
+    }
+
+    private static CFMetaData compile(String cql)
+    {
+        CreateColumnFamilyStatement statement = null;
+        try
+        {
+            statement = (CreateColumnFamilyStatement) QueryProcessor.parseStatement(cql)
+                    .prepare().statement;
+
+            ColumnFamilyType type = ColumnFamilyType.Standard;
+            CFMetaData newCFMD = new CFMetaData(TRACE_KEYSPACE, statement.columnFamily(), type, statement.comparator,
+                    null);
+
+            newCFMD.comment("")
+                    .readRepairChance(0)
+                    .dcLocalReadRepairChance(0)
+                    .gcGraceSeconds(0);
+
+            statement.applyPropertiesTo(newCFMD);
+            return newCFMD;
+        }
+        catch (InvalidRequestException e)
+        {
+            throw Throwables.propagate(e);
+        }
+        catch (ConfigurationException e)
+        {
+            throw Throwables.propagate(e);
         }
     }
 

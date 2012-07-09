@@ -21,20 +21,27 @@
 
 package org.apache.cassandra.service;
 
+import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
-import org.apache.cassandra.db.Table;
 
 public class TraceSessionContextTest extends SchemaLoader
 {
 
+    private static TraceSessionContext ctx;
+    private static ClientState state = new ClientState();
+
+    @BeforeClass
+    public static void setUp()
+    {
+        state.setQueryDetails(true);
+        ctx = TraceSessionContext.traceCtx();
+    }
+
     @Test
     public void testStartNewSession()
     {
-        ClientState state = new ClientState();
-        state.setQueryDetails(true);
-        TraceSessionContext ctx = TraceSessionContext.traceCtx();
         ctx.startSession(state, "test_request");
     }
 

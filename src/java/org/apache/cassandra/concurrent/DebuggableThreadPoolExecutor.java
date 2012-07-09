@@ -225,44 +225,52 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
         super.beforeExecute(t, r);
     }
 
+    @Override
     public void execute(Runnable command)
     {
-        if (command instanceof TraceSessionWrapper)
-        {
-            super.execute(command);
-        }
-        else
-        {
-            final FutureTask<?> ft = new TraceSessionWrapper<Object>(command, null);
-            super.execute(ft);
-        }
+        super.execute(wrapIfCallerIsTracing(command, null));
     }
 
+    @Override
     public Future<?> submit(Runnable task)
     {
-        final FutureTask<Object> ft = (task instanceof TraceSessionWrapper)
-                                      ? (FutureTask<Object>)task
-                                      : new TraceSessionWrapper<Object>(task, null);
-        execute(ft);
-        return ft;
+        return super.submit(wrapIfCallerIsTracing(task, null));
     }
 
+    @Override
     public <T> Future<T> submit(Runnable task, T result)
     {
-        final FutureTask<T> ft = (task instanceof TraceSessionWrapper)
-                                 ? (FutureTask<T>)task
-                                 : new TraceSessionWrapper<T>(task, result);
-        execute(ft);
-        return ft;
+        return super.submit(wrapIfCallerIsTracing(task, result), result);
     }
 
+    @Override
     public <T> Future<T> submit(Callable<T> task)
     {
-        final FutureTask<T> ft = (task instanceof TraceSessionWrapper)
-                                 ? (FutureTask<T>)task
-                                 : new TraceSessionWrapper<T>(task);
-        execute(ft);
-        return ft;
+        return super.submit(wrapIfCallerIsTracing(task));
+    }
+    
+    /**
+     * Wraps the caller with a trace session wrapper if the caller is tracing.
+     */
+    private <T> Runnable wrapIfCallerIsTracing(Runnable task, T result)
+    {
+        if (traceCtx() != null && traceCtx().isTracing() && !(task instanceof TraceSessionWrapper))
+        {
+            return new TraceSessionWrapper<T>(task,result);
+        }
+        return task;
+    }
+
+    /**
+     * Wraps the caller with a trace session wrapper if the caller is tracing.
+     */
+    private <T> Callable<T> wrapIfCallerIsTracing(Callable<T> task)
+    {
+        if (traceCtx() != null && traceCtx().isTracing() && !(task instanceof TraceSessionWrapper))
+        {
+            return new TraceSessionWrapper<T>(task);
+        }
+        return task;
     }
 
     /**
@@ -271,7 +279,7 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
      * 
      * @param <T>
      */
-    private static class TraceSessionWrapper<T> extends FutureTask<T>
+    private static class TraceSessionWrapper<T> extends FutureTask<T> implements Callable<T>
     {
         private final TraceSessionContext.TraceSessionContextThreadLocalState traceSessionThreadLocalState;
 
@@ -293,6 +301,13 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
         private void setupContext()
         {
             traceCtx().update(traceSessionThreadLocalState);
+        }
+        
+        @Override
+        public T call() throws Exception
+        {
+            run();
+            return get();
         }
     }
 }
