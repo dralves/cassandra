@@ -111,12 +111,12 @@ public class TraceSessionContext
     public static final String SESSION_CONTEXT_HEADER = "SessionContext";
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
     private static final CompositeType SESSION_CF_KEY_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(InetAddressType.instance,
-                    Int32Type.instance));
+            .<AbstractType<?>> of(Int32Type.instance, InetAddressType.instance
+            ));
 
     private static final CompositeType EVENTS_CF_KEY_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(InetAddressType.instance,
-                    Int32Type.instance, Int32Type.instance));
+            .<AbstractType<?>> of(Int32Type.instance, InetAddressType.instance,
+                    Int32Type.instance));
 
     private static TraceSessionContext ctx;
     private static boolean initializing = false;
@@ -150,21 +150,21 @@ public class TraceSessionContext
         }
 
         sessionsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + SESSIONS_TABLE + " (" +
-                "  " + COORDINATOR + "     inet," +
                 "  " + SESSION_ID + "      int," +
+                "  " + COORDINATOR + "     inet," +
                 "  " + SESSION_START + "   bigint," +
                 "  " + SESSION_REQUEST + " text," +
-                "  PRIMARY KEY (" + COORDINATOR + ", " + SESSION_ID + "));");
+                "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + "));");
 
         eventsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + EVENTS_TABLE + " (" +
-                "  " + COORDINATOR + "     inet," +
                 "  " + SESSION_ID + "      int," +
+                "  " + COORDINATOR + "     inet," +
                 "  " + EVENT_ID + "        int," +
                 "  " + SOURCE + "          inet," +
                 "  " + EVENT + "           text," +
                 "  " + DURATION + "        bigint," +
                 "  " + HAPPENED + "        bigint," +
-                "  PRIMARY KEY (" + COORDINATOR + ", " + SESSION_ID + ", " + EVENT_ID + "));");
+                "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + ", " + EVENT_ID + "));");
 
         this.localAddress = FBUtilities.getLocalAddress();
     }
@@ -325,11 +325,13 @@ public class TraceSessionContext
      */
     private void newSessionEvent(int sessionId, InetAddress coordinator, String request)
     {
-        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, SESSION_CF_KEY_TYPE.decompose(coordinator, sessionId));
+        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, SESSION_CF_KEY_TYPE.decompose(sessionId,
+                coordinator));
+
         // TODO add TTL
         ColumnFamily family = ColumnFamily.create(sessionsCfm);
         family.addColumn(column(SESSION_START, System.currentTimeMillis()));
-        family.addColumn(column(SESSION_REQUEST, request));
+        // family.addColumn(column(SESSION_REQUEST, request));
         mutation.add(family);
         try
         {
@@ -362,14 +364,14 @@ public class TraceSessionContext
     public void trace(int sessionId, InetAddress coordinator, InetAddress source,
             int eventId, String traceEvent, long duration, long happenedAt)
     {
-        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, EVENTS_CF_KEY_TYPE.decompose(coordinator, sessionId,
+        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, EVENTS_CF_KEY_TYPE.decompose(sessionId, coordinator,
                 eventId));
         // TODO add TTL
         ColumnFamily family = ColumnFamily.create(eventsCfm);
         family.addColumn(column(SOURCE, source));
-        family.addColumn(column(EVENT, traceEvent));
-        family.addColumn(column(DURATION, duration));
-        family.addColumn(column(HAPPENED, happenedAt));
+        // family.addColumn(column(EVENT, traceEvent));
+        // family.addColumn(column(DURATION, duration));
+        // family.addColumn(column(HAPPENED, happenedAt));
         mutation.add(family);
         try
         {
@@ -417,14 +419,14 @@ public class TraceSessionContext
         return new Column(ByteBufferUtil.bytes(columnName), ByteBufferUtil.bytes(value));
     }
 
-    private static Column column(String columnName, InetAddress address)
-    {
-        return new Column(ByteBufferUtil.bytes(columnName), ByteBuffer.wrap(address.getAddress()));
-    }
-
     private static Column column(String columnName, String value)
     {
         return new Column(ByteBufferUtil.bytes(columnName), ByteBufferUtil.bytes(value));
+    }
+
+    private static Column column(String columnName, InetAddress address)
+    {
+        return new Column(ByteBufferUtil.bytes(columnName), ByteBuffer.wrap(address.getAddress()));
     }
 
     /**

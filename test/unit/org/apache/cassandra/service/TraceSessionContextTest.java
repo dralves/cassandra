@@ -31,6 +31,8 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
+import org.apache.cassandra.db.Table;
+import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.utils.FBUtilities;
 
 public class TraceSessionContextTest extends SchemaLoader
@@ -53,6 +55,10 @@ public class TraceSessionContextTest extends SchemaLoader
     public void testLocalEvent()
     {
         traceCtx().trace("local_event");
+        traceCtx().trace("local_event2");
+        Table.open(TraceSessionContext.TRACE_KEYSPACE).getColumnFamilyStore(TraceSessionContext.EVENTS_TABLE)
+                .getColumnFamily(new QueryFilter(null, null, null));
+
     }
 
     public void testRemoteExecutionRequest()
