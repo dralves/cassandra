@@ -43,8 +43,6 @@ import com.google.common.collect.Iterables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.db.marshal.AbstractType;
-
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.config.KSMetaData;
@@ -55,6 +53,7 @@ import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.Table;
+import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.CompositeType;
 import org.apache.cassandra.db.marshal.InetAddressType;
 import org.apache.cassandra.db.marshal.Int32Type;
@@ -124,16 +123,17 @@ public class TraceSessionContext
     }
 
     public static final String SESSION_CONTEXT_HEADER = "SessionContext";
-
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
-    private static final TraceSessionContext instance = new TraceSessionContext();
-
     private static final CompositeType SESSION_CF_KEY_TYPE = CompositeType.getInstance(ImmutableList
             .<AbstractType<?>> of(InetAddressType.instance,
                     Int32Type.instance));
+
     private static final CompositeType EVENTS_CF_KEY_TYPE = CompositeType.getInstance(ImmutableList
             .<AbstractType<?>> of(InetAddressType.instance,
                     Int32Type.instance, Int32Type.instance));
+
+    private static TraceSessionContext ctx;
+    private static boolean initializing;
 
     private final AtomicInteger idGenerator = new AtomicInteger(0);
     private ThreadLocal<TraceSessionContextThreadLocalState> sessionContextThreadLocalState = new ThreadLocal<TraceSessionContextThreadLocalState>();
@@ -154,6 +154,7 @@ public class TraceSessionContext
             {
                 KSMetaData traceKs = KSMetaData.newKeyspace(TRACE_KEYSPACE, SimpleStrategy.class.getName(),
                         ImmutableMap.of("replication_factor", "1"));
+                MigrationManager.announceNewKeyspace(traceKs);
             }
             catch (ConfigurationException e)
             {
@@ -185,11 +186,11 @@ public class TraceSessionContext
      * @param cs
      * @return if the connection wide queryDetails was set, returns true and begins tracking the query. false otherwise.
      */
-    public boolean startSession(final ClientState cs, String request)
+    public int startSession(final ClientState cs, String request)
     {
         assert sessionContextThreadLocalState.get() == null;
         if (!cs.getQueryDetails())
-            return false;
+            return -1;
 
         int sessionId = idGenerator.incrementAndGet();
 
@@ -199,7 +200,7 @@ public class TraceSessionContext
         sessionContextThreadLocalState.set(tsctls);
 
         newSessionEvent(sessionId, tsctls.origin, request);
-        return true;
+        return sessionId;
     }
 
     /**
@@ -461,9 +462,17 @@ public class TraceSessionContext
         return new Column(ByteBufferUtil.bytes(columnName), ByteBufferUtil.bytes(value), timestamp);
     }
 
+    /**
+     * Fetches and lazy initializes the trace context.
+     */
     public static TraceSessionContext traceCtx()
     {
-        return instance;
+        if (ctx == null && !initializing)
+        {
+            initializing = true;
+            ctx = new TraceSessionContext();
+        }
+        return ctx;
     }
 
     public static class TraceSessionContextThreadLocalState

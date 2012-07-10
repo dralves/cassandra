@@ -21,6 +21,8 @@
 
 package org.apache.cassandra.service;
 
+import static org.apache.cassandra.service.TraceSessionContext.traceCtx;
+
 import org.junit.BeforeClass;
 import org.junit.Test;
 
@@ -28,21 +30,21 @@ import org.apache.cassandra.SchemaLoader;
 
 public class TraceSessionContextTest extends SchemaLoader
 {
-
-    private static TraceSessionContext ctx;
     private static ClientState state = new ClientState();
+    private int sessionId;
 
     @BeforeClass
     public static void setUp()
     {
         state.setQueryDetails(true);
-        ctx = TraceSessionContext.traceCtx();
+        traceCtx().startSession(state, "test_request");
+        // TODO assert that stuff is there
     }
 
     @Test
-    public void testStartNewSession()
+    public void testLocalEvent()
     {
-        ctx.startSession(state, "test_request");
+        
     }
 
     public void testRemoteExecutionRequest()
@@ -61,16 +63,6 @@ public class TraceSessionContextTest extends SchemaLoader
     }
 
     public void testRemoteExecutionResponse()
-    {
-
-    }
-
-    public void testLocalEventBegin()
-    {
-
-    }
-
-    public void testLocalEventStop()
     {
 
     }

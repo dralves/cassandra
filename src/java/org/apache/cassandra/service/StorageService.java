@@ -726,6 +726,7 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
             // Dont set any state for the node which is bootstrapping the existing token...
             tokenMetadata.updateNormalToken(token, FBUtilities.getBroadcastAddress());
         }
+        TraceSessionContext.traceCtx();
         setMode(Mode.JOINING, "Starting to bootstrap...", true);
         new BootStrapper(FBUtilities.getBroadcastAddress(), token, tokenMetadata).bootstrap(); // handles token update
     }
