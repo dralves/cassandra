@@ -36,13 +36,14 @@ import java.util.concurrent.atomic.AtomicInteger;
 import com.google.common.base.Predicate;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.db.marshal.InetAddressType;
+import org.apache.cassandra.db.marshal.AbstractType;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ConfigurationException;
@@ -54,6 +55,9 @@ import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.Table;
+import org.apache.cassandra.db.marshal.CompositeType;
+import org.apache.cassandra.db.marshal.InetAddressType;
+import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.net.MessageIn;
@@ -123,6 +127,13 @@ public class TraceSessionContext
 
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
     private static final TraceSessionContext instance = new TraceSessionContext();
+
+    private static final CompositeType SESSION_CF_KEY_TYPE = CompositeType.getInstance(ImmutableList
+            .<AbstractType<?>> of(InetAddressType.instance,
+                    Int32Type.instance));
+    private static final CompositeType EVENTS_CF_KEY_TYPE = CompositeType.getInstance(ImmutableList
+            .<AbstractType<?>> of(InetAddressType.instance,
+                    Int32Type.instance, Int32Type.instance));
 
     private final AtomicInteger idGenerator = new AtomicInteger(0);
     private ThreadLocal<TraceSessionContextThreadLocalState> sessionContextThreadLocalState = new ThreadLocal<TraceSessionContextThreadLocalState>();
@@ -337,11 +348,9 @@ public class TraceSessionContext
     public void newSessionEvent(int sessionId, InetAddress coordinator, String request)
     {
         long currentTime = System.currentTimeMillis();
-        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBufferUtil.bytes(sessionId));
+        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, SESSION_CF_KEY_TYPE.decompose(coordinator, sessionId));
         // TODO add TTL
         ColumnFamily family = ColumnFamily.create(sessionsCfm);
-        family.addColumn(column(SESSION, sessionId, currentTime));
-        family.addColumn(column(COORDINATOR, coordinator, currentTime));
         family.addColumn(column(REQUEST, request, currentTime));
         mutation.add(family);
         try
@@ -439,8 +448,7 @@ public class TraceSessionContext
 
     private static Column column(String columnName, InetAddress address, long timestamp)
     {
-        return new Column(ByteBufferUtil.bytes(columnName), InetAddressType.instance.fromString(address
-                .getHostAddress()), timestamp);
+        return new Column(ByteBufferUtil.bytes(columnName), ByteBuffer.wrap(address.getAddress()), timestamp);
     }
 
     private static Column column(String columnName, UUID uuid, long timestamp)
