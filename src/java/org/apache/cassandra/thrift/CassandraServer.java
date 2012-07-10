@@ -304,7 +304,7 @@ public class CassandraServer implements Cassandra.Iface
     public List<ColumnOrSuperColumn> get_slice(ByteBuffer key, ColumnParent column_parent, SlicePredicate predicate, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        traceCtx().startSession(state(), "get_slice");
+        traceCtx().startSession("get_slice");
         try
         {
             logger.debug("get_slice");
@@ -321,7 +321,7 @@ public class CassandraServer implements Cassandra.Iface
     public Map<ByteBuffer, List<ColumnOrSuperColumn>> multiget_slice(List<ByteBuffer> keys, ColumnParent column_parent, SlicePredicate predicate, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        traceCtx().startSession(state(), "multiget_slice");
+        startSessionIfRequested("multiget_slice");
         try
         {
             logger.debug("multiget_slice");
@@ -396,7 +396,7 @@ public class CassandraServer implements Cassandra.Iface
     public ColumnOrSuperColumn get(ByteBuffer key, ColumnPath column_path, ConsistencyLevel consistency_level)
     throws InvalidRequestException, NotFoundException, UnavailableException, TimedOutException
     {
-        traceCtx().startSession(state(), "get");
+        startSessionIfRequested("get");
         try
         {
             logger.debug("get");
@@ -411,7 +411,7 @@ public class CassandraServer implements Cassandra.Iface
     public int get_count(ByteBuffer key, ColumnParent column_parent, SlicePredicate predicate, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        traceCtx().startSession(state(), "get_count");
+        startSessionIfRequested("get_count");
         try
         {
             logger.debug("get_count");
@@ -492,7 +492,7 @@ public class CassandraServer implements Cassandra.Iface
     public Map<ByteBuffer, Integer> multiget_count(List<ByteBuffer> keys, ColumnParent column_parent, SlicePredicate predicate, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        traceCtx().startSession(state(), "multiget_count");
+        startSessionIfRequested("multiget_count");
         try
         {
             logger.debug("multiget_count");
@@ -549,7 +549,7 @@ public class CassandraServer implements Cassandra.Iface
     public void insert(ByteBuffer key, ColumnParent column_parent, Column column, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        traceCtx().startSession(state(), "insert");
+        startSessionIfRequested("insert");
         try
         {
             logger.debug("insert");
@@ -632,7 +632,7 @@ public class CassandraServer implements Cassandra.Iface
     public void batch_mutate(Map<ByteBuffer,Map<String,List<Mutation>>> mutation_map, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        traceCtx().startSession(state(), "batch_mutate");
+        startSessionIfRequested("batch_mutate");
         try
         {
             logger.debug("batch_mutate");
@@ -668,7 +668,7 @@ public class CassandraServer implements Cassandra.Iface
     public void remove(ByteBuffer key, ColumnPath column_path, long timestamp, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        traceCtx().startSession(state(), "remove");
+        startSessionIfRequested("remove");
         try
         {
             logger.debug("remove");
@@ -718,7 +718,7 @@ public class CassandraServer implements Cassandra.Iface
     public List<KeySlice> get_range_slices(ColumnParent column_parent, SlicePredicate predicate, KeyRange range, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TException, TimedOutException
     {
-        traceCtx().startSession(state(), "get_range_slices");
+        startSessionIfRequested("get_range_slices");
         try
         {
             logger.debug("range_slice");
@@ -785,7 +785,7 @@ public class CassandraServer implements Cassandra.Iface
     public List<KeySlice> get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TimedOutException, TException
     {
-        traceCtx().startSession(state(), "get_paged_slice");
+        startSessionIfRequested("get_paged_slice");
         try
         {
             logger.debug("get_paged_slice");
@@ -868,7 +868,7 @@ public class CassandraServer implements Cassandra.Iface
 
     public List<KeySlice> get_indexed_slices(ColumnParent column_parent, IndexClause index_clause, SlicePredicate column_predicate, ConsistencyLevel consistency_level) throws InvalidRequestException, UnavailableException, TimedOutException, TException
     {
-        traceCtx().startSession(state(),"get_indexed_slices");
+        startSessionIfRequested("get_indexed_slices");
         try
         {
             logger.debug("scan");
@@ -1181,7 +1181,7 @@ public class CassandraServer implements Cassandra.Iface
 
     public void truncate(String cfname) throws InvalidRequestException, UnavailableException, TimedOutException, TException
     {
-        traceCtx().startSession(state(), "truncate");
+        startSessionIfRequested("truncate");
         try
         {
             ClientState cState = state();
@@ -1238,7 +1238,7 @@ public class CassandraServer implements Cassandra.Iface
     public void add(ByteBuffer key, ColumnParent column_parent, CounterColumn column, ConsistencyLevel consistency_level)
             throws InvalidRequestException, UnavailableException, TimedOutException, TException
     {
-        traceCtx().startSession(state(), "add");
+        startSessionIfRequested("add");
         try
         {
             logger.debug("add");
@@ -1280,7 +1280,7 @@ public class CassandraServer implements Cassandra.Iface
     public void remove_counter(ByteBuffer key, ColumnPath path, ConsistencyLevel consistency_level)
             throws InvalidRequestException, UnavailableException, TimedOutException, TException
     {
-        traceCtx().startSession(state(), "remove_counter");
+        startSessionIfRequested("remove_counter");
         try
         {
             logger.debug("remove_counter");
@@ -1353,7 +1353,7 @@ public class CassandraServer implements Cassandra.Iface
             throws InvalidRequestException, UnavailableException, TimedOutException, SchemaDisagreementException,
             TException
     {
-        traceCtx().startSession(state(), "execute_cql_query");
+        startSessionIfRequested("execute_cql_query");
         try
         {
             if (logger.isDebugEnabled())
@@ -1376,7 +1376,7 @@ public class CassandraServer implements Cassandra.Iface
     public CqlPreparedResult prepare_cql_query(ByteBuffer query, Compression compression)
             throws InvalidRequestException, TException
     {
-        traceCtx().startSession(state(), "prepare_cql_query");
+        startSessionIfRequested("prepare_cql_query");
         try
         {
             if (logger.isDebugEnabled())
@@ -1400,7 +1400,7 @@ public class CassandraServer implements Cassandra.Iface
             throws InvalidRequestException, UnavailableException, TimedOutException, SchemaDisagreementException,
             TException
     {
-        traceCtx().startSession(state(), "execute_prepared_cql_query");
+        startSessionIfRequested("execute_prepared_cql_query");
         try
         {
             if (logger.isDebugEnabled())
@@ -1441,6 +1441,14 @@ public class CassandraServer implements Cassandra.Iface
         logger.debug("set_cql_version: " + version);
 
         state().setCQLVersion(version);
+    }
+    
+    private void startSessionIfRequested(String sessionName)
+    {
+        if (state().getQueryDetails())
+        {
+            traceCtx().startSession(sessionName);
+        }
     }
 
     // main method moved to CassandraDaemon

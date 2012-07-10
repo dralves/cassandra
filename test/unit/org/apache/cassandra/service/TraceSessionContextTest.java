@@ -21,30 +21,38 @@
 
 package org.apache.cassandra.service;
 
+import static junit.framework.Assert.assertNotNull;
+import static junit.framework.Assert.assertTrue;
 import static org.apache.cassandra.service.TraceSessionContext.traceCtx;
+
+import java.net.InetAddress;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
+import org.apache.cassandra.utils.FBUtilities;
 
 public class TraceSessionContextTest extends SchemaLoader
 {
-    private static ClientState state = new ClientState();
-    private int sessionId;
+    private static int sessionId;
+    private static InetAddress coordinator;
 
     @BeforeClass
     public static void setUp()
     {
-        state.setQueryDetails(true);
-        traceCtx().startSession(state, "test_request");
-        // TODO assert that stuff is there
+        coordinator = FBUtilities.getLocalAddress();
+        sessionId = traceCtx().startSession("test_session");
+        assertTrue(traceCtx().isTracing());
+        assertTrue(traceCtx().isLocalTraceSession());
+        assertNotNull(traceCtx().threadLocalState());
+        // TODO assert that stuff is stored
     }
 
     @Test
     public void testLocalEvent()
     {
-        
+        traceCtx().trace("local_event");
     }
 
     public void testRemoteExecutionRequest()
