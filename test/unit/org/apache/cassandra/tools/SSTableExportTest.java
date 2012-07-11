@@ -25,7 +25,6 @@ import static org.apache.cassandra.utils.ByteBufferUtil.bytesToHex;
 import static org.apache.cassandra.utils.ByteBufferUtil.hexToBytes;
 import static org.junit.Assert.assertTrue;
 
-import java.io.BufferedReader;
 import java.io.File;
 import java.io.FileReader;
 import java.io.IOException;
@@ -131,7 +130,7 @@ public class SSTableExportTest extends SchemaLoader
         assertEquals("unexpected number of keys", 2, rowA.keySet().size());
         assertEquals("unexpected row key",asHex("rowA"),rowA.get("key"));
 
-        JSONArray colsA = (JSONArray)rowA.get("cols");
+        JSONArray colsA = (JSONArray)rowA.get("columns");
         JSONArray colA = (JSONArray)colsA.get(0);
         assert hexToBytes((String)colA.get(1)).equals(ByteBufferUtil.bytes("valA"));
 
@@ -143,7 +142,7 @@ public class SSTableExportTest extends SchemaLoader
         assertEquals("unexpected number of keys", 2, rowB.keySet().size());
         assertEquals("unexpected row key",asHex("rowB"),rowB.get("key"));
 
-        JSONArray colsB = (JSONArray)rowB.get("cols");
+        JSONArray colsB = (JSONArray)rowB.get("columns");
         JSONArray colB = (JSONArray)colsB.get(0);
         assert colB.size() == 3;
 
@@ -190,7 +189,7 @@ public class SSTableExportTest extends SchemaLoader
         assertEquals("unexpected number of keys", 2, rowB.keySet().size());
         assertEquals("unexpected row key", asHex("rowA"), rowB.get("key"));
 
-        JSONObject cols = (JSONObject) rowA.get("cols");
+        JSONObject cols = (JSONObject) rowA.get("columns");
 
         JSONObject superA = (JSONObject) cols.get(cfamily.getComparator().getString(ByteBufferUtil.bytes("superA")));
         JSONArray subColumns = (JSONArray) superA.get("subColumns");
@@ -262,7 +261,7 @@ public class SSTableExportTest extends SchemaLoader
         assertEquals("unexpected number of keys", 2, row.keySet().size());
         assertEquals("unexpected row key",asHex("rowA"),row.get("key"));
 
-        JSONArray cols = (JSONArray)row.get("cols");
+        JSONArray cols = (JSONArray)row.get("columns");
         JSONArray colA = (JSONArray)cols.get(0);
         assert hexToBytes((String)colA.get(0)).equals(ByteBufferUtil.bytes("colA"));
         assert ((String) colA.get(3)).equals("c");
@@ -294,7 +293,7 @@ public class SSTableExportTest extends SchemaLoader
         assertEquals("unexpected number of keys", 2, row.keySet().size());
         assertEquals("unexpected row key",asHex("rowA"),row.get("key"));
 
-        JSONArray cols = (JSONArray)row.get("cols");
+        JSONArray cols = (JSONArray)row.get("columns");
         JSONArray colA = (JSONArray)cols.get(0);
         assert hexToBytes((String)colA.get(0)).equals(ByteBufferUtil.bytes("data"));
         assert colA.get(1).equals("{\"foo\":\"bar\"}");
@@ -335,7 +334,7 @@ public class SSTableExportTest extends SchemaLoader
         assertEquals("key did not match", ByteBufferUtil.bytes("rowA"), hexToBytes(rowKey));
 
         // check that there is metadata and that it contains deletionInfo
-        JSONObject meta = (JSONObject) row.get("meta");
+        JSONObject meta = (JSONObject) row.get("metadata");
         assertNotNull("expecing metadata to be present", meta);
 
         assertEquals("unexpected number of metadata entries", 1, meta.keySet().size());
@@ -349,7 +348,7 @@ public class SSTableExportTest extends SchemaLoader
                 serializedDeletionInfo.toJSONString());
 
         // check the colums are what we put in
-        JSONArray cols = (JSONArray) row.get("cols");
+        JSONArray cols = (JSONArray) row.get("columns");
         assertNotNull("expecing columns to be present", cols);
         assertEquals("expecting two columns", 2, cols.size());
 

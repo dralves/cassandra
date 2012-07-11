@@ -290,9 +290,9 @@ public class SSTableImport
 
             addColumnsToCF((List<?>) data.get("subColumns"), superName, cfamily);
 
-            if (data.containsKey("meta"))
+            if (data.containsKey("metadata"))
             {
-                parseMeta((Map<?, ?>) data.get("meta"), (SuperColumn) cfamily.getColumn(superName));
+                parseMeta((Map<?, ?>) data.get("metadata"), (SuperColumn) cfamily.getColumn(superName));
             }
         }
     }
@@ -346,12 +346,12 @@ public class SSTableImport
 
         for (Map.Entry<DecoratedKey, Map<?, ?>> row : decoratedKeys.entrySet())
         {
-            if (row.getValue().containsKey("meta"))
+            if (row.getValue().containsKey("metadata"))
             {
-                parseMeta((Map<?, ?>) row.getValue().get("meta"), columnFamily);
+                parseMeta((Map<?, ?>) row.getValue().get("metadata"), columnFamily);
             }
 
-            Object columns = row.getValue().get("cols");
+            Object columns = row.getValue().get("columns");
             if (columnFamily.getType() == ColumnFamilyType.Super)
                 addToSuperCF((Map<?, ?>) columns, columnFamily);
             else
@@ -422,14 +422,14 @@ public class SSTableImport
             Map<?, ?> row = parser.readValueAs(new TypeReference<Map<?, ?>>(){});
             DecoratedKey currentKey = partitioner.decorateKey(hexToBytes((String) row.get("key")));
 
-            if (row.containsKey("meta"))
-                parseMeta((Map<?, ?>) row.get("meta"), columnFamily);
+            if (row.containsKey("metadata"))
+                parseMeta((Map<?, ?>) row.get("metadata"), columnFamily);
 
 
             if (columnFamily.getType() == ColumnFamilyType.Super)
-                addToSuperCF((Map<?, ?>)row.get("cols"), columnFamily);
+                addToSuperCF((Map<?, ?>)row.get("columns"), columnFamily);
             else
-                addToStandardCF((List<?>)row.get("cols"), columnFamily);
+                addToStandardCF((List<?>)row.get("columns"), columnFamily);
 
             if (prevStoredKey != null && prevStoredKey.compareTo(currentKey) != -1)
             {

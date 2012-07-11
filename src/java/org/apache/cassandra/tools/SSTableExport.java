@@ -130,7 +130,7 @@ public class SSTableExport
             if (!columnFamily.deletionInfo().equals(DeletionInfo.LIVE))
             {
                 // begin meta
-                writeKey(out, "meta");
+                writeKey(out, "metadata");
                 writeDeletionInfo(out, columnFamily.deletionInfo().getTopLevelDeletion());
                 out.print(",");
             }
@@ -144,7 +144,7 @@ public class SSTableExport
                     superColumn.getLocalDeletionTime());
             if (!deletionInfo.equals(DeletionInfo.LIVE))
             {
-                writeKey(out, "meta");
+                writeKey(out, "metadata");
                 writeDeletionInfo(out, deletionInfo.getTopLevelDeletion());
                 out.print(",");
             }
@@ -278,7 +278,7 @@ public class SSTableExport
 
         writeMeta(out, columnFamily);
 
-        writeKey(out, "cols");
+        writeKey(out, "columns");
         out.print(isSuperCF ? "{" : "[");
 
         if (isSuperCF)
