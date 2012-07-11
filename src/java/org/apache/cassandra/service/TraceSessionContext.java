@@ -29,7 +29,9 @@ import java.io.IOError;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.base.Predicate;
@@ -52,6 +54,7 @@ import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.Table;
+import org.apache.cassandra.db.filter.QueryPath;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.CompositeType;
 import org.apache.cassandra.db.marshal.InetAddressType;
@@ -59,7 +62,9 @@ import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.net.MessageIn;
+import org.apache.cassandra.thrift.ConsistencyLevel;
 import org.apache.cassandra.thrift.InvalidRequestException;
+import org.apache.cassandra.thrift.UnavailableException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 
@@ -156,6 +161,8 @@ public class TraceSessionContext
                 "  " + SESSION_REQUEST + " text," +
                 "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + "));");
 
+        System.out.println("B4: " + sessionsCfm);
+
         eventsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + EVENTS_TABLE + " (" +
                 "  " + SESSION_ID + "      int," +
                 "  " + COORDINATOR + "     inet," +
@@ -165,6 +172,18 @@ public class TraceSessionContext
                 "  " + DURATION + "        bigint," +
                 "  " + HAPPENED + "        bigint," +
                 "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + ", " + EVENT_ID + "));");
+
+        try
+        {
+            MigrationManager.announceNewColumnFamily(sessionsCfm);
+            MigrationManager.announceNewColumnFamily(eventsCfm);
+
+            System.out.println("AF: " + Table.open(TRACE_KEYSPACE).getColumnFamilyStore(SESSIONS_TABLE).metadata);
+        }
+        catch (ConfigurationException e)
+        {
+            Throwables.propagate(e);
+        }
 
         this.localAddress = FBUtilities.getLocalAddress();
     }
@@ -331,16 +350,22 @@ public class TraceSessionContext
         // TODO add TTL
         ColumnFamily family = ColumnFamily.create(sessionsCfm);
         family.addColumn(column(SESSION_START, System.currentTimeMillis()));
-        // family.addColumn(column(SESSION_REQUEST, request));
+        family.addColumn(column(SESSION_REQUEST, request));
         mutation.add(family);
         try
         {
-            mutation.apply();
+            StorageProxy.mutate(Arrays.asList(mutation), ConsistencyLevel.ANY);
         }
         // log but tracing errors shouldn't affect the caller
-        catch (IOException e)
+        catch (TimeoutException e)
         {
             logger.error("error while storing trace event", e);
+            Throwables.propagate(e);
+        }
+        catch (UnavailableException e)
+        {
+            logger.error("error while storing trace event", e);
+            Throwables.propagate(e);
         }
     }
 
