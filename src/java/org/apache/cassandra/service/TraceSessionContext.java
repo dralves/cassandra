@@ -34,6 +34,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
+import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Predicate;
 import com.google.common.base.Stopwatch;
 import com.google.common.base.Throwables;
@@ -47,18 +48,18 @@ import org.slf4j.LoggerFactory;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.config.KSMetaData;
+import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.statements.CreateColumnFamilyStatement;
 import org.apache.cassandra.db.Column;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.db.RowMutation;
-import org.apache.cassandra.db.Table;
-import org.apache.cassandra.db.filter.QueryPath;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.CompositeType;
 import org.apache.cassandra.db.marshal.InetAddressType;
 import org.apache.cassandra.db.marshal.Int32Type;
+import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.net.MessageIn;
@@ -90,9 +91,33 @@ public class TraceSessionContext
     public static final String SESSIONS_TABLE = "trace_sessions";
     public static final String EVENTS_TABLE = "trace_events";
 
-    private CFMetaData sessionsCfm;
+    private static final ByteBuffer SESSION_ID_BB = ByteBufferUtil.bytes(SESSION_ID);
+    private static final ByteBuffer COORDINATOR_BB = ByteBufferUtil.bytes(COORDINATOR);
+    private static final ByteBuffer SESSION_REQUEST_BB = ByteBufferUtil.bytes(SESSION_REQUEST);
+    private static final ByteBuffer SESSION_START_BB = ByteBufferUtil.bytes(SESSION_REQUEST);
+    private static final ByteBuffer EVENT_ID_BB = ByteBufferUtil.bytes(SESSION_REQUEST);
+    private static final ByteBuffer SOURCE_BB = ByteBufferUtil.bytes(SOURCE);
+    private static final ByteBuffer EVENT_BB = ByteBufferUtil.bytes(SOURCE);
+    private static final ByteBuffer HAPPENED_BB = ByteBufferUtil.bytes(SOURCE);
+    private static final ByteBuffer DURATION_BB = ByteBufferUtil.bytes(DURATION);
 
-    private CFMetaData eventsCfm;
+    private static final CFMetaData sessionsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + SESSIONS_TABLE
+            + " (" +
+            "  " + SESSION_ID + "      int," +
+            "  " + COORDINATOR + "     inet," +
+            "  " + SESSION_START + "   timestamp," +
+            "  " + SESSION_REQUEST + " text," +
+            "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + "));");
+
+    private static final CFMetaData eventsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + EVENTS_TABLE + " (" +
+            "  " + SESSION_ID + "      int," +
+            "  " + COORDINATOR + "     inet," +
+            "  " + EVENT_ID + "        int," +
+            "  " + SOURCE + "          inet," +
+            "  " + EVENT + "           text," +
+            "  " + DURATION + "        int," +
+            "  " + HAPPENED + "        timestamp," +
+            "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + ", " + EVENT_ID + "));");
 
     /**
      * Trace session meta events.
@@ -115,13 +140,38 @@ public class TraceSessionContext
 
     public static final String SESSION_CONTEXT_HEADER = "SessionContext";
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
-    private static final CompositeType SESSION_CF_KEY_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(Int32Type.instance, InetAddressType.instance
+
+    private static final CompositeType COORDINATOR_TYPE = CompositeType.getInstance(ImmutableList
+            .<AbstractType<?>> of(InetAddressType.instance, UTF8Type.instance
             ));
 
-    private static final CompositeType EVENTS_CF_KEY_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(Int32Type.instance, InetAddressType.instance,
-                    Int32Type.instance));
+    private static final CompositeType SESSION_START_TYPE = CompositeType.getInstance(ImmutableList
+            .<AbstractType<?>> of(InetAddressType.instance, UTF8Type.instance
+            ));
+
+    private static final CompositeType SESSION_REQUEST_TYPE = CompositeType.getInstance(ImmutableList
+            .<AbstractType<?>> of(InetAddressType.instance, UTF8Type.instance
+            ));
+
+    private static final CompositeType EVENT_ID_TYPE = CompositeType.getInstance(ImmutableList
+            .<AbstractType<?>> of(InetAddressType.instance, Int32Type.instance, UTF8Type.instance
+            ));
+
+    private static final CompositeType SOURCE_TYPE = CompositeType.getInstance(ImmutableList
+            .<AbstractType<?>> of(InetAddressType.instance, Int32Type.instance, UTF8Type.instance
+            ));
+
+    private static final CompositeType EVENT_TYPE = CompositeType.getInstance(ImmutableList
+            .<AbstractType<?>> of(InetAddressType.instance, Int32Type.instance, UTF8Type.instance
+            ));
+
+    private static final CompositeType DURATION_TYPE = CompositeType.getInstance(ImmutableList
+            .<AbstractType<?>> of(InetAddressType.instance, Int32Type.instance, UTF8Type.instance
+            ));
+
+    private static final CompositeType HAPPENED_TYPE = CompositeType.getInstance(ImmutableList
+            .<AbstractType<?>> of(InetAddressType.instance, Int32Type.instance, UTF8Type.instance
+            ));
 
     private static TraceSessionContext ctx;
     private static boolean initializing = false;
@@ -130,14 +180,14 @@ public class TraceSessionContext
     private final InetAddress localAddress;
     private ThreadLocal<TraceSessionContextThreadLocalState> sessionContextThreadLocalState = new ThreadLocal<TraceSessionContextThreadLocalState>();
 
-    private TraceSessionContext()
+    protected TraceSessionContext()
     {
 
-        if (!Iterables.tryFind(Table.all(), new Predicate<Table>()
+        if (!Iterables.tryFind(Schema.instance.getTables(), new Predicate<String>()
         {
-            public boolean apply(Table table)
+            public boolean apply(String keyspace)
             {
-                return table.name.equals(TRACE_KEYSPACE);
+                return keyspace.equals(TRACE_KEYSPACE);
             }
 
         }).isPresent())
@@ -147,42 +197,13 @@ public class TraceSessionContext
                 KSMetaData traceKs = KSMetaData.newKeyspace(TRACE_KEYSPACE, SimpleStrategy.class.getName(),
                         ImmutableMap.of("replication_factor", "1"));
                 MigrationManager.announceNewKeyspace(traceKs);
+                MigrationManager.announceNewColumnFamily(sessionsCfm);
+                MigrationManager.announceNewColumnFamily(eventsCfm);
             }
             catch (ConfigurationException e)
             {
                 Throwables.propagate(e);
             }
-        }
-
-        sessionsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + SESSIONS_TABLE + " (" +
-                "  " + SESSION_ID + "      int," +
-                "  " + COORDINATOR + "     inet," +
-                "  " + SESSION_START + "   bigint," +
-                "  " + SESSION_REQUEST + " text," +
-                "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + "));");
-
-        System.out.println("B4: " + sessionsCfm);
-
-        eventsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + EVENTS_TABLE + " (" +
-                "  " + SESSION_ID + "      int," +
-                "  " + COORDINATOR + "     inet," +
-                "  " + EVENT_ID + "        int," +
-                "  " + SOURCE + "          inet," +
-                "  " + EVENT + "           text," +
-                "  " + DURATION + "        bigint," +
-                "  " + HAPPENED + "        bigint," +
-                "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + ", " + EVENT_ID + "));");
-
-        try
-        {
-            MigrationManager.announceNewColumnFamily(sessionsCfm);
-            MigrationManager.announceNewColumnFamily(eventsCfm);
-
-            System.out.println("AF: " + Table.open(TRACE_KEYSPACE).getColumnFamilyStore(SESSIONS_TABLE).metadata);
-        }
-        catch (ConfigurationException e)
-        {
-            Throwables.propagate(e);
         }
 
         this.localAddress = FBUtilities.getLocalAddress();
@@ -344,29 +365,18 @@ public class TraceSessionContext
      */
     private void newSessionEvent(int sessionId, InetAddress coordinator, String request)
     {
-        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, SESSION_CF_KEY_TYPE.decompose(sessionId,
-                coordinator));
+        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBufferUtil.bytes(sessionId));
 
         // TODO add TTL
         ColumnFamily family = ColumnFamily.create(sessionsCfm);
-        family.addColumn(column(SESSION_START, System.currentTimeMillis()));
-        family.addColumn(column(SESSION_REQUEST, request));
+        family.addColumn(column(build(COORDINATOR_TYPE, bytes(coordinator), COORDINATOR_BB), coordinator));
+        family.addColumn(column(build(SESSION_REQUEST_TYPE, bytes(coordinator), SESSION_REQUEST_BB), request));
+        family.addColumn(column(build(SESSION_START_TYPE, bytes(coordinator), SESSION_START_BB),
+                System.currentTimeMillis()));
         mutation.add(family);
-        try
-        {
-            StorageProxy.mutate(Arrays.asList(mutation), ConsistencyLevel.ANY);
-        }
-        // log but tracing errors shouldn't affect the caller
-        catch (TimeoutException e)
-        {
-            logger.error("error while storing trace event", e);
-            Throwables.propagate(e);
-        }
-        catch (UnavailableException e)
-        {
-            logger.error("error while storing trace event", e);
-            Throwables.propagate(e);
-        }
+
+        mutate(mutation);
+
     }
 
     /**
@@ -389,24 +399,24 @@ public class TraceSessionContext
     public void trace(int sessionId, InetAddress coordinator, InetAddress source,
             int eventId, String traceEvent, long duration, long happenedAt)
     {
-        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, EVENTS_CF_KEY_TYPE.decompose(sessionId, coordinator,
-                eventId));
+        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBufferUtil.bytes(sessionId));
         // TODO add TTL
         ColumnFamily family = ColumnFamily.create(eventsCfm);
-        family.addColumn(column(SOURCE, source));
-        // family.addColumn(column(EVENT, traceEvent));
-        // family.addColumn(column(DURATION, duration));
-        // family.addColumn(column(HAPPENED, happenedAt));
+        family.addColumn(column(
+                build(COORDINATOR_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), COORDINATOR_BB), coordinator));
+        family.addColumn(column(build(EVENT_ID_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), EVENT_ID_BB),
+                eventId));
+        family.addColumn(column(build(SOURCE_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), SOURCE_BB),
+                source));
+        family.addColumn(column(build(EVENT_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), EVENT_BB),
+                traceEvent));
+        family.addColumn(column(build(DURATION_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), DURATION_BB),
+                duration));
+        family.addColumn(column(build(HAPPENED_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), HAPPENED_BB),
+                happenedAt));
         mutation.add(family);
-        try
-        {
-            mutation.apply();
-        }
-        // log but tracing errors shouldn't affect the caller
-        catch (IOException e)
-        {
-            logger.error("error while storing trace event", e);
-        }
+
+        mutate(mutation);
     }
 
     private static CFMetaData compile(String cql)
@@ -417,8 +427,8 @@ public class TraceSessionContext
             statement = (CreateColumnFamilyStatement) QueryProcessor.parseStatement(cql)
                     .prepare().statement;
 
-            ColumnFamilyType type = ColumnFamilyType.Standard;
-            CFMetaData newCFMD = new CFMetaData(TRACE_KEYSPACE, statement.columnFamily(), type, statement.comparator,
+            CFMetaData newCFMD = new CFMetaData(TRACE_KEYSPACE, statement.columnFamily(), ColumnFamilyType.Standard,
+                    statement.comparator,
                     null);
 
             newCFMD.comment("")
@@ -439,19 +449,63 @@ public class TraceSessionContext
         }
     }
 
-    private static Column column(String columnName, long value)
+    private static Column column(ByteBuffer columnName, long value)
     {
-        return new Column(ByteBufferUtil.bytes(columnName), ByteBufferUtil.bytes(value));
+        return new Column(columnName, ByteBufferUtil.bytes(value));
     }
 
-    private static Column column(String columnName, String value)
+    private static Column column(ByteBuffer columnName, String value)
     {
-        return new Column(ByteBufferUtil.bytes(columnName), ByteBufferUtil.bytes(value));
+        return new Column(columnName, ByteBufferUtil.bytes(value));
     }
 
-    private static Column column(String columnName, InetAddress address)
+    private static Column column(ByteBuffer columnName, InetAddress address)
     {
-        return new Column(ByteBufferUtil.bytes(columnName), ByteBuffer.wrap(address.getAddress()));
+        return new Column(columnName, ByteBuffer.wrap(address.getAddress()));
+    }
+
+    private static ByteBuffer build(CompositeType type, ByteBuffer... args)
+    {
+        CompositeType.Builder builder = new CompositeType.Builder(type);
+        for (ByteBuffer arg : args)
+        {
+            builder.add(arg);
+        }
+        return builder.build();
+    }
+
+    private static ByteBuffer bytes(InetAddress address)
+    {
+        return ByteBuffer.wrap(address.getAddress());
+    }
+
+    /**
+     * Separated and made visible so that we can override the actual storage for testing purposes.
+     */
+    @VisibleForTesting
+    protected void mutate(RowMutation mutation)
+    {
+        try
+        {
+            StorageProxy.mutate(Arrays.asList(mutation), ConsistencyLevel.ANY);
+        }
+        // log but tracing errors shouldn't affect the caller
+        catch (TimeoutException e)
+        {
+            logger.error("error while storing trace event", e);
+            Throwables.propagate(e);
+        }
+        catch (UnavailableException e)
+        {
+            logger.error("error while storing trace event", e);
+            Throwables.propagate(e);
+        }
+    }
+
+    @VisibleForTesting
+    public static void setCtx(TraceSessionContext context)
+    {
+        ctx = context;
     }
 
     /**

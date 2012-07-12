@@ -25,30 +25,56 @@ import static junit.framework.Assert.assertNotNull;
 import static junit.framework.Assert.assertTrue;
 import static org.apache.cassandra.service.TraceSessionContext.traceCtx;
 
+import java.io.IOException;
 import java.net.InetAddress;
+
+import com.google.common.base.Throwables;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
-import org.apache.cassandra.db.Table;
-import org.apache.cassandra.db.filter.QueryFilter;
+import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.utils.FBUtilities;
 
 public class TraceSessionContextTest extends SchemaLoader
 {
+
+    private static class LocalTraceSessionContext extends TraceSessionContext
+    {
+
+        /**
+         * Override the paren't mutation that applies mutation to the cluster to instead apply mutations locally for
+         * testing.
+         */
+        @Override
+        protected void mutate(RowMutation mutation)
+        {
+            try
+            {
+                mutation.apply();
+            }
+            catch (IOException e)
+            {
+                Throwables.propagate(e);
+            }
+        }
+    }
+
     private static int sessionId;
     private static InetAddress coordinator;
 
     @BeforeClass
-    public static void setUp()
+    public static void loadSchema() throws IOException
     {
+        SchemaLoader.loadSchema();
+        TraceSessionContext.setCtx(new LocalTraceSessionContext());
         coordinator = FBUtilities.getLocalAddress();
         sessionId = traceCtx().startSession("test_session");
         assertTrue(traceCtx().isTracing());
         assertTrue(traceCtx().isLocalTraceSession());
         assertNotNull(traceCtx().threadLocalState());
-        // TODO assert that stuff is stored
+
     }
 
     @Test
@@ -56,8 +82,6 @@ public class TraceSessionContextTest extends SchemaLoader
     {
         traceCtx().trace("local_event");
         traceCtx().trace("local_event2");
-        Table.open(TraceSessionContext.TRACE_KEYSPACE).getColumnFamilyStore(TraceSessionContext.EVENTS_TABLE)
-                .getColumnFamily(new QueryFilter(null, null, null));
 
     }
 
