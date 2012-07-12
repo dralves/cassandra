@@ -23,10 +23,13 @@ package org.apache.cassandra.service;
 
 import static junit.framework.Assert.assertNotNull;
 import static junit.framework.Assert.assertTrue;
+import static org.apache.cassandra.service.TraceSessionContext.SESSIONS_TABLE;
+import static org.apache.cassandra.service.TraceSessionContext.TRACE_KEYSPACE;
 import static org.apache.cassandra.service.TraceSessionContext.traceCtx;
 
 import java.io.IOException;
 import java.net.InetAddress;
+import java.nio.ByteBuffer;
 
 import com.google.common.base.Throwables;
 
@@ -34,7 +37,12 @@ import org.junit.BeforeClass;
 import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
+import org.apache.cassandra.Util;
+import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.RowMutation;
+import org.apache.cassandra.db.Table;
+import org.apache.cassandra.db.filter.QueryFilter;
+import org.apache.cassandra.db.filter.QueryPath;
 import org.apache.cassandra.utils.FBUtilities;
 
 public class TraceSessionContextTest extends SchemaLoader
@@ -61,7 +69,7 @@ public class TraceSessionContextTest extends SchemaLoader
         }
     }
 
-    private static int sessionId;
+    private static byte[] sessionId;
     private static InetAddress coordinator;
 
     @BeforeClass
@@ -74,6 +82,12 @@ public class TraceSessionContextTest extends SchemaLoader
         assertTrue(traceCtx().isTracing());
         assertTrue(traceCtx().isLocalTraceSession());
         assertNotNull(traceCtx().threadLocalState());
+        ColumnFamily family = Table.open(TRACE_KEYSPACE)
+                .getColumnFamilyStore(SESSIONS_TABLE)
+                .getColumnFamily(
+                        QueryFilter.getIdentityFilter(Util.dk(ByteBuffer.wrap(sessionId)), new QueryPath(
+                                SESSIONS_TABLE)));
+        System.out.println(family.getColumnCount());
 
     }
 

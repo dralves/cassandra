@@ -68,6 +68,7 @@ import org.apache.cassandra.thrift.InvalidRequestException;
 import org.apache.cassandra.thrift.UnavailableException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
+import org.apache.cassandra.utils.UUIDGen;
 
 /**
  * A trace session context. Able to track and store trace sessions. A session is usually a user initiated query, and may
@@ -91,7 +92,6 @@ public class TraceSessionContext
     public static final String SESSIONS_TABLE = "trace_sessions";
     public static final String EVENTS_TABLE = "trace_events";
 
-    private static final ByteBuffer SESSION_ID_BB = ByteBufferUtil.bytes(SESSION_ID);
     private static final ByteBuffer COORDINATOR_BB = ByteBufferUtil.bytes(COORDINATOR);
     private static final ByteBuffer SESSION_REQUEST_BB = ByteBufferUtil.bytes(SESSION_REQUEST);
     private static final ByteBuffer SESSION_START_BB = ByteBufferUtil.bytes(SESSION_REQUEST);
@@ -100,43 +100,6 @@ public class TraceSessionContext
     private static final ByteBuffer EVENT_BB = ByteBufferUtil.bytes(SOURCE);
     private static final ByteBuffer HAPPENED_BB = ByteBufferUtil.bytes(SOURCE);
     private static final ByteBuffer DURATION_BB = ByteBufferUtil.bytes(DURATION);
-
-    private static final CFMetaData sessionsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + SESSIONS_TABLE
-            + " (" +
-            "  " + SESSION_ID + "      int," +
-            "  " + COORDINATOR + "     inet," +
-            "  " + SESSION_START + "   timestamp," +
-            "  " + SESSION_REQUEST + " text," +
-            "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + "));");
-
-    private static final CFMetaData eventsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + EVENTS_TABLE + " (" +
-            "  " + SESSION_ID + "      int," +
-            "  " + COORDINATOR + "     inet," +
-            "  " + EVENT_ID + "        int," +
-            "  " + SOURCE + "          inet," +
-            "  " + EVENT + "           text," +
-            "  " + DURATION + "        int," +
-            "  " + HAPPENED + "        timestamp," +
-            "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + ", " + EVENT_ID + "));");
-
-    /**
-     * Trace session meta events.
-     */
-    public enum TraceEvent
-    {
-        /**
-         * Signals a remotely initiated trace session's beginning.
-         */
-        REMOTE_TRACE_SESSION_BEGIN,
-        /**
-         * Signals a remotely initiated trace session's end.
-         */
-        REMOTE_TRACE_SESSION_END,
-        /**
-         * Signals a locally initiated trace session's end.
-         */
-        TRACE_SESSION_END;
-    }
 
     public static final String SESSION_CONTEXT_HEADER = "SessionContext";
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
@@ -172,6 +135,43 @@ public class TraceSessionContext
     private static final CompositeType HAPPENED_TYPE = CompositeType.getInstance(ImmutableList
             .<AbstractType<?>> of(InetAddressType.instance, Int32Type.instance, UTF8Type.instance
             ));
+
+    private static final CFMetaData sessionsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + SESSIONS_TABLE
+            + " (" +
+            "  " + SESSION_ID + "      timeuuid," +
+            "  " + COORDINATOR + "     inet," +
+            "  " + SESSION_START + "   timestamp," +
+            "  " + SESSION_REQUEST + " text," +
+            "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + "));");
+
+    private static final CFMetaData eventsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + EVENTS_TABLE + " (" +
+            "  " + SESSION_ID + "      timeuuid," +
+            "  " + COORDINATOR + "     inet," +
+            "  " + EVENT_ID + "        int," +
+            "  " + SOURCE + "          inet," +
+            "  " + EVENT + "           text," +
+            "  " + DURATION + "        int," +
+            "  " + HAPPENED + "        timestamp," +
+            "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + ", " + EVENT_ID + "));");
+
+    /**
+     * Trace session meta events.
+     */
+    public enum TraceEvent
+    {
+        /**
+         * Signals a remotely initiated trace session's beginning.
+         */
+        REMOTE_TRACE_SESSION_BEGIN,
+        /**
+         * Signals a remotely initiated trace session's end.
+         */
+        REMOTE_TRACE_SESSION_END,
+        /**
+         * Signals a locally initiated trace session's end.
+         */
+        TRACE_SESSION_END;
+    }
 
     private static TraceSessionContext ctx;
     private static boolean initializing = false;
@@ -209,11 +209,11 @@ public class TraceSessionContext
         this.localAddress = FBUtilities.getLocalAddress();
     }
 
-    public int startSession(String request)
+    public byte[] startSession(String request)
     {
         assert sessionContextThreadLocalState.get() == null;
 
-        int sessionId = idGenerator.incrementAndGet();
+        byte[] sessionId = UUIDGen.getTimeUUIDBytes();
 
         TraceSessionContextThreadLocalState tsctls = new TraceSessionContextThreadLocalState(localAddress,
                 localAddress, sessionId);
@@ -251,7 +251,7 @@ public class TraceSessionContext
         return ((tls != null) && tls.origin.equals(localAddress)) ? true : false;
     }
 
-    public Integer getSessionId()
+    public byte[] getSessionId()
     {
         return isTracing() ? sessionContextThreadLocalState.get().sessionId : null;
     }
@@ -314,10 +314,11 @@ public class TraceSessionContext
     {
         checkState((bytes != null) && bytes.length > 0);
         final DataInputStream dis = new DataInputStream(new ByteArrayInputStream(bytes));
-        final Integer sessionId;
+        final byte[] sessionId;
         try
         {
-            sessionId = dis.readInt();
+            sessionId = new byte[dis.readInt()];
+            dis.read(sessionId);
         }
         catch (IOException e)
         {
@@ -344,7 +345,8 @@ public class TraceSessionContext
         try
         {
             final TraceSessionContextThreadLocalState tls = sessionContextThreadLocalState.get();
-            buffer.writeInt(tls.sessionId);
+            buffer.writeInt(tls.sessionId.length);
+            buffer.write(tls.sessionId);
             return buffer.getData();
         }
         catch (IOException e)
@@ -363,9 +365,9 @@ public class TraceSessionContext
      * @param request
      *            the request that initiated the session (usually the user operation)
      */
-    private void newSessionEvent(int sessionId, InetAddress coordinator, String request)
+    private void newSessionEvent(byte[] sessionId, InetAddress coordinator, String request)
     {
-        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBufferUtil.bytes(sessionId));
+        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBuffer.wrap(sessionId));
 
         // TODO add TTL
         ColumnFamily family = ColumnFamily.create(sessionsCfm);
@@ -396,10 +398,10 @@ public class TraceSessionContext
                 state.watch.elapsedTime(TimeUnit.NANOSECONDS), System.currentTimeMillis());
     }
 
-    public void trace(int sessionId, InetAddress coordinator, InetAddress source,
+    public void trace(byte[] sessionId, InetAddress coordinator, InetAddress source,
             int eventId, String traceEvent, long duration, long happenedAt)
     {
-        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBufferUtil.bytes(sessionId));
+        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBuffer.wrap(sessionId));
         // TODO add TTL
         ColumnFamily family = ColumnFamily.create(eventsCfm);
         family.addColumn(column(
@@ -524,7 +526,7 @@ public class TraceSessionContext
     public static class TraceSessionContextThreadLocalState
 
     {
-        public final Integer sessionId;
+        public final byte[] sessionId;
         public final InetAddress origin;
         public final InetAddress source;
         public final String messageId;
@@ -537,13 +539,13 @@ public class TraceSessionContext
         }
 
         public TraceSessionContextThreadLocalState(final InetAddress coordinator, final InetAddress source,
-                final Integer sessionId)
+                final byte[] sessionId)
         {
             this(coordinator, source, sessionId, null);
         }
 
         public TraceSessionContextThreadLocalState(final InetAddress coordinator, final InetAddress source,
-                final Integer sessionId,
+                final byte[] sessionId,
                 final String messageId)
         {
             checkNotNull(coordinator);
