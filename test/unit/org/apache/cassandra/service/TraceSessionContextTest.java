@@ -30,15 +30,20 @@ import static org.apache.cassandra.service.TraceSessionContext.traceCtx;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
+import java.util.Map;
 
 import com.google.common.base.Throwables;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
 
+import org.apache.cassandra.db.marshal.CompositeType;
+
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
+import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.db.ColumnFamily;
+import org.apache.cassandra.db.IColumn;
 import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.Table;
 import org.apache.cassandra.db.filter.QueryFilter;
@@ -78,6 +83,9 @@ public class TraceSessionContextTest extends SchemaLoader
         SchemaLoader.loadSchema();
         TraceSessionContext.setCtx(new LocalTraceSessionContext());
         coordinator = FBUtilities.getLocalAddress();
+        byte[] addAsBytes = coordinator.getAddress();
+        InetAddress address = InetAddress.getByAddress(addAsBytes);
+        System.out.println("ADDR: " + address);
         sessionId = traceCtx().startSession("test_session");
         assertTrue(traceCtx().isTracing());
         assertTrue(traceCtx().isLocalTraceSession());
@@ -88,6 +96,24 @@ public class TraceSessionContextTest extends SchemaLoader
                         QueryFilter.getIdentityFilter(Util.dk(ByteBuffer.wrap(sessionId)), new QueryPath(
                                 SESSIONS_TABLE)));
         System.out.println(family.getColumnCount());
+        System.out.println(sessionId);
+        
+        CompositeType ct;
+        
+        for (IColumn column : family)
+        {
+            
+            
+            for (Map.Entry<ByteBuffer, ColumnDefinition> entry : TraceSessionContext.sessionsCfm.getColumn_metadata()
+                    .entrySet())
+            {
+                
+                
+                System.out.println("K: " + new String(entry.getKey().array()));
+                System.out.println("V: " + entry.getValue());
+            }
+            System.out.println("---");
+        }
 
     }
 

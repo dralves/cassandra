@@ -49,6 +49,7 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.config.KSMetaData;
 import org.apache.cassandra.config.Schema;
+import org.apache.cassandra.cql3.ColumnNameBuilder;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.statements.CreateColumnFamilyStatement;
 import org.apache.cassandra.db.Column;
@@ -102,41 +103,18 @@ public class TraceSessionContext
     private static final ByteBuffer DURATION_BB = ByteBufferUtil.bytes(DURATION);
 
     public static final String SESSION_CONTEXT_HEADER = "SessionContext";
+
+    public static final CompositeType SESSION_TYPE = CompositeType.getInstance(ImmutableList
+            .<AbstractType<?>> of(InetAddressType.instance, UTF8Type.instance
+            ));
+
+    public static final CompositeType EVENT_TYPE = CompositeType.getInstance(ImmutableList
+            .<AbstractType<?>> of(InetAddressType.instance, Int32Type.instance, UTF8Type.instance
+            ));
+
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
 
-    private static final CompositeType COORDINATOR_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(InetAddressType.instance, UTF8Type.instance
-            ));
-
-    private static final CompositeType SESSION_START_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(InetAddressType.instance, UTF8Type.instance
-            ));
-
-    private static final CompositeType SESSION_REQUEST_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(InetAddressType.instance, UTF8Type.instance
-            ));
-
-    private static final CompositeType EVENT_ID_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(InetAddressType.instance, Int32Type.instance, UTF8Type.instance
-            ));
-
-    private static final CompositeType SOURCE_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(InetAddressType.instance, Int32Type.instance, UTF8Type.instance
-            ));
-
-    private static final CompositeType EVENT_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(InetAddressType.instance, Int32Type.instance, UTF8Type.instance
-            ));
-
-    private static final CompositeType DURATION_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(InetAddressType.instance, Int32Type.instance, UTF8Type.instance
-            ));
-
-    private static final CompositeType HAPPENED_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(InetAddressType.instance, Int32Type.instance, UTF8Type.instance
-            ));
-
-    private static final CFMetaData sessionsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + SESSIONS_TABLE
+    public static final CFMetaData sessionsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + SESSIONS_TABLE
             + " (" +
             "  " + SESSION_ID + "      timeuuid," +
             "  " + COORDINATOR + "     inet," +
@@ -220,7 +198,7 @@ public class TraceSessionContext
 
         sessionContextThreadLocalState.set(tsctls);
 
-        newSessionEvent(sessionId, tsctls.origin, request);
+        newSessionEvent(sessionId, localAddress, request);
         return sessionId;
     }
 
@@ -371,12 +349,12 @@ public class TraceSessionContext
 
         // TODO add TTL
         ColumnFamily family = ColumnFamily.create(sessionsCfm);
-        family.addColumn(column(build(COORDINATOR_TYPE, bytes(coordinator), COORDINATOR_BB), coordinator));
-        family.addColumn(column(build(SESSION_REQUEST_TYPE, bytes(coordinator), SESSION_REQUEST_BB), request));
-        family.addColumn(column(build(SESSION_START_TYPE, bytes(coordinator), SESSION_START_BB),
+        ColumnNameBuilder builder = sessionsCfm.getCfDef().getColumnNameBuilder();
+        family.addColumn(column(builder.add(ByteBuffer.wrap(coordinator.getAddress())).add(SESSION_START_BB).build(),
                 System.currentTimeMillis()));
+        family.addColumn(column(builder.add(ByteBuffer.wrap(coordinator.getAddress())).add(SESSION_REQUEST_BB).build(),
+                request));
         mutation.add(family);
-
         mutate(mutation);
 
     }
@@ -405,16 +383,22 @@ public class TraceSessionContext
         // TODO add TTL
         ColumnFamily family = ColumnFamily.create(eventsCfm);
         family.addColumn(column(
-                build(COORDINATOR_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), COORDINATOR_BB), coordinator));
-        family.addColumn(column(build(EVENT_ID_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), EVENT_ID_BB),
+                buildComposite(EVENT_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), COORDINATOR_BB),
+                coordinator));
+        family.addColumn(column(
+                buildComposite(EVENT_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), EVENT_ID_BB),
                 eventId));
-        family.addColumn(column(build(SOURCE_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), SOURCE_BB),
+        family.addColumn(column(
+                buildComposite(EVENT_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), SOURCE_BB),
                 source));
-        family.addColumn(column(build(EVENT_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), EVENT_BB),
+        family.addColumn(column(
+                buildComposite(EVENT_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), EVENT_BB),
                 traceEvent));
-        family.addColumn(column(build(DURATION_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), DURATION_BB),
+        family.addColumn(column(
+                buildComposite(EVENT_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), DURATION_BB),
                 duration));
-        family.addColumn(column(build(HAPPENED_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), HAPPENED_BB),
+        family.addColumn(column(
+                buildComposite(EVENT_TYPE, bytes(coordinator), ByteBufferUtil.bytes(eventId), HAPPENED_BB),
                 happenedAt));
         mutation.add(family);
 
@@ -463,10 +447,10 @@ public class TraceSessionContext
 
     private static Column column(ByteBuffer columnName, InetAddress address)
     {
-        return new Column(columnName, ByteBuffer.wrap(address.getAddress()));
+        return new Column(columnName, bytes(address));
     }
 
-    private static ByteBuffer build(CompositeType type, ByteBuffer... args)
+    private static ByteBuffer buildComposite(CompositeType type, ByteBuffer... args)
     {
         CompositeType.Builder builder = new CompositeType.Builder(type);
         for (ByteBuffer arg : args)
