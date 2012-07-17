@@ -26,7 +26,9 @@ import static junit.framework.Assert.assertNotNull;
 import static junit.framework.Assert.assertSame;
 import static junit.framework.Assert.assertTrue;
 import static org.apache.cassandra.service.TraceSessionContext.EVENTS_TABLE;
+import static org.apache.cassandra.service.TraceSessionContext.EVENT_TYPE;
 import static org.apache.cassandra.service.TraceSessionContext.SESSIONS_TABLE;
+import static org.apache.cassandra.service.TraceSessionContext.SESSION_TYPE;
 import static org.apache.cassandra.service.TraceSessionContext.TRACE_KEYSPACE;
 import static org.apache.cassandra.service.TraceSessionContext.traceCtx;
 
@@ -37,6 +39,8 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import com.google.common.base.Throwables;
 import com.google.common.collect.Iterables;
@@ -46,6 +50,7 @@ import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
+import org.apache.cassandra.concurrent.DebuggableThreadPoolExecutor;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.IColumn;
 import org.apache.cassandra.db.RowMutation;
@@ -111,7 +116,7 @@ public class TraceSessionContextTest extends SchemaLoader
 
         // request col
         IColumn requestColumn = Iterables.get(family, 0);
-        List<CompositeComponent> components = TraceSessionContext.SESSION_TYPE.deconstruct(requestColumn.name());
+        List<CompositeComponent> components = SESSION_TYPE.deconstruct(requestColumn.name());
         InetAddress address = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
         String colName = (String) components.get(1).comparator.compose(components.get(1).value);
         assertEquals("request", colName);
@@ -122,7 +127,7 @@ public class TraceSessionContextTest extends SchemaLoader
 
         // startedAt col
         IColumn startColumn = Iterables.get(family, 1);
-        components = TraceSessionContext.SESSION_TYPE.deconstruct(startColumn.name());
+        components = SESSION_TYPE.deconstruct(startColumn.name());
         address = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
         colName = (String) components.get(1).comparator.compose(components.get(1).value);
         assertEquals("startedAt", colName);
@@ -132,7 +137,7 @@ public class TraceSessionContextTest extends SchemaLoader
     }
 
     @Test
-    public void testNewTraceEvent() throws CharacterCodingException, UnknownHostException
+    public void testNewLocalTraceEvent() throws CharacterCodingException, UnknownHostException
     {
         UUID eventId = traceCtx().trace("simple trace event", 4321L, 1234L);
 
@@ -147,7 +152,7 @@ public class TraceSessionContextTest extends SchemaLoader
         assertSame(4, family.getColumnCount());
 
         IColumn durationColumn = Iterables.get(family, 0);
-        List<CompositeComponent> components = TraceSessionContext.EVENT_TYPE.deconstruct(durationColumn.name());
+        List<CompositeComponent> components = EVENT_TYPE.deconstruct(durationColumn.name());
         InetAddress coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
         UUID decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
         String colName = (String) components.get(2).comparator.compose(components.get(2).value);
@@ -157,7 +162,7 @@ public class TraceSessionContextTest extends SchemaLoader
         assertEquals(4321L, ByteBufferUtil.toLong(durationColumn.value()));
 
         IColumn eventColumn = Iterables.get(family, 1);
-        components = TraceSessionContext.EVENT_TYPE.deconstruct(eventColumn.name());
+        components = EVENT_TYPE.deconstruct(eventColumn.name());
         coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
         decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
         colName = (String) components.get(2).comparator.compose(components.get(2).value);
@@ -167,7 +172,7 @@ public class TraceSessionContextTest extends SchemaLoader
         assertEquals("simple trace event", ByteBufferUtil.string(eventColumn.value()));
 
         IColumn happenedAtColumn = Iterables.get(family, 2);
-        components = TraceSessionContext.EVENT_TYPE.deconstruct(happenedAtColumn.name());
+        components = EVENT_TYPE.deconstruct(happenedAtColumn.name());
         coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
         decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
         colName = (String) components.get(2).comparator.compose(components.get(2).value);
@@ -177,7 +182,7 @@ public class TraceSessionContextTest extends SchemaLoader
         assertEquals(1234L, ByteBufferUtil.toLong(happenedAtColumn.value()));
 
         IColumn sourceColumn = Iterables.get(family, 3);
-        components = TraceSessionContext.EVENT_TYPE.deconstruct(sourceColumn.name());
+        components = EVENT_TYPE.deconstruct(sourceColumn.name());
         coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
         decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
         colName = (String) components.get(2).comparator.compose(components.get(2).value);
@@ -186,6 +191,32 @@ public class TraceSessionContextTest extends SchemaLoader
         assertEquals(FBUtilities.getLocalAddress(), coordinator);
         assertEquals(FBUtilities.getLocalAddress(),
                 InetAddress.getByAddress(ByteBufferUtil.getArray(sourceColumn.value())));
+    }
+
+    @Test
+    public void testContextTLStateAcompaniesToAnotherThread() throws InterruptedException, ExecutionException
+    {
+        // the state should be carried to another thread as long as the debuggable TPE is used
+        DebuggableThreadPoolExecutor poolExecutor = DebuggableThreadPoolExecutor
+                .createWithFixedPoolSize("test_pool", 1);
+
+        final AtomicBoolean executed = new AtomicBoolean(false);
+        poolExecutor.submit(new Runnable()
+        {
+            @Override
+            public void run()
+            {
+                assertTrue(traceCtx().isTracing());
+                assertEquals(sessionId, traceCtx().getSessionId());
+                executed.set(true);
+            }
+        }).get();
+        assertTrue(executed.get());
+    }
+
+    @Test
+    public void testTracingSessionsContinueRemotely()
+    {
 
     }
 }

@@ -209,17 +209,6 @@ public class TraceSessionContext
         return UUIDGen.getUUID(ByteBuffer.wrap(sessionId));
     }
 
-    /**
-     * Includes the provided event in trace, duration is computed with the session's thread local {@link Stopwatch},
-     * counting from the beginning of the *LOCAL* session, i.e., in order to compute global durations when sessions span
-     * multiple nodes values must be added up. Current time is measured with System.currentTimeMillis().
-     */
-
-    public UUID trace(TraceEvent traceEvent, long timestamp)
-    {
-        return trace(traceEvent.name());
-    }
-
     public UUID trace(TraceEvent traceEvent)
     {
         return trace(traceEvent.name(), System.currentTimeMillis());
@@ -230,19 +219,32 @@ public class TraceSessionContext
         return trace(traceEvent, System.currentTimeMillis());
     }
 
+    public UUID trace(TraceEvent traceEvent, long timestamp)
+    {
+        return trace(traceEvent.name());
+    }
+
     public UUID trace(String traceEvent, long timestamp)
     {
-        TraceSessionContextThreadLocalState state = sessionContextThreadLocalState.get();
-        return trace(traceEvent, state.watch.elapsedTime(TimeUnit.NANOSECONDS), timestamp);
+        if (isTracing())
+        {
+            TraceSessionContextThreadLocalState state = sessionContextThreadLocalState.get();
+            return trace(traceEvent, state.watch.elapsedTime(TimeUnit.NANOSECONDS), timestamp);
+        }
+        return null;
     }
 
     public UUID trace(String traceEvent, long duration, long timestamp)
     {
-        byte[] eventId = UUIDGen.getTimeUUIDBytes();
-        TraceSessionContextThreadLocalState state = sessionContextThreadLocalState.get();
-        trace(state.sessionId, state.origin, eventId, state.source, traceEvent,
-                duration, timestamp);
-        return UUIDGen.getUUID(ByteBuffer.wrap(eventId));
+        if (isTracing())
+        {
+            byte[] eventId = UUIDGen.getTimeUUIDBytes();
+            TraceSessionContextThreadLocalState state = sessionContextThreadLocalState.get();
+            trace(state.sessionId, state.origin, eventId, state.source, traceEvent,
+                    duration, timestamp);
+            return UUIDGen.getUUID(ByteBuffer.wrap(eventId));
+        }
+        return null;
     }
 
     public void stopSession()
@@ -272,9 +274,9 @@ public class TraceSessionContext
         return ((tls != null) && tls.origin.equals(localAddress)) ? true : false;
     }
 
-    public byte[] getSessionId()
+    public UUID getSessionId()
     {
-        return isTracing() ? sessionContextThreadLocalState.get().sessionId : null;
+        return isTracing() ? UUIDGen.getUUID(ByteBuffer.wrap(sessionContextThreadLocalState.get().sessionId)) : null;
     }
 
     public InetAddress getOrigin()
@@ -424,6 +426,49 @@ public class TraceSessionContext
         return builder.build();
     }
 
+    private Column column(ByteBuffer columnName, long value)
+    {
+        return new Column(columnName, ByteBufferUtil.bytes(value));
+    }
+
+    private Column column(ByteBuffer columnName, String value)
+    {
+        return new Column(columnName, ByteBufferUtil.bytes(value));
+    }
+
+    private Column column(ByteBuffer columnName, InetAddress address)
+    {
+        return new Column(columnName, bytes(address));
+    }
+
+    private ByteBuffer bytes(InetAddress address)
+    {
+        return ByteBuffer.wrap(address.getAddress());
+    }
+
+    /**
+     * Separated and made visible so that we can override the actual storage for testing purposes.
+     */
+    @VisibleForTesting
+    protected void mutate(RowMutation mutation)
+    {
+        try
+        {
+            StorageProxy.mutate(Arrays.asList(mutation), ConsistencyLevel.ANY);
+        }
+        // log but tracing errors shouldn't affect the caller
+        catch (TimeoutException e)
+        {
+            logger.error("error while storing trace event", e);
+            Throwables.propagate(e);
+        }
+        catch (UnavailableException e)
+        {
+            logger.error("error while storing trace event", e);
+            Throwables.propagate(e);
+        }
+    }
+
     private static CFMetaData compile(String cql)
     {
         CreateColumnFamilyStatement statement = null;
@@ -451,49 +496,6 @@ public class TraceSessionContext
         catch (ConfigurationException e)
         {
             throw Throwables.propagate(e);
-        }
-    }
-
-    private static Column column(ByteBuffer columnName, long value)
-    {
-        return new Column(columnName, ByteBufferUtil.bytes(value));
-    }
-
-    private static Column column(ByteBuffer columnName, String value)
-    {
-        return new Column(columnName, ByteBufferUtil.bytes(value));
-    }
-
-    private static Column column(ByteBuffer columnName, InetAddress address)
-    {
-        return new Column(columnName, bytes(address));
-    }
-
-    private static ByteBuffer bytes(InetAddress address)
-    {
-        return ByteBuffer.wrap(address.getAddress());
-    }
-
-    /**
-     * Separated and made visible so that we can override the actual storage for testing purposes.
-     */
-    @VisibleForTesting
-    protected void mutate(RowMutation mutation)
-    {
-        try
-        {
-            StorageProxy.mutate(Arrays.asList(mutation), ConsistencyLevel.ANY);
-        }
-        // log but tracing errors shouldn't affect the caller
-        catch (TimeoutException e)
-        {
-            logger.error("error while storing trace event", e);
-            Throwables.propagate(e);
-        }
-        catch (UnavailableException e)
-        {
-            logger.error("error while storing trace event", e);
-            Throwables.propagate(e);
         }
     }
 
