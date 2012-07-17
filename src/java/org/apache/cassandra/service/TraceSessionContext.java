@@ -30,9 +30,9 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Predicate;
@@ -59,7 +59,7 @@ import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.CompositeType;
 import org.apache.cassandra.db.marshal.InetAddressType;
-import org.apache.cassandra.db.marshal.Int32Type;
+import org.apache.cassandra.db.marshal.TimeUUIDType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.locator.SimpleStrategy;
@@ -77,39 +77,42 @@ import org.apache.cassandra.utils.UUIDGen;
  */
 public class TraceSessionContext
 {
-    /* column names */
-    public static final String SESSION_ID = "sessionId";
-    public static final String COORDINATOR = "coordinator";
-    public static final String SESSION_REQUEST = "request";
-    public static final String SESSION_START = "startedAt";
-    public static final String EVENT_ID = "eventId";
-    public static final String SOURCE = "source";
-    public static final String EVENT = "event";
-    public static final String HAPPENED = "happened_at";
-    public static final String DURATION = "duration";
+    public static final String SESSION_CONTEXT_HEADER = "SessionContext";
 
     /* keyspace and column families */
     public static final String TRACE_KEYSPACE = "trace";
     public static final String SESSIONS_TABLE = "trace_sessions";
     public static final String EVENTS_TABLE = "trace_events";
 
-    private static final ByteBuffer COORDINATOR_BB = ByteBufferUtil.bytes(COORDINATOR);
-    private static final ByteBuffer SESSION_REQUEST_BB = ByteBufferUtil.bytes(SESSION_REQUEST);
-    private static final ByteBuffer SESSION_START_BB = ByteBufferUtil.bytes(SESSION_START);
-    private static final ByteBuffer EVENT_ID_BB = ByteBufferUtil.bytes(EVENT_ID);
-    private static final ByteBuffer SOURCE_BB = ByteBufferUtil.bytes(SOURCE);
-    private static final ByteBuffer EVENT_BB = ByteBufferUtil.bytes(EVENT);
-    private static final ByteBuffer HAPPENED_BB = ByteBufferUtil.bytes(HAPPENED);
-    private static final ByteBuffer DURATION_BB = ByteBufferUtil.bytes(DURATION);
+    /* key */
+    private static final String SESSION_ID = "sessionId";
 
-    public static final String SESSION_CONTEXT_HEADER = "SessionContext";
+    /* secondary PK (col prefixes) */
+    public static final String COORDINATOR = "coordinator";
+    public static final String EVENT_ID = "eventId";
+
+    /* session table columns */
+    public static final String SESSION_REQUEST = "request";
+    public static final ByteBuffer SESSION_REQUEST_BB = ByteBufferUtil.bytes(SESSION_REQUEST);
+    public static final String SESSION_START = "startedAt";
+    public static final ByteBuffer SESSION_START_BB = ByteBufferUtil.bytes(SESSION_START);
+
+    /* event table columns */
+    public static final String EVENT = "event";
+    public static final ByteBuffer EVENT_BB = ByteBufferUtil.bytes(EVENT);
+    public static final String DURATION = "duration";
+    public static final ByteBuffer DURATION_BB = ByteBufferUtil.bytes(DURATION);
+    public static final String HAPPENED = "happened_at";
+    public static final ByteBuffer HAPPENED_BB = ByteBufferUtil.bytes(HAPPENED);
+    public static final String SOURCE = "source";
+    public static final ByteBuffer SOURCE_BB = ByteBufferUtil.bytes(SOURCE);
 
     public static final CompositeType SESSION_TYPE = CompositeType.getInstance(ImmutableList
             .<AbstractType<?>> of(InetAddressType.instance, UTF8Type.instance
             ));
 
     public static final CompositeType EVENT_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(InetAddressType.instance, Int32Type.instance, UTF8Type.instance
+            .<AbstractType<?>> of(InetAddressType.instance, TimeUUIDType.instance, UTF8Type.instance
             ));
 
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
@@ -125,7 +128,7 @@ public class TraceSessionContext
     private static final CFMetaData eventsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + EVENTS_TABLE + " (" +
             "  " + SESSION_ID + "      timeuuid," +
             "  " + COORDINATOR + "     inet," +
-            "  " + EVENT_ID + "        int," +
+            "  " + EVENT_ID + "        timeuuid," +
             "  " + SOURCE + "          inet," +
             "  " + EVENT + "           text," +
             "  " + DURATION + "        int," +
@@ -154,7 +157,6 @@ public class TraceSessionContext
     private static TraceSessionContext ctx;
     private static boolean initializing = false;
 
-    private final AtomicInteger idGenerator = new AtomicInteger(0);
     private final InetAddress localAddress;
     private ThreadLocal<TraceSessionContextThreadLocalState> sessionContextThreadLocalState = new ThreadLocal<TraceSessionContextThreadLocalState>();
 
@@ -187,7 +189,12 @@ public class TraceSessionContext
         this.localAddress = FBUtilities.getLocalAddress();
     }
 
-    public byte[] startSession(String request)
+    public UUID startSession(String request)
+    {
+        return startSession(request, System.currentTimeMillis());
+    }
+
+    public UUID startSession(String request, long timestamp)
     {
         assert sessionContextThreadLocalState.get() == null;
 
@@ -198,8 +205,44 @@ public class TraceSessionContext
 
         sessionContextThreadLocalState.set(tsctls);
 
-        newSessionEvent(sessionId, localAddress, request);
-        return sessionId;
+        newSession(sessionId, localAddress, request, timestamp);
+        return UUIDGen.getUUID(ByteBuffer.wrap(sessionId));
+    }
+
+    /**
+     * Includes the provided event in trace, duration is computed with the session's thread local {@link Stopwatch},
+     * counting from the beginning of the *LOCAL* session, i.e., in order to compute global durations when sessions span
+     * multiple nodes values must be added up. Current time is measured with System.currentTimeMillis().
+     */
+
+    public UUID trace(TraceEvent traceEvent, long timestamp)
+    {
+        return trace(traceEvent.name());
+    }
+
+    public UUID trace(TraceEvent traceEvent)
+    {
+        return trace(traceEvent.name(), System.currentTimeMillis());
+    }
+
+    public UUID trace(String traceEvent)
+    {
+        return trace(traceEvent, System.currentTimeMillis());
+    }
+
+    public UUID trace(String traceEvent, long timestamp)
+    {
+        TraceSessionContextThreadLocalState state = sessionContextThreadLocalState.get();
+        return trace(traceEvent, state.watch.elapsedTime(TimeUnit.NANOSECONDS), timestamp);
+    }
+
+    public UUID trace(String traceEvent, long duration, long timestamp)
+    {
+        byte[] eventId = UUIDGen.getTimeUUIDBytes();
+        TraceSessionContextThreadLocalState state = sessionContextThreadLocalState.get();
+        trace(state.sessionId, state.origin, eventId, state.source, traceEvent,
+                duration, timestamp);
+        return UUIDGen.getUUID(ByteBuffer.wrap(eventId));
     }
 
     public void stopSession()
@@ -343,15 +386,30 @@ public class TraceSessionContext
      * @param request
      *            the request that initiated the session (usually the user operation)
      */
-    private void newSessionEvent(byte[] sessionId, InetAddress coordinator, String request)
+    private void newSession(byte[] sessionId, InetAddress coordinator, String request, long startedAt)
     {
         RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBuffer.wrap(sessionId));
-
         // TODO add TTL
         ColumnFamily family = ColumnFamily.create(sessionsCfm);
         ByteBuffer coordinatorAsBb = ByteBuffer.wrap(coordinator.getAddress());
-        family.addColumn(column(buildName(sessionsCfm, coordinatorAsBb, SESSION_START_BB), System.currentTimeMillis()));
+        family.addColumn(column(buildName(sessionsCfm, coordinatorAsBb, SESSION_START_BB), startedAt));
         family.addColumn(column(buildName(sessionsCfm, coordinatorAsBb, SESSION_REQUEST_BB), request));
+        mutation.add(family);
+        mutate(mutation);
+    }
+
+    public void trace(byte[] sessionId, InetAddress coordinator, byte[] eventId, InetAddress source,
+            String traceEvent, long duration, long happenedAt)
+    {
+        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBuffer.wrap(sessionId));
+        // TODO add TTL
+        ColumnFamily family = ColumnFamily.create(eventsCfm);
+        ByteBuffer coordinatorAsBB = bytes(coordinator);
+        ByteBuffer eventIdAsBB = ByteBuffer.wrap(eventId);
+        family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, SOURCE_BB), source));
+        family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, EVENT_BB), traceEvent));
+        family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, DURATION_BB), duration));
+        family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, HAPPENED_BB), happenedAt));
         mutation.add(family);
         mutate(mutation);
     }
@@ -364,46 +422,6 @@ public class TraceSessionContext
             builder.add(arg);
         }
         return builder.build();
-    }
-
-    /**
-     * Includes the provided event in trace, duration is computed with the session's thread local {@link Stopwatch},
-     * counting from the beginning of the *LOCAL* session, i.e., in order to compute global durations when sessions span
-     * multiple nodes values must be added up. Current time is measured with System.currentTimeMillis().
-     */
-    public void trace(TraceEvent traceEvent)
-    {
-        trace(traceEvent.name());
-    }
-
-    public void trace(String traceEvent)
-    {
-        TraceSessionContextThreadLocalState state = sessionContextThreadLocalState.get();
-        trace(state.sessionId, state.origin, state.source, state.eventIds.getAndIncrement(), traceEvent,
-                state.watch.elapsedTime(TimeUnit.NANOSECONDS), System.currentTimeMillis());
-    }
-
-    public void trace(byte[] sessionId, InetAddress coordinator, InetAddress source,
-            int eventId, String traceEvent, long duration, long happenedAt)
-    {
-        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBuffer.wrap(sessionId));
-        // TODO add TTL
-        ColumnFamily family = ColumnFamily.create(eventsCfm);
-        family.addColumn(column(
-                buildName(eventsCfm, bytes(coordinator), ByteBufferUtil.bytes(eventId), COORDINATOR_BB), coordinator));
-        family.addColumn(column(
-                buildName(eventsCfm, bytes(coordinator), ByteBufferUtil.bytes(eventId), EVENT_ID_BB), eventId));
-        family.addColumn(column(
-                buildName(eventsCfm, bytes(coordinator), ByteBufferUtil.bytes(eventId), SOURCE_BB), source));
-        family.addColumn(column(
-                buildName(eventsCfm, bytes(coordinator), ByteBufferUtil.bytes(eventId), EVENT_BB), traceEvent));
-        family.addColumn(column(
-                buildName(eventsCfm, bytes(coordinator), ByteBufferUtil.bytes(eventId), DURATION_BB), duration));
-        family.addColumn(column(
-                buildName(eventsCfm, bytes(coordinator), ByteBufferUtil.bytes(eventId), HAPPENED_BB), happenedAt));
-        mutation.add(family);
-
-        mutate(mutation);
     }
 
     private static CFMetaData compile(String cql)
@@ -506,7 +524,6 @@ public class TraceSessionContext
         public final InetAddress source;
         public final String messageId;
         public final Stopwatch watch;
-        public final AtomicInteger eventIds = new AtomicInteger();
 
         public TraceSessionContextThreadLocalState(final TraceSessionContextThreadLocalState other)
         {
