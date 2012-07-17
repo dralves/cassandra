@@ -55,6 +55,7 @@ import org.apache.cassandra.cql3.statements.CreateColumnFamilyStatement;
 import org.apache.cassandra.db.Column;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ColumnFamilyType;
+import org.apache.cassandra.db.ExpiringColumn;
 import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.CompositeType;
@@ -158,6 +159,7 @@ public class TraceSessionContext
     private static boolean initializing = false;
 
     private InetAddress localAddress;
+    private int timeToLive = 86400;
     private ThreadLocal<TraceSessionContextThreadLocalState> sessionContextThreadLocalState = new ThreadLocal<TraceSessionContextThreadLocalState>();
 
     protected TraceSessionContext()
@@ -396,7 +398,6 @@ public class TraceSessionContext
     private void newSession(byte[] sessionId, InetAddress coordinator, String request, long startedAt)
     {
         RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBuffer.wrap(sessionId));
-        // TODO add TTL
         ColumnFamily family = ColumnFamily.create(sessionsCfm);
         ByteBuffer coordinatorAsBb = ByteBuffer.wrap(coordinator.getAddress());
         family.addColumn(column(buildName(sessionsCfm, coordinatorAsBb, SESSION_START_BB), startedAt));
@@ -409,7 +410,6 @@ public class TraceSessionContext
             String traceEvent, long duration, long happenedAt)
     {
         RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBuffer.wrap(sessionId));
-        // TODO add TTL
         ColumnFamily family = ColumnFamily.create(eventsCfm);
         ByteBuffer coordinatorAsBB = bytes(coordinator);
         ByteBuffer eventIdAsBB = ByteBuffer.wrap(eventId);
@@ -433,17 +433,17 @@ public class TraceSessionContext
 
     private Column column(ByteBuffer columnName, long value)
     {
-        return new Column(columnName, ByteBufferUtil.bytes(value));
+        return new ExpiringColumn(columnName, ByteBufferUtil.bytes(value), System.currentTimeMillis(), timeToLive);
     }
 
     private Column column(ByteBuffer columnName, String value)
     {
-        return new Column(columnName, ByteBufferUtil.bytes(value));
+        return new ExpiringColumn(columnName, ByteBufferUtil.bytes(value), System.currentTimeMillis(), timeToLive);
     }
 
     private Column column(ByteBuffer columnName, InetAddress address)
     {
-        return new Column(columnName, bytes(address));
+        return new ExpiringColumn(columnName, bytes(address), System.currentTimeMillis(), timeToLive);
     }
 
     private ByteBuffer bytes(InetAddress address)
@@ -478,6 +478,11 @@ public class TraceSessionContext
     public void setLocalAddress(InetAddress localAddress)
     {
         this.localAddress = localAddress;
+    }
+
+    public void setTimeToLive(int timeToLive)
+    {
+        this.timeToLive = timeToLive;
     }
 
     private static CFMetaData compile(String cql)
