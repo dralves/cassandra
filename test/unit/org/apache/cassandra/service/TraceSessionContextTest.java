@@ -21,7 +21,9 @@
 
 package org.apache.cassandra.service;
 
+import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertNotNull;
+import static junit.framework.Assert.assertSame;
 import static junit.framework.Assert.assertTrue;
 import static org.apache.cassandra.service.TraceSessionContext.SESSIONS_TABLE;
 import static org.apache.cassandra.service.TraceSessionContext.TRACE_KEYSPACE;
@@ -30,24 +32,25 @@ import static org.apache.cassandra.service.TraceSessionContext.traceCtx;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
-import java.util.Map;
+import java.nio.charset.CharacterCodingException;
+import java.util.List;
 
 import com.google.common.base.Throwables;
+import com.google.common.collect.Iterables;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
 
-import org.apache.cassandra.db.marshal.CompositeType;
-
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
-import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.IColumn;
 import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.Table;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.db.filter.QueryPath;
+import org.apache.cassandra.db.marshal.AbstractCompositeType.CompositeComponent;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 
 public class TraceSessionContextTest extends SchemaLoader
@@ -75,54 +78,51 @@ public class TraceSessionContextTest extends SchemaLoader
     }
 
     private static byte[] sessionId;
-    private static InetAddress coordinator;
 
     @BeforeClass
     public static void loadSchema() throws IOException
     {
         SchemaLoader.loadSchema();
         TraceSessionContext.setCtx(new LocalTraceSessionContext());
-        coordinator = FBUtilities.getLocalAddress();
-        byte[] addAsBytes = coordinator.getAddress();
-        InetAddress address = InetAddress.getByAddress(addAsBytes);
-        System.out.println("ADDR: " + address);
+    }
+
+    @Test
+    public void testNewSessiont() throws CharacterCodingException
+    {
         sessionId = traceCtx().startSession("test_session");
         assertTrue(traceCtx().isTracing());
         assertTrue(traceCtx().isLocalTraceSession());
         assertNotNull(traceCtx().threadLocalState());
+
         ColumnFamily family = Table.open(TRACE_KEYSPACE)
                 .getColumnFamilyStore(SESSIONS_TABLE)
                 .getColumnFamily(
                         QueryFilter.getIdentityFilter(Util.dk(ByteBuffer.wrap(sessionId)), new QueryPath(
                                 SESSIONS_TABLE)));
-        System.out.println(family.getColumnCount());
-        System.out.println(sessionId);
-        
-        CompositeType ct;
-        
-        for (IColumn column : family)
-        {
-            
-            
-            for (Map.Entry<ByteBuffer, ColumnDefinition> entry : TraceSessionContext.sessionsCfm.getColumn_metadata()
-                    .entrySet())
-            {
-                
-                
-                System.out.println("K: " + new String(entry.getKey().array()));
-                System.out.println("V: " + entry.getValue());
-            }
-            System.out.println("---");
-        }
 
-    }
+        // should have two columns
+        assertSame(2, family.getColumnCount());
 
-    @Test
-    public void testLocalEvent()
-    {
-        traceCtx().trace("local_event");
-        traceCtx().trace("local_event2");
+        // request col
+        IColumn requestColumn = Iterables.get(family, 0);
+        List<CompositeComponent> components = TraceSessionContext.SESSION_TYPE.deconstruct(requestColumn.name());
+        InetAddress address = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
+        String colName = (String) components.get(1).comparator.compose(components.get(1).value);
+        assertEquals("request", colName);
+        System.out.println(requestColumn);
+        assertEquals(FBUtilities.getLocalAddress(), address);
+        String request = ByteBufferUtil.string(requestColumn.value());
+        assertEquals("test_session", request);
 
+        // startedAt col
+        IColumn startColumn = Iterables.get(family, 1);
+        components = TraceSessionContext.SESSION_TYPE.deconstruct(startColumn.name());
+        address = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
+        colName = (String) components.get(1).comparator.compose(components.get(1).value);
+        assertEquals("startedAt", colName);
+        assertEquals(FBUtilities.getLocalAddress(), address);
+        // try to parse the long but as the time comes from the system clock when can't actually test it
+        ByteBufferUtil.toLong(startColumn.value());
     }
 
     public void testRemoteExecutionRequest()
