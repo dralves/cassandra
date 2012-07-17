@@ -49,9 +49,8 @@ public class MessageDeliveryTask implements Runnable
             return;
         }
 
-        final byte[] queryContextBytes = (byte[]) message.parameters.get(TraceSessionContext.SESSION_CONTEXT_HEADER);
-        if (queryContextBytes != null)
-            traceCtx().update(message, queryContextBytes, id);
+        // setup tracing (if the message requests it)
+        traceCtx().update(message, id);
 
         IVerbHandler verbHandler = MessagingService.instance().getVerbHandler(verb);
         if (verbHandler == null)
@@ -66,8 +65,7 @@ public class MessageDeliveryTask implements Runnable
         }
         finally
         {
-            if (queryContextBytes != null)
-                traceCtx().reset();
+            traceCtx().reset();
         }
     }
 }

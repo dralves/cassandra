@@ -77,7 +77,7 @@ import org.apache.cassandra.utils.UUIDGen;
  */
 public class TraceSessionContext
 {
-    public static final String SESSION_CONTEXT_HEADER = "SessionContext";
+    public static final String TRACE_SESSION_CONTEXT_HEADER = "SessionContext";
 
     /* keyspace and column families */
     public static final String TRACE_KEYSPACE = "trace";
@@ -157,7 +157,7 @@ public class TraceSessionContext
     private static TraceSessionContext ctx;
     private static boolean initializing = false;
 
-    private final InetAddress localAddress;
+    private InetAddress localAddress;
     private ThreadLocal<TraceSessionContextThreadLocalState> sessionContextThreadLocalState = new ThreadLocal<TraceSessionContextThreadLocalState>();
 
     protected TraceSessionContext()
@@ -330,13 +330,18 @@ public class TraceSessionContext
      * 
      * @param message
      *            The internode message
-     * @param bytes
-     *            Bytes used in the header, returned from call getMessageBytes()
      */
-    public void update(final MessageIn<?> message, final byte[] bytes, String id)
+    public void update(final MessageIn<?> message, String id)
     {
-        checkState((bytes != null) && bytes.length > 0);
-        final DataInputStream dis = new DataInputStream(new ByteArrayInputStream(bytes));
+        final byte[] queryContextBytes = (byte[]) message.parameters
+                .get(TraceSessionContext.TRACE_SESSION_CONTEXT_HEADER);
+
+        // if the message has no session context header don't do tracing
+        if (queryContextBytes == null)
+            return;
+
+        checkState(queryContextBytes.length > 0);
+        final DataInputStream dis = new DataInputStream(new ByteArrayInputStream(queryContextBytes));
         final byte[] sessionId;
         try
         {
@@ -357,7 +362,7 @@ public class TraceSessionContext
      * 
      * @return
      */
-    public byte[] getMessageBytes()
+    public byte[] getSessionContextHeader()
     {
         if (!isLocalTraceSession())
             return null;
@@ -467,6 +472,12 @@ public class TraceSessionContext
             logger.error("error while storing trace event", e);
             Throwables.propagate(e);
         }
+    }
+
+    @VisibleForTesting
+    public void setLocalAddress(InetAddress localAddress)
+    {
+        this.localAddress = localAddress;
     }
 
     private static CFMetaData compile(String cql)
