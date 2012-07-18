@@ -264,10 +264,6 @@ public class QueryProcessor
         {
             throw new UnavailableException();
         }
-        catch (TimeoutException e)
-        {
-            throw new TimedOutException();
-        }
     }
 
     private static IFilter filterFromSelect(SelectStatement select, CFMetaData metadata, List<ByteBuffer> variables)
@@ -617,10 +613,6 @@ public class QueryProcessor
                 {
                     throw new UnavailableException();
                 }
-                catch (TimeoutException e)
-                {
-                    throw new TimedOutException();
-                }
 
                 result.type = CqlResultType.VOID;
                 return result;
@@ -664,14 +656,7 @@ public class QueryProcessor
                     validateKey(deletion.key());
                 }
 
-                try
-                {
-                    StorageProxy.mutate(deletions, delete.getConsistencyLevel());
-                }
-                catch (TimeoutException e)
-                {
-                    throw new TimedOutException();
-                }
+                StorageProxy.mutate(deletions, delete.getConsistencyLevel());
 
                 result.type = CqlResultType.VOID;
                 return result;
@@ -860,14 +845,14 @@ public class QueryProcessor
     }
 
     public static CqlResult process(String queryString, ClientState clientState)
-    throws RecognitionException, UnavailableException, InvalidRequestException, TimedOutException, SchemaDisagreementException
+    throws UnavailableException, InvalidRequestException, TimedOutException, SchemaDisagreementException
     {
         logger.trace("CQL QUERY: {}", queryString);
         return processStatement(getStatement(queryString), clientState, new ArrayList<ByteBuffer>(0));
     }
 
     public static CqlPreparedResult prepare(String queryString, ClientState clientState)
-    throws RecognitionException, InvalidRequestException
+    throws InvalidRequestException
     {
         logger.trace("CQL QUERY: {}", queryString);
 
@@ -932,7 +917,7 @@ public class QueryProcessor
         return keyString;
     }
 
-    private static CQLStatement getStatement(String queryStr) throws InvalidRequestException, RecognitionException
+    private static CQLStatement getStatement(String queryStr) throws InvalidRequestException
     {
         try
         {
@@ -956,6 +941,12 @@ public class QueryProcessor
         {
             InvalidRequestException ire = new InvalidRequestException("Failed parsing statement: [" + queryStr + "] reason: " + re.getClass().getSimpleName() + " " + re.getMessage());
             ire.initCause(re);
+            throw ire;
+        }
+        catch (RecognitionException e)
+        {
+            InvalidRequestException ire = new InvalidRequestException("Invalid or malformed CQL query string");
+            ire.initCause(e);
             throw ire;
         }
     }

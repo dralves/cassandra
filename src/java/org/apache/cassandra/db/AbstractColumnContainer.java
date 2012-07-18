@@ -87,9 +87,11 @@ public abstract class AbstractColumnContainer implements IColumnContainer, IIter
         columns.maybeResetDeletionTimes(gcBefore);
     }
 
-    /**
-     * We need to go through each column in the column container and resolve it before adding
-     */
+    public long addAllWithSizeDelta(AbstractColumnContainer cc, Allocator allocator, Function<IColumn, IColumn> transformation)
+    {
+        return columns.addAllWithSizeDelta(cc.columns, allocator, transformation);
+    }
+
     public void addAll(AbstractColumnContainer cc, Allocator allocator, Function<IColumn, IColumn> transformation)
     {
         columns.addAll(cc.columns, allocator, transformation);
@@ -193,13 +195,14 @@ public abstract class AbstractColumnContainer implements IColumnContainer, IIter
         return columns.reverseIterator(slices);
     }
 
-    public boolean hasExpiredTombstones(int gcBefore)
+    public boolean hasIrrelevantData(int gcBefore)
     {
         if (deletionInfo().purge(gcBefore) == DeletionInfo.LIVE)
             return true;
 
+        long deletedAt = deletionInfo().maxTimestamp();
         for (IColumn column : columns)
-            if (column.hasExpiredTombstones(gcBefore))
+            if (column.mostRecentLiveChangeAt() <= deletedAt || column.hasIrrelevantData(gcBefore))
                 return true;
 
         return false;
