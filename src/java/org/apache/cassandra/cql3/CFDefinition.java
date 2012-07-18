@@ -25,6 +25,7 @@ import com.google.common.collect.AbstractIterator;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.ColumnToCollectionType;
 import org.apache.cassandra.db.marshal.CompositeType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.thrift.InvalidRequestException;
@@ -55,11 +56,12 @@ public class CFDefinition implements Iterable<CFDefinition.Name>
     // option when creating a table in that "static CF" without a composite type will have isCompact == false
     // even though one must use 'WITH COMPACT STORAGE' to declare them.
     public final boolean isCompact;
+    public final boolean hasCollections;
 
     public CFDefinition(CFMetaData cfm)
     {
         this.cfm = cfm;
-        this.key = new Name(getKeyId(cfm), Name.Kind.KEY_ALIAS, cfm.getKeyValidator());
+        this.key = new Name(cfm.ksName, cfm.cfName, getKeyId(cfm), Name.Kind.KEY_ALIAS, cfm.getKeyValidator());
         if (cfm.comparator instanceof CompositeType)
         {
             this.isComposite = true;
@@ -68,12 +70,13 @@ public class CFDefinition implements Iterable<CFDefinition.Name>
             {
                 // "dense" composite
                 this.isCompact = true;
+                this.hasCollections = false;
                 for (int i = 0; i < composite.types.size(); i++)
                 {
                     ColumnIdentifier id = getColumnId(cfm, i);
-                    this.columns.put(id, new Name(id, Name.Kind.COLUMN_ALIAS, i, composite.types.get(i)));
+                    this.columns.put(id, new Name(cfm.ksName, cfm.cfName, id, Name.Kind.COLUMN_ALIAS, i, composite.types.get(i)));
                 }
-                this.value = new Name(getValueId(cfm), Name.Kind.VALUE_ALIAS, cfm.getDefaultValidator());
+                this.value = new Name(cfm.ksName, cfm.cfName, getValueId(cfm), Name.Kind.VALUE_ALIAS, cfm.getDefaultValidator());
             }
             else
             {
@@ -81,30 +84,44 @@ public class CFDefinition implements Iterable<CFDefinition.Name>
                 this.isCompact = false;
                 this.value = null;
                 assert cfm.getValueAlias() == null;
-                for (int i = 0; i < composite.types.size() - 1; i++)
+                // check for collection type
+                int last = composite.types.size() - 1;
+                AbstractType<?> lastType = composite.types.get(last);
+                if (lastType instanceof ColumnToCollectionType)
+                {
+                    --last;
+                    this.hasCollections = true;
+                }
+                else
+                {
+                    this.hasCollections = false;
+                }
+
+                for (int i = 0; i < last; i++)
                 {
                     ColumnIdentifier id = getColumnId(cfm, i);
-                    this.columns.put(id, new Name(id, Name.Kind.COLUMN_ALIAS, i, composite.types.get(i)));
+                    this.columns.put(id, new Name(cfm.ksName, cfm.cfName, id, Name.Kind.COLUMN_ALIAS, i, composite.types.get(i)));
                 }
 
                 for (Map.Entry<ByteBuffer, ColumnDefinition> def : cfm.getColumn_metadata().entrySet())
                 {
                     ColumnIdentifier id = new ColumnIdentifier(def.getKey(), cfm.getColumnDefinitionComparator(def.getValue()));
-                    this.metadata.put(id, new Name(id, Name.Kind.COLUMN_METADATA, def.getValue().getValidator()));
+                    this.metadata.put(id, new Name(cfm.ksName, cfm.cfName, id, Name.Kind.COLUMN_METADATA, def.getValue().getValidator()));
                 }
             }
         }
         else
         {
             this.isComposite = false;
+            this.hasCollections = false;
             if (cfm.getColumn_metadata().isEmpty())
             {
                 // dynamic CF
                 this.isCompact = true;
                 ColumnIdentifier id = getColumnId(cfm, 0);
-                Name name = new Name(id, Name.Kind.COLUMN_ALIAS, 0, cfm.comparator);
+                Name name = new Name(cfm.ksName, cfm.cfName, id, Name.Kind.COLUMN_ALIAS, 0, cfm.comparator);
                 this.columns.put(id, name);
-                this.value = new Name(getValueId(cfm), Name.Kind.VALUE_ALIAS, cfm.getDefaultValidator());
+                this.value = new Name(cfm.ksName, cfm.cfName, getValueId(cfm), Name.Kind.VALUE_ALIAS, cfm.getDefaultValidator());
             }
             else
             {
@@ -116,7 +133,7 @@ public class CFDefinition implements Iterable<CFDefinition.Name>
                 for (Map.Entry<ByteBuffer, ColumnDefinition> def : cfm.getColumn_metadata().entrySet())
                 {
                     ColumnIdentifier id = new ColumnIdentifier(def.getKey(), cfm.getColumnDefinitionComparator(def.getValue()));
-                    this.metadata.put(id, new Name(id, Name.Kind.COLUMN_METADATA, def.getValue().getValidator()));
+                    this.metadata.put(id, new Name(cfm.ksName, cfm.cfName, id, Name.Kind.COLUMN_METADATA, def.getValue().getValidator()));
                 }
             }
         }
@@ -143,6 +160,15 @@ public class CFDefinition implements Iterable<CFDefinition.Name>
         return cfm.getValueAlias() == null
              ? new ColumnIdentifier(DEFAULT_VALUE_ALIAS, false)
              : new ColumnIdentifier(cfm.getValueAlias(), definitionType);
+    }
+
+    public ColumnToCollectionType getCollectionType()
+    {
+        if (!hasCollections)
+            return null;
+
+        CompositeType composite = (CompositeType)cfm.comparator;
+        return (ColumnToCollectionType)composite.types.get(composite.types.size() - 1);
     }
 
     public Name get(ColumnIdentifier name)
@@ -198,48 +224,27 @@ public class CFDefinition implements Iterable<CFDefinition.Name>
              : new NonCompositeBuilder(cfm.comparator);
     }
 
-    public AbstractType<?> getNameComparatorForResultSet(Name name)
-    {
-        // In the resultSet, a name should always be UTF8. However, for
-        // backward compatibility sake, this method allows to support non UTF8
-        // names for static CF column names.
-        if (!isCompact && !isComposite)
-            return cfm.comparator;
-        else
-            return definitionType;
-    }
-
-    public static class Name
+    public static class Name extends ColumnSpecification
     {
         public static enum Kind
         {
             KEY_ALIAS, COLUMN_ALIAS, VALUE_ALIAS, COLUMN_METADATA
         }
 
-        private Name(ColumnIdentifier name, Kind kind, AbstractType<?> type)
+        private Name(String ksName, String cfName, ColumnIdentifier name, Kind kind, AbstractType<?> type)
         {
-            this(name, kind, -1, type);
+            this(ksName, cfName, name, kind, -1, type);
         }
 
-        private Name(ColumnIdentifier name, Kind kind, int position, AbstractType<?> type)
+        private Name(String ksName, String cfName, ColumnIdentifier name, Kind kind, int position, AbstractType<?> type)
         {
+            super(ksName, cfName, name, type);
             this.kind = kind;
-            this.name = name;
             this.position = position;
-            this.type = type;
         }
 
         public final Kind kind;
-        public final ColumnIdentifier name;
         public final int position; // only make sense for COLUMN_ALIAS
-        public final AbstractType<?> type;
-
-        @Override
-        public String toString()
-        {
-            // It is not fully conventional, but it is convenient for error messages to the user
-            return name.toString();
-        }
     }
 
     @Override
