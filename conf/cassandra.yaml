@@ -9,7 +9,22 @@
 # one logical cluster from joining another.
 cluster_name: 'Test Cluster'
 
-# You should always specify InitialToken when setting up a production
+# This defines the number of tokens randomly assigned to this node on the ring
+# The more tokens, relative to other nodes, the larger the proportion of data
+# that this node will store. You probably want all nodes to have the same number
+# of tokens assuming they have equal hardware capability.
+#
+# If you leave this unspecified, Cassandra will use the default of 1 token for legacy compatibility,
+# and will use the initial_token as described below.
+#
+# Specifying initial_token will override this setting.
+#
+# If you already have a cluster with 1 token per node, and wish to migrate to 
+# multiple tokens per node, see http://wiki.apache.org/cassandra/Operations
+# num_tokens: 256
+
+# If you haven't specified num_tokens, or have set it to the default of 1 then
+# you should always specify InitialToken when setting up a production
 # cluster for the first time, and often when adding capacity later.
 # The principle is that each node should be given an equal slice of
 # the token ring; see http://wiki.apache.org/cassandra/Operations
@@ -159,13 +174,16 @@ saved_caches_directory: /var/lib/cassandra/saved_caches
 commitlog_sync: periodic
 commitlog_sync_period_in_ms: 10000
 
-# Configure  the Size of the individual Commitlog file. The 
-# default is 128 MB, which is almost always fine, but if you are
-# archiving commitlog segments (see commitlog_archiving.properties),
-# then you probably want a finer granularity of archiving; 16 MB
-# is reasonable.
+# The size of the individual commitlog file segments.  A commitlog
+# segment may be archived, deleted, or recycled once all the data
+# in it (potentally from each columnfamily in the system) has been 
+# flushed to sstables.  
 #
-# commitlog_segment_size_in_mb: 128
+# The default size is 32, which is almost always fine, but if you are
+# archiving commitlog segments (see commitlog_archiving.properties),
+# then you probably want a finer granularity of archiving; 8 or 16 MB
+# is reasonable.
+commitlog_segment_size_in_mb: 32
 
 # any class that implements the SeedProvider interface and has a
 # constructor that takes a Map<String, String> of parameters will do.
@@ -222,10 +240,14 @@ concurrent_writes: 32
 # If omitted, Cassandra will set it to 1/3 of the heap.
 # memtable_total_space_in_mb: 2048
 
-# Total space to use for commitlogs. 
+# Total space to use for commitlogs.  Since commitlog segments are
+# mmapped, and hence use up address space, the default size is 32
+# on 32-bit JVMs, and 1024 on 64-bit JVMs.
+#
 # If space gets above this value (it will round up to the next nearest
 # segment multiple), Cassandra will flush every dirty CF in the oldest
-# segment and remove it.
+# segment and remove it.  So a small total commitlog space will tend
+# to cause more flush activity on less-active columnfamilies.
 # commitlog_total_space_in_mb: 4096
 
 # This sets the amount of memtable flush writer threads.  These will
@@ -271,6 +293,23 @@ listen_address: localhost
 # Leaving this blank will set it to the same value as listen_address
 # broadcast_address: 1.2.3.4
 
+
+# Whether to start the native transport server.
+# Currently, only the thrift server is started by default because the native
+# transport is considered beta.
+start_native_transport: false
+# The address to bind the CQL native transport to. The same remarks than for
+# rpc_address applies.
+native_transport_address: localhost
+# port for the CQL native transport to listen for clients on
+native_transport_port: 8000
+# The maximum of thread handling requests. The meaning is the same than
+# rpc_max_threads. The default is unlimited.
+#native_transport_max_threads: 2048
+
+
+# Whether to start the thrift rpc server.
+start_rpc: true
 # The address to bind the Thrift RPC service to -- clients connect
 # here. Unlike ListenAddress above, you *can* specify 0.0.0.0 here if
 # you want Thrift to listen on all interfaces.

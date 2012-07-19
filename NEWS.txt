@@ -35,11 +35,19 @@ Upgrading
       ByteOrderedPartitioner instead.
     - Global option hinted_handoff_throttle_delay_in_ms has been removed.
       hinted_handoff_throttle_in_kb has been added instead.
+    - The default bloom filter fp chance has been increased to 1%.
+      This will save about 30% of the memory used by the old default.
+      Existing columnfamilies will retain their old setting.
 
 Features
 --------
+    - Cassandra can now handle concurrent CREATE TABLE schema changes
+      as well as other updates
     - rpc_timeout has been split up to allow finer-grained control
       on timeouts for different operation types
+    - num_tokens can now be specified in cassandra.yaml. This defines the
+      number of tokens assigned to the host on the ring (default: 1).
+      Also specifying initial_token will override any num_tokens setting.
 
 
 1.1.2

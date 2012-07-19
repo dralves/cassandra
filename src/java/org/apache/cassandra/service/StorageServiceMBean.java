@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -71,11 +72,19 @@ public interface StorageServiceMBean
     public List<String> getMovingNodes();
 
     /**
-     * Fetch a string representation of the token.
+     * Fetch string representations of the tokens for this node.
      *
-     * @return a string token
+     * @return a collection of tokens formatted as strings
      */
-    public String getToken();
+    public List<String> getTokens();
+
+    /**
+     * Fetch string representations of the tokens for a specified node.
+     *
+     * @param endpoint string representation of an node
+     * @return a collection of tokens formatted as strings
+     */
+    public List<String> getTokens(String endpoint) throws UnknownHostException;
 
     /**
      * Fetch a string representation of the Cassandra version.
@@ -328,7 +337,7 @@ public interface StorageServiceMBean
      * given a list of tokens (representing the nodes in the cluster), returns
      *   a mapping from "token -> %age of cluster owned by that token"
      */
-    public Map<String, Float> getOwnership();
+    public Map<InetAddress, Float> getOwnership();
 
     /**
      * Effective ownership is % of the data each node owns given the keyspace
@@ -337,7 +346,7 @@ public interface StorageServiceMBean
      * in the cluster have the same replication strategies and if yes then we will
      * use the first else a empty Map is returned.
      */
-    public Map<String, Float> effectiveOwnership(String keyspace) throws ConfigurationException;
+    public Map<InetAddress, Float> effectiveOwnership(String keyspace) throws ConfigurationException;
 
     public List<String> getKeyspaces();
 
@@ -369,6 +378,10 @@ public interface StorageServiceMBean
 
     // to determine if thrift is running
     public boolean isRPCServerRunning();
+
+    public void stopNativeTransport();
+    public void startNativeTransport();
+    public boolean isNativeTransportRunning();
 
     // allows a node that have been started without joining the ring to join it
     public void joinRing() throws IOException, org.apache.cassandra.config.ConfigurationException;

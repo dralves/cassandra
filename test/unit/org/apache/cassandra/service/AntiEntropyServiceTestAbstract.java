@@ -94,7 +94,7 @@ public abstract class AntiEntropyServiceTestAbstract extends SchemaLoader
         aes = AntiEntropyService.instance;
         TokenMetadata tmd = StorageService.instance.getTokenMetadata();
         tmd.clearUnsafe();
-        StorageService.instance.setToken(StorageService.getPartitioner().getRandomToken());
+        StorageService.instance.setTokens(Collections.singleton(StorageService.getPartitioner().getRandomToken()));
         tmd.updateNormalToken(StorageService.getPartitioner().getMinimumToken(), REMOTE);
         assert tmd.isMember(REMOTE);
 
@@ -185,7 +185,7 @@ public abstract class AntiEntropyServiceTestAbstract extends SchemaLoader
         Set<InetAddress> expected = new HashSet<InetAddress>();
         for (Range<Token> replicaRange : ars.getAddressRanges().get(FBUtilities.getBroadcastAddress()))
         {
-            expected.addAll(ars.getRangeAddresses(tmd).get(replicaRange));
+            expected.addAll(ars.getRangeAddresses(tmd.cloneOnlyTokenMap()).get(replicaRange));
         }
         expected.remove(FBUtilities.getBroadcastAddress());
         Collection<Range<Token>> ranges = StorageService.instance.getLocalRanges(tablename);

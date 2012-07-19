@@ -18,7 +18,10 @@
 */
 package org.apache.cassandra.db.compaction;
 
-import java.io.*;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.PrintStream;
+import java.io.RandomAccessFile;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.ExecutionException;
@@ -26,21 +29,22 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.Test;
-import static junit.framework.Assert.assertEquals;
-import static junit.framework.Assert.assertNotNull;
-import static junit.framework.Assert.assertTrue;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.*;
-import org.apache.cassandra.db.compaction.OperationType;
+import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
+import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.db.filter.QueryPath;
-import org.apache.cassandra.io.sstable.*;
+import org.apache.cassandra.io.sstable.SSTableReader;
+import org.apache.cassandra.io.sstable.SSTableScanner;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
+
+import static junit.framework.Assert.*;
 
 public class CompactionsTest extends SchemaLoader
 {
@@ -103,7 +107,7 @@ public class CompactionsTest extends SchemaLoader
      * Test to see if sstable has enough expired columns, it is compacted itself.
      */
     @Test
-    public void testSingleSSTableCompaction() throws Exception
+    public void testSingleSSTableCompactionWithSizeTieredCompaction() throws Exception
     {
         Table table = Table.open(TABLE1);
         ColumnFamilyStore store = table.getColumnFamilyStore("Standard1");
@@ -150,6 +154,57 @@ public class CompactionsTest extends SchemaLoader
     }
 
     @Test
+    public void testSingleSSTableCompactionWithLeveledCompaction() throws Exception
+    {
+        Table table = Table.open(TABLE1);
+        ColumnFamilyStore store = table.getColumnFamilyStore("Standard1");
+        store.clearUnsafe();
+        store.metadata.gcGraceSeconds(1);
+        store.setCompactionStrategyClass(LeveledCompactionStrategy.class.getCanonicalName());
+
+        LeveledCompactionStrategy strategy = (LeveledCompactionStrategy) store.getCompactionStrategy();
+
+        // disable compaction while flushing
+        store.disableAutoCompaction();
+
+        long timestamp = System.currentTimeMillis();
+        for (int i = 0; i < 10; i++)
+        {
+            DecoratedKey key = Util.dk(Integer.toString(i));
+            RowMutation rm = new RowMutation(TABLE1, key.key);
+            for (int j = 0; j < 10; j++)
+                rm.add(new QueryPath("Standard1", null, ByteBufferUtil.bytes(Integer.toString(j))),
+                              ByteBufferUtil.EMPTY_BYTE_BUFFER,
+                              timestamp,
+                              j > 0 ? 3 : 0); // let first column never expire, since deleting all columns does not produce sstable
+            rm.apply();
+        }
+        store.forceBlockingFlush();
+        assertEquals(1, store.getSSTables().size());
+        long originalSize = store.getSSTables().iterator().next().uncompressedLength();
+
+        // wait enough to force single compaction
+        TimeUnit.SECONDS.sleep(5);
+
+        store.setMinimumCompactionThreshold(2);
+        store.setMaximumCompactionThreshold(4);
+        FBUtilities.waitOnFuture(CompactionManager.instance.submitBackground(store));
+        while (CompactionManager.instance.getPendingTasks() > 0 || CompactionManager.instance.getActiveCompactions() > 0)
+            TimeUnit.SECONDS.sleep(1);
+
+        // and sstable with ttl should be compacted
+        assertEquals(1, store.getSSTables().size());
+        long size = store.getSSTables().iterator().next().uncompressedLength();
+        assertTrue("should be less than " + originalSize + ", but was " + size, size < originalSize);
+
+        // make sure max timestamp of compacted sstables is recorded properly after compaction.
+        assertMaxTimestamp(store, timestamp);
+
+        // tombstone removal compaction should not promote level
+        assert strategy.getLevelSize(0) == 1;
+    }
+
+    @Test
     public void testSuperColumnCompactions() throws IOException, ExecutionException, InterruptedException
     {
         Table table = Table.open(TABLE1);
@@ -189,6 +244,43 @@ public class CompactionsTest extends SchemaLoader
 
         // make sure max timestamp of compacted sstables is recorded properly after compaction.
         assertMaxTimestamp(cfs, maxTimestampExpected);
+    }
+
+    @Test
+    public void testSuperColumnTombstones() throws IOException, ExecutionException, InterruptedException
+    {
+        Table table = Table.open(TABLE1);
+        ColumnFamilyStore cfs = table.getColumnFamilyStore("Super1");
+        cfs.disableAutoCompaction();
+
+        DecoratedKey key = Util.dk("tskey");
+        ByteBuffer scName = ByteBufferUtil.bytes("TestSuperColumn");
+
+        // a subcolumn
+        RowMutation rm = new RowMutation(TABLE1, key.key);
+        rm.add(new QueryPath("Super1", scName, ByteBufferUtil.bytes(0)),
+               ByteBufferUtil.EMPTY_BYTE_BUFFER,
+               FBUtilities.timestampMicros());
+        rm.apply();
+        cfs.forceBlockingFlush();
+
+        // shadow the subcolumn with a supercolumn tombstone
+        rm = new RowMutation(TABLE1, key.key);
+        rm.delete(new QueryPath("Super1", scName), FBUtilities.timestampMicros());
+        rm.apply();
+        cfs.forceBlockingFlush();
+
+        CompactionManager.instance.performMaximal(cfs);
+        assertEquals(1, cfs.getSSTables().size());
+
+        // check that the shadowed column is gone
+        SSTableReader sstable = cfs.getSSTables().iterator().next();
+        SSTableScanner scanner = sstable.getScanner(new QueryFilter(null, new QueryPath("Super1", scName), new IdentityQueryFilter()));
+        scanner.seekTo(key);
+        OnDiskAtomIterator iter = scanner.next();
+        assertEquals(key, iter.getKey());
+        SuperColumn sc = (SuperColumn) iter.next();
+        assert sc.getSubColumns().isEmpty();
     }
 
     public void assertMaxTimestamp(ColumnFamilyStore cfs, long maxTimestampExpected)

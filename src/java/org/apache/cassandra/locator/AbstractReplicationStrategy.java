@@ -176,13 +176,18 @@ public abstract class AbstractReplicationStrategy
 
     public Multimap<InetAddress, Range<Token>> getAddressRanges()
     {
-        return getAddressRanges(tokenMetadata);
+        return getAddressRanges(tokenMetadata.cloneOnlyTokenMap());
     }
 
     public Collection<Range<Token>> getPendingAddressRanges(TokenMetadata metadata, Token pendingToken, InetAddress pendingAddress)
     {
+        return getPendingAddressRanges(metadata, Arrays.asList(pendingToken), pendingAddress);
+    }
+
+    public Collection<Range<Token>> getPendingAddressRanges(TokenMetadata metadata, Collection<Token> pendingTokens, InetAddress pendingAddress)
+    {
         TokenMetadata temp = metadata.cloneOnlyTokenMap();
-        temp.updateNormalToken(pendingToken, pendingAddress);
+        temp.updateNormalTokens(pendingTokens, pendingAddress);
         return getAddressRanges(temp).get(pendingAddress);
     }
 
