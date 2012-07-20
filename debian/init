@@ -21,7 +21,7 @@ SCRIPTNAME=/etc/init.d/$NAME
 CONFDIR=/etc/cassandra
 JSVC=/usr/bin/jsvc
 WAIT_FOR_START=10
-WAIT_FOR_STOP=10
+WAIT_FOR_STOP=100
 CASSANDRA_HOME=/usr/share/cassandra
 FD_LIMIT=100000
 

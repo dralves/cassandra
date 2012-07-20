@@ -296,6 +296,7 @@ public class CassandraDaemon
         logger.info("Cassandra shutting down...");
         thriftServer.stop();
         nativeServer.stop();
+        StorageService.instance.flushTablesBlocking(true);
     }
 
 
