@@ -304,7 +304,7 @@ public class CassandraServer implements Cassandra.Iface
     public List<ColumnOrSuperColumn> get_slice(ByteBuffer key, ColumnParent column_parent, SlicePredicate predicate, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        traceCtx().startSession("get_slice");
+        startSessionIfRequested("get_slice");
         try
         {
             logger.debug("get_slice");
