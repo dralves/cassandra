@@ -156,7 +156,6 @@ public class TraceSessionContext
     }
 
     private static TraceSessionContext ctx;
-    private static boolean initializing = false;
 
     private InetAddress localAddress;
     private int timeToLive = 86400;
@@ -164,7 +163,7 @@ public class TraceSessionContext
 
     protected TraceSessionContext()
     {
-
+        logger.info("Initializing Trace session context.");
         if (!Iterables.tryFind(Schema.instance.getTables(), new Predicate<String>()
         {
             public boolean apply(String keyspace)
@@ -526,12 +525,12 @@ public class TraceSessionContext
      */
     public static TraceSessionContext traceCtx()
     {
-        if (ctx == null && !initializing)
-        {
-            initializing = true;
-            ctx = new TraceSessionContext();
-        }
         return ctx;
+    }
+
+    public static void initialize()
+    {
+        ctx = new TraceSessionContext();
     }
 
     public static class TraceSessionContextThreadLocalState
