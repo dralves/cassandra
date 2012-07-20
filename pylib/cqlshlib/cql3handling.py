@@ -41,6 +41,17 @@ class Cql3ParsingRuleSet(CqlParsingRuleSet):
         'compact', 'storage', 'order', 'by', 'asc', 'desc', 'clustering', 'token'
     ))
 
+    columnfamily_options = (
+        # (CQL option name, Thrift option name (or None if same))
+        ('comment', None),
+        ('comparator', 'comparator_type'),
+        ('read_repair_chance', None),
+        ('gc_grace_seconds', None),
+        ('default_validation', 'default_validation_class'),
+        ('replicate_on_write', None),
+        ('compaction_strategy_class', 'compaction_strategy'),
+    )
+
     columnfamily_layout_options = (
         'comment',
         'bloom_filter_fp_chance',
@@ -48,8 +59,6 @@ class Cql3ParsingRuleSet(CqlParsingRuleSet):
         'read_repair_chance',
         # 'local_read_repair_chance',   -- not yet a valid cql option
         'gc_grace_seconds',
-        'min_compaction_threshold',
-        'max_compaction_threshold',
         'replicate_on_write',
         'compaction_strategy_class',
     )
@@ -90,7 +99,7 @@ class Cql3ParsingRuleSet(CqlParsingRuleSet):
     def cql3_escape_name(name):
         return '"%s"' % name.replace('"', '""')
 
-    valid_cql3_word_re = re.compile(r'^[a-z][0-9a-z_]*$', re.I)
+    valid_cql3_word_re = re.compile(r'^[a-z][0-9a-z_]*$')
 
     @classmethod
     def is_valid_cql3_name(cls, s):
@@ -196,15 +205,15 @@ JUNK ::= /([ \t\r\f\v]+|(--|[/][/])[^\n\r]*([\n\r]|$)|[/][*].*?[*][/])/ ;
                           | <alterTableStatement>
                           ;
 
-<consistencylevel> ::= <K_ONE>
-                     | <K_QUORUM>
-                     | <K_ALL>
-                     | <K_ANY>
-                     | <K_LOCAL_QUORUM>
-                     | <K_EACH_QUORUM>
-                     | <K_TWO>
-                     | <K_THREE>
-                     ;
+<consistencylevel> ::= cl=( <K_ONE>
+                          | <K_QUORUM>
+                          | <K_ALL>
+                          | <K_ANY>
+                          | <K_LOCAL_QUORUM>
+                          | <K_EACH_QUORUM>
+                          | <K_TWO>
+                          | <K_THREE> )
+                          ;
 
 <storageType> ::= typename=( <identifier> | <stringLiteral> ) ;
 
@@ -229,6 +238,10 @@ JUNK ::= /([ \t\r\f\v]+|(--|[/][/])[^\n\r]*([\n\r]|$)|[/][*].*?[*][/])/ ;
                         | <consistencylevel> )
                       ;
 '''
+
+@completer_for('consistencylevel', 'cl')
+def consistencylevel_cl_completer(ctxt, cass):
+    return CqlRuleSet.consistency_levels
 
 @completer_for('extendedTerm', 'token')
 def token_word_completer(ctxt, cass):
@@ -276,7 +289,7 @@ syntax_rules += r'''
                  ;
 <selectStatement> ::= "SELECT" <selectClause>
                         "FROM" cf=<columnFamilyName>
-                          ("USING" "CONSISTENCY" <consistencylevel>)?
+                          ("USING" "CONSISTENCY" selcl=<consistencylevel>)?
                           ("WHERE" <whereClause>)?
                           ("ORDER" "BY" <orderByClause> ( "," <orderByClause> )* )?
                           ("LIMIT" <wholenumber>)?
@@ -294,6 +307,10 @@ syntax_rules += r'''
 <orderByClause> ::= [ordercol]=<cident> ( "ASC" | "DESC" )?
                   ;
 '''
+
+@completer_for('selectStatement', 'selcl')
+def select_statement_consistencylevel(ctxt, cass):
+    return [cl for cl in CqlRuleSet.consistency_levels if cl != 'ANY']
 
 @completer_for('orderByClause', 'ordercol')
 def select_order_column_completer(ctxt, cass):

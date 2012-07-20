@@ -38,6 +38,7 @@ public class Config
 
     /* initial token in the ring */
     public String initial_token;
+    public Integer num_tokens = 1;
 
     public Long rpc_timeout_in_ms = new Long(10000);
 
@@ -65,7 +66,7 @@ public class Config
     public String listen_address;
     public String broadcast_address;
 
-    public Boolean start_rpc = false;
+    public Boolean start_rpc = true;
     public String rpc_address;
     public Integer rpc_port = 9160;
     public String rpc_server_type = "sync";
