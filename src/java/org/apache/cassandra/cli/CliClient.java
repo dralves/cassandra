@@ -2007,7 +2007,7 @@ public class CliClient
         switch(optionType)
         {
             case CliParser.NODE_QUERY_DETAILS:
-                thriftClient.system_enable_query_details(true);
+                thriftClient.trace_next_query();
                 break;
         }
     }
@@ -2022,7 +2022,7 @@ public class CliClient
         switch(optionType)
         {
             case CliParser.NODE_QUERY_DETAILS:
-                thriftClient.system_enable_query_details(false);
+//                thriftClient.system_enable_query_details(false);
                 break;
         }
     }

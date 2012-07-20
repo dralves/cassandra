@@ -25,30 +25,68 @@ import java.io.UnsupportedEncodingException;
 import java.net.SocketAddress;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.TimeoutException;
 import java.util.zip.DataFormatException;
 import java.util.zip.Inflater;
 
 import com.google.common.base.Predicates;
 import com.google.common.collect.Maps;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.db.marshal.TimeUUIDType;
+
 import org.apache.cassandra.auth.Permission;
-import org.apache.cassandra.config.*;
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ConfigurationException;
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.config.KSMetaData;
+import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql.CQLStatement;
 import org.apache.cassandra.cql.QueryProcessor;
-import org.apache.cassandra.db.*;
+import org.apache.cassandra.db.ColumnFamily;
+import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.ColumnFamilyType;
+import org.apache.cassandra.db.CounterMutation;
+import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.ExpiringColumn;
+import org.apache.cassandra.db.IColumn;
+import org.apache.cassandra.db.IMutation;
+import org.apache.cassandra.db.RangeSliceCommand;
+import org.apache.cassandra.db.ReadCommand;
+import org.apache.cassandra.db.Row;
+import org.apache.cassandra.db.RowMutation;
+import org.apache.cassandra.db.RowPosition;
+import org.apache.cassandra.db.SliceByNamesReadCommand;
+import org.apache.cassandra.db.SliceFromReadCommand;
+import org.apache.cassandra.db.Table;
 import org.apache.cassandra.db.context.CounterContext;
 import org.apache.cassandra.db.filter.IFilter;
 import org.apache.cassandra.db.filter.QueryPath;
 import org.apache.cassandra.db.marshal.MarshalException;
-import org.apache.cassandra.dht.*;
+import org.apache.cassandra.dht.AbstractBounds;
+import org.apache.cassandra.dht.Bounds;
+import org.apache.cassandra.dht.IPartitioner;
+import org.apache.cassandra.dht.Range;
+import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.locator.DynamicEndpointSnitch;
 import org.apache.cassandra.scheduler.IRequestScheduler;
-import org.apache.cassandra.service.*;
+import org.apache.cassandra.service.ClientState;
+import org.apache.cassandra.service.MigrationManager;
+import org.apache.cassandra.service.SocketSessionManagementService;
+import org.apache.cassandra.service.StorageProxy;
+import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.thrift.TException;
 
@@ -1222,11 +1260,6 @@ public class CassandraServer implements Cassandra.Iface
         state().setKeyspace(keyspace);
     }
 
-    public void system_enable_query_details(boolean enabled) throws TException
-    {
-        state().setQueryDetails(enabled);
-    }
-
     public Map<String, List<String>> describe_schema_versions() throws TException, InvalidRequestException
     {
         logger.debug("checking schema agreement");
@@ -1443,11 +1476,28 @@ public class CassandraServer implements Cassandra.Iface
         state().setCQLVersion(version);
     }
     
+    @Override
+    public void system_enable_tracing(double trace_probability, int num_queries_to_trace) throws TException
+    {
+        state().enableTracing(trace_probability, num_queries_to_trace);
+    }
+    
+    @Override
+    public ByteBuffer trace_next_query() throws TException
+    {
+        UUID sessionId = traceCtx().prepareSession();
+        state().prepareTracingSession(sessionId);
+        return TimeUUIDType.instance.decompose(sessionId);
+    }
+    
     private void startSessionIfRequested(String sessionName)
     {
-        if (state().getQueryDetails())
+        if (state().isTracingEnabled())
         {
-            traceCtx().startSession(sessionName);
+            if (state().isPreparedTracingSession())
+                traceCtx().startPreparedSession(state().getPreparedSessionIdAndReset(), sessionName);
+            else
+                traceCtx().startSession(sessionName);
         }
     }
 

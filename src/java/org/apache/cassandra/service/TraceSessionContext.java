@@ -195,26 +195,39 @@ public class TraceSessionContext
 
         this.localAddress = FBUtilities.getLocalAddress();
     }
+    
+    public UUID prepareSession()
+    {
+        return UUIDGen.getUUID(ByteBuffer.wrap(UUIDGen.getTimeUUIDBytes()));
+    }
+    
+    public void startPreparedSession(UUID sessionId, String request)
+    {
+        startSession(sessionId, request, System.currentTimeMillis());
+    }
 
     public UUID startSession(String request)
     {
-        return startSession(request, System.currentTimeMillis());
+        UUID sessionId = prepareSession();
+        startSession(sessionId, request, System.currentTimeMillis());
+        return sessionId;
     }
 
-    public UUID startSession(String request, long timestamp)
+    public void startSession(UUID sessionId, String request, long timestamp)
     {
         assert sessionContextThreadLocalState.get() == null;
-
-        byte[] sessionId = UUIDGen.getTimeUUIDBytes();
+        
+        byte[] sessionIdAsBB = TimeUUIDType.instance.decompose(sessionId).array();
 
         TraceSessionContextThreadLocalState tsctls = new TraceSessionContextThreadLocalState(localAddress,
-                localAddress, sessionId);
+                localAddress, sessionIdAsBB);
 
         sessionContextThreadLocalState.set(tsctls);
 
-        newSession(sessionId, localAddress, request, timestamp);
-        return UUIDGen.getUUID(ByteBuffer.wrap(sessionId));
+        newSession(sessionIdAsBB, localAddress, request, timestamp);
     }
+    
+    
 
     public UUID trace(TraceEvent traceEvent)
     {

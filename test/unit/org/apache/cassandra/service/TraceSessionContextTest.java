@@ -108,7 +108,8 @@ public class TraceSessionContextTest extends SchemaLoader
     @Test
     public void testNewSession() throws CharacterCodingException
     {
-        sessionId = traceCtx().startSession("test_session", 123L);
+        sessionId = traceCtx().prepareSession();
+        traceCtx().startSession(sessionId, "test_session", 123L);
         assertTrue(traceCtx().isTracing());
         assertTrue(traceCtx().isLocalTraceSession());
         assertNotNull(traceCtx().threadLocalState());
