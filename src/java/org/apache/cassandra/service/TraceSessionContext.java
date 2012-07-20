@@ -144,17 +144,21 @@ public class TraceSessionContext
     public enum TraceEvent
     {
         /**
-         * Signals a remotely initiated trace session's beginning.
+         * Signals a new stage runnable was started within this trace.
          */
-        REMOTE_TRACE_SESSION_BEGIN,
+        STAGE_BEGIN,
         /**
-         * Signals a remotely initiated trace session's end.
+         * Signals a stage runnable finished within this trace.
          */
-        REMOTE_TRACE_SESSION_END,
+        STAGE_FINISH,
         /**
          * Signals a locally initiated trace session's end.
          */
         TRACE_SESSION_END;
+        
+        public String name(String desc) {
+            return new StringBuilder().append(name()).append("[").append(desc).append("]").toString();
+        }
     }
 
     private static TraceSessionContext ctx;

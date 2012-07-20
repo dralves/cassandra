@@ -35,6 +35,8 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import antlr.debug.TraceEvent;
+
 import org.apache.cassandra.service.TraceSessionContext;
 
 /**
@@ -148,7 +150,17 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
         
         if (r instanceof TraceSessionWrapper)
         {
-            // we modified the QueryContext when this task started, so reset it
+            if (getThreadFactory() instanceof NamedThreadFactory)
+            {
+                traceCtx().trace(
+                        TraceSessionContext.TraceEvent.STAGE_FINISH.name(((NamedThreadFactory) getThreadFactory()).id));
+            }
+            else
+            {
+                traceCtx().trace(
+                        TraceSessionContext.TraceEvent.STAGE_FINISH);
+            }
+            // we modified the TraceSessionContext when this task started, so reset it
             traceCtx().reset();
         }
 
@@ -221,6 +233,16 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
         if (r instanceof TraceSessionWrapper)
         {
             ((TraceSessionWrapper) r).setupContext();
+            if (getThreadFactory() instanceof NamedThreadFactory)
+            {
+                traceCtx().trace(
+                        TraceSessionContext.TraceEvent.STAGE_BEGIN.name(((NamedThreadFactory) getThreadFactory()).id));
+            }
+            else
+            {
+                traceCtx().trace(
+                        TraceSessionContext.TraceEvent.STAGE_BEGIN);
+            }
         }
         super.beforeExecute(t, r);
     }
