@@ -79,96 +79,58 @@ help: |
 commands:
     - name: NODE_HELP
       help: |
-        help <command>;
+        help <command>
 
         Display the general help page with a list of available commands.;
-    - name: NODE_CONNECT
+    - name: TOOL_CF_HISTOGRAMS
       help: |
-        connect <hostname>/<port> (<username> '<password>')?;
+        cfhistograms <keyspace> <column family name>
 
-        Connect to the a Cassandra node on the specified port.
-
-        If a username and password are supplied the login will occur when the
-        'use' statement is executed. If the server does not support authentication
-        it will silently ignore credentials.
-
-        For information on configuring authentication and authorisation see the
-        conf/cassandra.yaml file or the project documentation.
-
+        Print statistical histograms for a given column family
+        
         Required Parameters:
-        - hostname: Machine name or IP address of the node to connect to.
+        - keyspace: the keyspace the column family belongs to
 
-        - port: rpc_port to connect to the node on, as defined in
-        conf/Cassandra.yaml for the node. The default port is 9160.
-
-        Optional Parameters:
-        - password: Password for the supplied username.
-
-        - username: Username to authenticate to the node as.
+        - column family name: the name of the column family for which to 
+        print the histograms
 
         Examples:
-        connect localhost/9160;
-        connect localhost/9160 user 'badpasswd';
-        connect 127.0.0.1/9160 user 'badpasswd';
-    - name: NODE_USE_TABLE
+        cfhistograms my_keyspace my_colun_family
+        
+    - name: TOOL_CF_STATS
       help: |
-        use <keyspace>;
-        use <keyspace> <username> '<password>';
+        cfstats
 
-        Use the specified keyspace.
-
-        If a username and password are supplied they will be used to authorize
-        against the keyspace. Otherwise the credentials supplied to the 'connect'
-        statement will be used to authorize the user . If the server does not
-        support authentication it will silently ignore credentials.
-
-        Required Parameters:
-        - keyspace: Name of the keyspace to use. The keyspace must exist.
-
-        Optional Parameters:
-        - password: Password for the supplied username.
-
-        - username: Username to login to the node as.
+        Print statistics on column families
 
         Examples:
-        use Keyspace1;
-        use Keyspace1 user 'badpasswd';
-    - name: NODE_DESCRIBE
+        cftstats
+    - name: TOOL_CLEANUP
       help: |
-        describe;
-        describe <keyspace>;
-        describe <column_family>;
+        cleanup <keyspace> <cfnames...>
 
-        Describes the settings for the current or named keyspace, or the settings
-        of the column family in the current authenticated keyspace.
-
-        Optional Parameters:
-        - keyspace: Name of the keyspace to describe.
-        - column_family: Name of the column family to describe.
+        Runs cleanup on one or more column families.
 
         Examples:
-        describe; - Describes current authenticated keyspace
-        describe <keyspace>; - Describe this keyspace
-        describe <column_family>; - Describe the colum family in the current authenticated keyspace
-    - name:
+        cleanup my_keyspace my_cf_1
+        cleanup my_keyspace my_cf_1 my_cf_2 
+    - name: TOOL_CLEAR_SNAPSHOT
       help: |
-        describe cluster;
+        clearsnapshot <keyspaces...> (-t <snapshot_name>)
 
-        Describes the snitch, partitioner and schema versions for the currently
-        connected cluster.
-
-        NOTE: The cluster should only report one schema version. Multiple versions
-        may indicate a failed schema modification, consult the project documentation.
+        Remove snapshots for the specified keyspaces. Either remove all snapshots 
+        or remove the snapshots with the given name.
 
         Examples:
-        describe cluster;
-    - name: NODE_EXIT
+        clearsnapshot my_keyspace
+        clearsnapshot my_keyspace_1 my_keyspace_2
+        clearsnapshot my_keyspace -t my_snapshot_name
+    - name: TOOL_COMPACT
       help: |
-        exit;
-        quit;
+        compact <keyspace> <cfnames...>
 
-        Exit this utility.
-
+        Force a (major) compaction on one or more column famil
+        
         Examples:
         exit;
         quit;
