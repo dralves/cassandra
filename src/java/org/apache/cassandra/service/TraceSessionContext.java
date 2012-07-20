@@ -45,6 +45,8 @@ import com.google.common.collect.Iterables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.thrift.TimedOutException;
+
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.config.KSMetaData;
@@ -461,7 +463,7 @@ public class TraceSessionContext
             StorageProxy.mutate(Arrays.asList(mutation), ConsistencyLevel.ANY);
         }
         // log but tracing errors shouldn't affect the caller
-        catch (TimeoutException e)
+        catch (TimedOutException e)
         {
             logger.error("error while storing trace event", e);
             Throwables.propagate(e);

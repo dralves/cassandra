@@ -38,7 +38,6 @@ import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.db.ColumnFamilyStoreMBean;
 import org.apache.cassandra.db.compaction.CompactionManagerMBean;
 import org.apache.cassandra.db.compaction.OperationType;
-import org.apache.cassandra.locator.EndpointSnitchInfo;
 import org.apache.cassandra.locator.EndpointSnitchInfoMBean;
 import org.apache.cassandra.net.MessagingServiceMBean;
 import org.apache.cassandra.service.CacheServiceMBean;
@@ -46,7 +45,6 @@ import org.apache.cassandra.service.StorageProxyMBean;
 import org.apache.cassandra.thrift.InvalidRequestException;
 import org.apache.cassandra.utils.EstimatedHistogram;
 import org.apache.cassandra.utils.Pair;
-import org.apache.rat.document.UnreadableArchiveException;
 
 public class NodeCmd
 {
