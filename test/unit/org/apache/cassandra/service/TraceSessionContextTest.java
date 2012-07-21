@@ -210,7 +210,7 @@ public class TraceSessionContextTest extends SchemaLoader
     {
         // the state should be carried to another thread as long as the debuggable TPE is used
         DebuggableThreadPoolExecutor poolExecutor = DebuggableThreadPoolExecutor
-                .createWithFixedPoolSize("test_pool", 1);
+                .createWithFixedPoolSize("TestStage", 1);
 
         final AtomicReference<UUID> reference = new AtomicReference<UUID>();
         poolExecutor.submit(new Runnable()
@@ -225,6 +225,10 @@ public class TraceSessionContextTest extends SchemaLoader
         }).get();
         assertNotNull(reference.get());
 
+        // The DebuggableTPE that will executed the task will insert a trace event AFTER
+        // it returns so we need to wait a bit.
+        Thread.sleep(500);
+
         ColumnFamily family = Table
                 .open(TRACE_KEYSPACE)
                 .getColumnFamilyStore(EVENTS_TABLE)
@@ -233,22 +237,37 @@ public class TraceSessionContextTest extends SchemaLoader
                                 new QueryPath(
                                         EVENTS_TABLE)));
 
-        // should now have 8 columns from the two trace events
-        assertSame(8, family.getColumnCount());
+        // should now have 16 columns
+        // 4 - from the previous method
+        // 4 - from the automated trace event inserted at stage start
+        // 4 - from the custom trace event inserted by the runnable
+        // 4 - from the automated trace event inserted at stage end
+        assertSame(16, family.getColumnCount());
 
-        UUID eventId = reference.get();
-
-        IColumn durationColumn = Iterables.get(family, 4);
-        List<CompositeComponent> components = EVENT_TYPE.deconstruct(durationColumn.name());
+        // make sure that the automated stage tracing events are there (start)
+        IColumn traceStart = Iterables.get(family, 5);
+        List<CompositeComponent> components = EVENT_TYPE.deconstruct(traceStart.name());
         InetAddress coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
         UUID decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
         String colName = (String) components.get(2).comparator.compose(components.get(2).value);
+        assertEquals("event", colName);
+        assertEquals(FBUtilities.getLocalAddress(), coordinator);
+        assertEquals("STAGE_BEGIN[TestStage]", ByteBufferUtil.string(traceStart.value()));
+
+        // now make sure all the details of our trace event match
+        UUID eventId = reference.get();
+
+        IColumn durationColumn = Iterables.get(family, 8);
+        components = EVENT_TYPE.deconstruct(durationColumn.name());
+        coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
+        decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
+        colName = (String) components.get(2).comparator.compose(components.get(2).value);
         assertEquals("duration", colName);
         assertEquals(eventId, decodedEventId);
         assertEquals(FBUtilities.getLocalAddress(), coordinator);
         assertEquals(8765L, ByteBufferUtil.toLong(durationColumn.value()));
 
-        IColumn eventColumn = Iterables.get(family, 5);
+        IColumn eventColumn = Iterables.get(family, 9);
         components = EVENT_TYPE.deconstruct(eventColumn.name());
         coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
         decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
@@ -258,7 +277,7 @@ public class TraceSessionContextTest extends SchemaLoader
         assertEquals(FBUtilities.getLocalAddress(), coordinator);
         assertEquals("multi threaded trace event", ByteBufferUtil.string(eventColumn.value()));
 
-        IColumn happenedAtColumn = Iterables.get(family, 6);
+        IColumn happenedAtColumn = Iterables.get(family, 10);
         components = EVENT_TYPE.deconstruct(happenedAtColumn.name());
         coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
         decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
@@ -268,7 +287,7 @@ public class TraceSessionContextTest extends SchemaLoader
         assertEquals(FBUtilities.getLocalAddress(), coordinator);
         assertEquals(5678L, ByteBufferUtil.toLong(happenedAtColumn.value()));
 
-        IColumn sourceColumn = Iterables.get(family, 7);
+        IColumn sourceColumn = Iterables.get(family, 11);
         components = EVENT_TYPE.deconstruct(sourceColumn.name());
         coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
         decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
@@ -278,6 +297,16 @@ public class TraceSessionContextTest extends SchemaLoader
         assertEquals(FBUtilities.getLocalAddress(), coordinator);
         assertEquals(FBUtilities.getLocalAddress(),
                 InetAddress.getByAddress(ByteBufferUtil.getArray(sourceColumn.value())));
+
+        // make sure that the automated stage tracing events are there (finish)
+        IColumn traceFinish = Iterables.get(family, 13);
+        components = EVENT_TYPE.deconstruct(traceFinish.name());
+        coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
+        decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
+        colName = (String) components.get(2).comparator.compose(components.get(2).value);
+        assertEquals("event", colName);
+        assertEquals(FBUtilities.getLocalAddress(), coordinator);
+        assertEquals("STAGE_FINISH[TestStage]", ByteBufferUtil.string(traceFinish.value()));
     }
 
     @Test
@@ -323,12 +352,13 @@ public class TraceSessionContextTest extends SchemaLoader
                                 new QueryPath(
                                         EVENTS_TABLE)));
 
-        // should now have 8 columns from the two trace events
-        assertSame(12, family.getColumnCount());
+        // Because the MessageDeliveryTask does not run on a DebuggableTPE no automated tracing
+        // events were inserted, we just have 4 more than after the previous method
+        assertSame(20, family.getColumnCount());
 
         UUID eventId = reference.get();
 
-        IColumn durationColumn = Iterables.get(family, 8);
+        IColumn durationColumn = Iterables.get(family, 16);
         List<CompositeComponent> components = EVENT_TYPE.deconstruct(durationColumn.name());
         InetAddress coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
         UUID decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
@@ -338,7 +368,7 @@ public class TraceSessionContextTest extends SchemaLoader
         assertEquals(FBUtilities.getLocalAddress(), coordinator);
         assertEquals(9123L, ByteBufferUtil.toLong(durationColumn.value()));
 
-        IColumn eventColumn = Iterables.get(family, 9);
+        IColumn eventColumn = Iterables.get(family, 17);
         components = EVENT_TYPE.deconstruct(eventColumn.name());
         coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
         decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
@@ -348,7 +378,7 @@ public class TraceSessionContextTest extends SchemaLoader
         assertEquals(FBUtilities.getLocalAddress(), coordinator);
         assertEquals("remote trace event", ByteBufferUtil.string(eventColumn.value()));
 
-        IColumn happenedAtColumn = Iterables.get(family, 10);
+        IColumn happenedAtColumn = Iterables.get(family, 18);
         components = EVENT_TYPE.deconstruct(happenedAtColumn.name());
         coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
         decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
@@ -358,7 +388,7 @@ public class TraceSessionContextTest extends SchemaLoader
         assertEquals(FBUtilities.getLocalAddress(), coordinator);
         assertEquals(3219L, ByteBufferUtil.toLong(happenedAtColumn.value()));
 
-        IColumn sourceColumn = Iterables.get(family, 11);
+        IColumn sourceColumn = Iterables.get(family, 19);
         components = EVENT_TYPE.deconstruct(sourceColumn.name());
         coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
         decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
