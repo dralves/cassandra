@@ -21,17 +21,27 @@ import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.PrintStream;
-import java.nio.ByteBuffer;
-import java.nio.charset.CharacterCodingException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
-import java.util.*;
+import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.LinkedList;
+import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
-import com.google.common.base.Predicate;
-import com.google.common.collect.Collections2;
-import org.apache.commons.lang.StringUtils;
 import com.google.common.base.Charsets;
 import com.google.common.base.Joiner;
+import com.google.common.base.Predicate;
+import com.google.common.collect.Collections2;
+
+import org.apache.commons.lang.StringUtils;
 
 import org.antlr.runtime.tree.Tree;
 import org.apache.cassandra.auth.IAuthenticator;
@@ -39,11 +49,49 @@ import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.db.ColumnFamilyStoreMBean;
 import org.apache.cassandra.db.compaction.CompactionManagerMBean;
 import org.apache.cassandra.db.compaction.OperationType;
-import org.apache.cassandra.db.marshal.*;
+import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.AsciiType;
+import org.apache.cassandra.db.marshal.BytesType;
+import org.apache.cassandra.db.marshal.CounterColumnType;
+import org.apache.cassandra.db.marshal.Int32Type;
+import org.apache.cassandra.db.marshal.IntegerType;
+import org.apache.cassandra.db.marshal.LexicalUUIDType;
+import org.apache.cassandra.db.marshal.LongType;
+import org.apache.cassandra.db.marshal.MarshalException;
+import org.apache.cassandra.db.marshal.TimeUUIDType;
+import org.apache.cassandra.db.marshal.TypeParser;
+import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.locator.SimpleSnitch;
 import org.apache.cassandra.service.StorageProxy;
-import org.apache.cassandra.thrift.*;
+import org.apache.cassandra.thrift.AuthenticationException;
+import org.apache.cassandra.thrift.AuthenticationRequest;
+import org.apache.cassandra.thrift.AuthorizationException;
+import org.apache.cassandra.thrift.Cassandra;
+import org.apache.cassandra.thrift.CfDef;
+import org.apache.cassandra.thrift.Column;
+import org.apache.cassandra.thrift.ColumnDef;
+import org.apache.cassandra.thrift.ColumnOrSuperColumn;
+import org.apache.cassandra.thrift.ColumnParent;
+import org.apache.cassandra.thrift.ColumnPath;
+import org.apache.cassandra.thrift.ConsistencyLevel;
+import org.apache.cassandra.thrift.CounterColumn;
+import org.apache.cassandra.thrift.CounterSuperColumn;
+import org.apache.cassandra.thrift.IndexClause;
+import org.apache.cassandra.thrift.IndexExpression;
+import org.apache.cassandra.thrift.IndexOperator;
+import org.apache.cassandra.thrift.IndexType;
+import org.apache.cassandra.thrift.InvalidRequestException;
+import org.apache.cassandra.thrift.KeyRange;
+import org.apache.cassandra.thrift.KeySlice;
+import org.apache.cassandra.thrift.KsDef;
+import org.apache.cassandra.thrift.NotFoundException;
+import org.apache.cassandra.thrift.SchemaDisagreementException;
+import org.apache.cassandra.thrift.SlicePredicate;
+import org.apache.cassandra.thrift.SliceRange;
+import org.apache.cassandra.thrift.SuperColumn;
+import org.apache.cassandra.thrift.TimedOutException;
+import org.apache.cassandra.thrift.UnavailableException;
 import org.apache.cassandra.tools.NodeProbe;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
@@ -55,11 +103,10 @@ import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonGenerator;
 import org.codehaus.jackson.JsonParser;
 import org.codehaus.jackson.JsonToken;
-import org.codehaus.jackson.type.TypeReference;
-import org.yaml.snakeyaml.constructor.Constructor;
 import org.yaml.snakeyaml.Loader;
 import org.yaml.snakeyaml.TypeDescription;
 import org.yaml.snakeyaml.Yaml;
+import org.yaml.snakeyaml.constructor.Constructor;
 
 // Cli Client Side Library
 public class CliClient
@@ -266,11 +313,13 @@ public class CliClient
                 case CliParser.NODE_USE_TABLE:
                     executeUseKeySpace(tree);
                     break;
-                case CliParser.NODE_ENABLE:
-                    executeEnable(tree);
+                case CliParser.NODE_TRACE_NEXT_QUERY:
+                    executeTraceNextQuery();
+                case CliParser.NODE_ENABLE_TRACING:
+                    executeEnableTracing(tree);
                     break;
-                case CliParser.NODE_DISABLE:
-                    executeDisable(tree);
+                case CliParser.NODE_DISABLE_TRACING:
+                    executeDisableTracing();
                     break;
                 case CliParser.NODE_CONNECT:
                     executeConnect(tree);
@@ -1996,35 +2045,40 @@ public class CliClient
             sessionState.err.println("Login failure. Did you specify 'keyspace', 'username' and 'password'?");
         }
     }
-
-    private void executeEnable(final Tree statement) throws TException
+    
+    private void executeTraceNextQuery() throws TException, CharacterCodingException
     {
         if (!CliMain.isConnected())
             return;
-
-        final int optionType = statement.getChild(0).getType();
-
-        switch(optionType)
-        {
-            case CliParser.NODE_QUERY_DETAILS:
-                thriftClient.trace_next_query();
-                break;
-        }
+        
+        ByteBuffer sessionId = thriftClient.trace_next_query();
+        
+        sessionState.out.println("Will trace next query. Session ID: " + ByteBufferUtil.string(sessionId));
     }
 
-    private void executeDisable(final Tree statement) throws TException
+    private void executeEnableTracing(final Tree statement) throws TException
     {
         if (!CliMain.isConnected())
             return;
 
-        final int optionType = statement.getChild(0).getType();
+        final double tracingProbability = Double.parseDouble(statement.getChild(0).getText());
+        final int tracingNumber = Integer.parseInt(statement.getChild(1).getText());
 
-        switch(optionType)
-        {
-            case CliParser.NODE_QUERY_DETAILS:
-//                thriftClient.system_enable_query_details(false);
-                break;
-        }
+        thriftClient.enable_tracing(tracingProbability, tracingNumber);
+        
+        sessionState.out.println("Query Tracing is enabled, will trace requests from this client with "
+                + new Double(tracingProbability).floatValue() + " probability up to "
+                + (tracingNumber == -1 ? "ALL" : tracingNumber));
+    }
+
+    private void executeDisableTracing() throws TException
+    {
+        if (!CliMain.isConnected())
+            return;
+        
+        thriftClient.disable_tracing();
+        
+        sessionState.out.println("Query tracing is disabled.");
     }
 
     private void describeKeySpace(String keySpaceName, KsDef metadata) throws TException

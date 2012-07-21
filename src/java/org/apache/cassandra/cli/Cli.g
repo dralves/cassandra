@@ -38,9 +38,9 @@ tokens {
     NODE_DESCRIBE;
     NODE_DESCRIBE_CLUSTER;
     NODE_USE_TABLE;
-    NODE_ENABLE;
-    NODE_DISABLE;
-    NODE_QUERY_DETAILS;
+    NODE_TRACE_NEXT_QUERY;
+    NODE_ENABLE_TRACING;
+    NODE_DISABLE_TRACING;
     NODE_EXIT;
     NODE_HELP;
     NODE_NO_OP;
@@ -148,8 +148,9 @@ statement
     | delColumnFamily
     | delKeyspace
     | useKeyspace
-    | enableStatement
-    | disableStatement
+    | traceNextQuery
+    | enableTracing
+    | disableTracing
     | delStatement
     | getStatement
     | helpStatement
@@ -178,10 +179,12 @@ helpStatement
         -> ^(NODE_HELP NODE_CONNECT)
     | HELP USE 
         -> ^(NODE_HELP NODE_USE_TABLE)
-    | HELP ENABLE QUERY DETAILS
-        -> ^(NODE_HELP NODE_ENABLE)
-    | HELP DISABLE QUERY DETAILS
-        -> ^(NODE_HELP NODE_DISABLE)
+    | HELP TRACE NEXT QUERY
+        -> ^(NODE_HELP NODE_TRACE_NEXT_QUERY)
+    | HELP ENABLE TRACING
+        -> ^(NODE_HELP NODE_ENABLE_TRACING)
+    | HELP DISABLE TRACING
+        -> ^(NODE_HELP NODE_DISABLE_TRACING)
     | HELP DESCRIBE
         -> ^(NODE_HELP NODE_DESCRIBE)
     | HELP DESCRIBE 'CLUSTER'
@@ -381,15 +384,20 @@ useKeyspace
     : USE keyspace ( username )? ( password )? 
         -> ^(NODE_USE_TABLE keyspace ( username )? ( password )?)
     ;
-
-enableStatement
-    : ENABLE QUERY DETAILS
-        -> ^(NODE_ENABLE NODE_QUERY_DETAILS)
+    
+traceNextQuery
+    : TRACE NEXT QUERY
+        -> ^(NODE_TRACE_NEXT_QUERY)
     ;
 
-disableStatement
-    : DISABLE QUERY DETAILS
-        -> ^(NODE_DISABLE NODE_QUERY_DETAILS)
+enableTracing
+    : ENABLE TRACING tracingProbability tracingNumber 
+        -> ^(NODE_ENABLE_TRACING tracingProbability tracingNumber)
+    ;
+
+disableTracing
+    : DISABLE TRACING
+        -> ^(NODE_DISABLE_TRACING)
     ;
 
 keyValuePairExpr
@@ -561,6 +569,15 @@ incrementValue
     | IntegerNegativeLiteral
     ;
 
+tracingProbability
+    : DoubleLiteral
+    ;
+
+tracingNumber
+    : IntegerPositiveLiteral
+    | IntegerNegativeLiteral
+    ;
+
 //
 // Lexer Section
 //
@@ -577,10 +594,12 @@ COUNT:       'COUNT';
 DEL:         'DEL';
 DESCRIBE:    'DESCRIBE';
 USE:         'USE';
-ENABLE:     'ENABLE';
-DISABLE:    'DISABLE';
-QUERY:      'QUERY';
-DETAILS:    'DETAILS';
+ENABLE:      'ENABLE';
+DISABLE:     'DISABLE';
+TRACING:     'TRACING';
+TRACE:       'TRACE';
+NEXT:        'NEXT';
+QUERY:       'QUERY';
 GET:         'GET';
 HELP:        'HELP';
 EXIT:        'EXIT';

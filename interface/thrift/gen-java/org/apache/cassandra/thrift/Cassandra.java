@@ -286,7 +286,9 @@ public class Cassandra {
      * @param trace_probability
      * @param num_queries_to_trace
      */
-    public void system_enable_tracing(double trace_probability, int num_queries_to_trace) throws org.apache.thrift.TException;
+    public void enable_tracing(double trace_probability, int num_queries_to_trace) throws org.apache.thrift.TException;
+
+    public void disable_tracing() throws org.apache.thrift.TException;
 
     /**
      * adds a column family. returns the new schema id.
@@ -419,7 +421,9 @@ public class Cassandra {
 
     public void trace_next_query(org.apache.thrift.async.AsyncMethodCallback<AsyncClient.trace_next_query_call> resultHandler) throws org.apache.thrift.TException;
 
-    public void system_enable_tracing(double trace_probability, int num_queries_to_trace, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.system_enable_tracing_call> resultHandler) throws org.apache.thrift.TException;
+    public void enable_tracing(double trace_probability, int num_queries_to_trace, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.enable_tracing_call> resultHandler) throws org.apache.thrift.TException;
+
+    public void disable_tracing(org.apache.thrift.async.AsyncMethodCallback<AsyncClient.disable_tracing_call> resultHandler) throws org.apache.thrift.TException;
 
     public void system_add_column_family(CfDef cf_def, org.apache.thrift.async.AsyncMethodCallback<AsyncClient.system_add_column_family_call> resultHandler) throws org.apache.thrift.TException;
 
@@ -1249,24 +1253,43 @@ public class Cassandra {
       throw new org.apache.thrift.TApplicationException(org.apache.thrift.TApplicationException.MISSING_RESULT, "trace_next_query failed: unknown result");
     }
 
-    public void system_enable_tracing(double trace_probability, int num_queries_to_trace) throws org.apache.thrift.TException
+    public void enable_tracing(double trace_probability, int num_queries_to_trace) throws org.apache.thrift.TException
     {
-      send_system_enable_tracing(trace_probability, num_queries_to_trace);
-      recv_system_enable_tracing();
+      send_enable_tracing(trace_probability, num_queries_to_trace);
+      recv_enable_tracing();
     }
 
-    public void send_system_enable_tracing(double trace_probability, int num_queries_to_trace) throws org.apache.thrift.TException
+    public void send_enable_tracing(double trace_probability, int num_queries_to_trace) throws org.apache.thrift.TException
     {
-      system_enable_tracing_args args = new system_enable_tracing_args();
+      enable_tracing_args args = new enable_tracing_args();
       args.setTrace_probability(trace_probability);
       args.setNum_queries_to_trace(num_queries_to_trace);
-      sendBase("system_enable_tracing", args);
+      sendBase("enable_tracing", args);
     }
 
-    public void recv_system_enable_tracing() throws org.apache.thrift.TException
+    public void recv_enable_tracing() throws org.apache.thrift.TException
     {
-      system_enable_tracing_result result = new system_enable_tracing_result();
-      receiveBase(result, "system_enable_tracing");
+      enable_tracing_result result = new enable_tracing_result();
+      receiveBase(result, "enable_tracing");
+      return;
+    }
+
+    public void disable_tracing() throws org.apache.thrift.TException
+    {
+      send_disable_tracing();
+      recv_disable_tracing();
+    }
+
+    public void send_disable_tracing() throws org.apache.thrift.TException
+    {
+      disable_tracing_args args = new disable_tracing_args();
+      sendBase("disable_tracing", args);
+    }
+
+    public void recv_disable_tracing() throws org.apache.thrift.TException
+    {
+      disable_tracing_result result = new disable_tracing_result();
+      receiveBase(result, "disable_tracing");
       return;
     }
 
@@ -2538,25 +2561,25 @@ public class Cassandra {
       }
     }
 
-    public void system_enable_tracing(double trace_probability, int num_queries_to_trace, org.apache.thrift.async.AsyncMethodCallback<system_enable_tracing_call> resultHandler) throws org.apache.thrift.TException {
+    public void enable_tracing(double trace_probability, int num_queries_to_trace, org.apache.thrift.async.AsyncMethodCallback<enable_tracing_call> resultHandler) throws org.apache.thrift.TException {
       checkReady();
-      system_enable_tracing_call method_call = new system_enable_tracing_call(trace_probability, num_queries_to_trace, resultHandler, this, ___protocolFactory, ___transport);
+      enable_tracing_call method_call = new enable_tracing_call(trace_probability, num_queries_to_trace, resultHandler, this, ___protocolFactory, ___transport);
       this.___currentMethod = method_call;
       ___manager.call(method_call);
     }
 
-    public static class system_enable_tracing_call extends org.apache.thrift.async.TAsyncMethodCall {
+    public static class enable_tracing_call extends org.apache.thrift.async.TAsyncMethodCall {
       private double trace_probability;
       private int num_queries_to_trace;
-      public system_enable_tracing_call(double trace_probability, int num_queries_to_trace, org.apache.thrift.async.AsyncMethodCallback<system_enable_tracing_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
+      public enable_tracing_call(double trace_probability, int num_queries_to_trace, org.apache.thrift.async.AsyncMethodCallback<enable_tracing_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
         super(client, protocolFactory, transport, resultHandler, false);
         this.trace_probability = trace_probability;
         this.num_queries_to_trace = num_queries_to_trace;
       }
 
       public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
-        prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("system_enable_tracing", org.apache.thrift.protocol.TMessageType.CALL, 0));
-        system_enable_tracing_args args = new system_enable_tracing_args();
+        prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("enable_tracing", org.apache.thrift.protocol.TMessageType.CALL, 0));
+        enable_tracing_args args = new enable_tracing_args();
         args.setTrace_probability(trace_probability);
         args.setNum_queries_to_trace(num_queries_to_trace);
         args.write(prot);
@@ -2569,7 +2592,36 @@ public class Cassandra {
         }
         org.apache.thrift.transport.TMemoryInputTransport memoryTransport = new org.apache.thrift.transport.TMemoryInputTransport(getFrameBuffer().array());
         org.apache.thrift.protocol.TProtocol prot = client.getProtocolFactory().getProtocol(memoryTransport);
-        (new Client(prot)).recv_system_enable_tracing();
+        (new Client(prot)).recv_enable_tracing();
+      }
+    }
+
+    public void disable_tracing(org.apache.thrift.async.AsyncMethodCallback<disable_tracing_call> resultHandler) throws org.apache.thrift.TException {
+      checkReady();
+      disable_tracing_call method_call = new disable_tracing_call(resultHandler, this, ___protocolFactory, ___transport);
+      this.___currentMethod = method_call;
+      ___manager.call(method_call);
+    }
+
+    public static class disable_tracing_call extends org.apache.thrift.async.TAsyncMethodCall {
+      public disable_tracing_call(org.apache.thrift.async.AsyncMethodCallback<disable_tracing_call> resultHandler, org.apache.thrift.async.TAsyncClient client, org.apache.thrift.protocol.TProtocolFactory protocolFactory, org.apache.thrift.transport.TNonblockingTransport transport) throws org.apache.thrift.TException {
+        super(client, protocolFactory, transport, resultHandler, false);
+      }
+
+      public void write_args(org.apache.thrift.protocol.TProtocol prot) throws org.apache.thrift.TException {
+        prot.writeMessageBegin(new org.apache.thrift.protocol.TMessage("disable_tracing", org.apache.thrift.protocol.TMessageType.CALL, 0));
+        disable_tracing_args args = new disable_tracing_args();
+        args.write(prot);
+        prot.writeMessageEnd();
+      }
+
+      public void getResult() throws org.apache.thrift.TException {
+        if (getState() != org.apache.thrift.async.TAsyncMethodCall.State.RESPONSE_READ) {
+          throw new IllegalStateException("Method call not finished!");
+        }
+        org.apache.thrift.transport.TMemoryInputTransport memoryTransport = new org.apache.thrift.transport.TMemoryInputTransport(getFrameBuffer().array());
+        org.apache.thrift.protocol.TProtocol prot = client.getProtocolFactory().getProtocol(memoryTransport);
+        (new Client(prot)).recv_disable_tracing();
       }
     }
 
@@ -2942,7 +2994,8 @@ public class Cassandra {
       processMap.put("describe_keyspace", new describe_keyspace());
       processMap.put("describe_splits", new describe_splits());
       processMap.put("trace_next_query", new trace_next_query());
-      processMap.put("system_enable_tracing", new system_enable_tracing());
+      processMap.put("enable_tracing", new enable_tracing());
+      processMap.put("disable_tracing", new disable_tracing());
       processMap.put("system_add_column_family", new system_add_column_family());
       processMap.put("system_drop_column_family", new system_drop_column_family());
       processMap.put("system_add_keyspace", new system_add_keyspace());
@@ -3539,18 +3592,34 @@ public class Cassandra {
       }
     }
 
-    private static class system_enable_tracing<I extends Iface> extends org.apache.thrift.ProcessFunction<I, system_enable_tracing_args> {
-      public system_enable_tracing() {
-        super("system_enable_tracing");
+    private static class enable_tracing<I extends Iface> extends org.apache.thrift.ProcessFunction<I, enable_tracing_args> {
+      public enable_tracing() {
+        super("enable_tracing");
       }
 
-      protected system_enable_tracing_args getEmptyArgsInstance() {
-        return new system_enable_tracing_args();
+      protected enable_tracing_args getEmptyArgsInstance() {
+        return new enable_tracing_args();
       }
 
-      protected system_enable_tracing_result getResult(I iface, system_enable_tracing_args args) throws org.apache.thrift.TException {
-        system_enable_tracing_result result = new system_enable_tracing_result();
-        iface.system_enable_tracing(args.trace_probability, args.num_queries_to_trace);
+      protected enable_tracing_result getResult(I iface, enable_tracing_args args) throws org.apache.thrift.TException {
+        enable_tracing_result result = new enable_tracing_result();
+        iface.enable_tracing(args.trace_probability, args.num_queries_to_trace);
+        return result;
+      }
+    }
+
+    private static class disable_tracing<I extends Iface> extends org.apache.thrift.ProcessFunction<I, disable_tracing_args> {
+      public disable_tracing() {
+        super("disable_tracing");
+      }
+
+      protected disable_tracing_args getEmptyArgsInstance() {
+        return new disable_tracing_args();
+      }
+
+      protected disable_tracing_result getResult(I iface, disable_tracing_args args) throws org.apache.thrift.TException {
+        disable_tracing_result result = new disable_tracing_result();
+        iface.disable_tracing();
         return result;
       }
     }
@@ -28388,8 +28457,8 @@ public class Cassandra {
 
   }
 
-  public static class system_enable_tracing_args implements org.apache.thrift.TBase<system_enable_tracing_args, system_enable_tracing_args._Fields>, java.io.Serializable, Cloneable   {
-    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("system_enable_tracing_args");
+  public static class enable_tracing_args implements org.apache.thrift.TBase<enable_tracing_args, enable_tracing_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("enable_tracing_args");
 
     private static final org.apache.thrift.protocol.TField TRACE_PROBABILITY_FIELD_DESC = new org.apache.thrift.protocol.TField("trace_probability", org.apache.thrift.protocol.TType.DOUBLE, (short)1);
     private static final org.apache.thrift.protocol.TField NUM_QUERIES_TO_TRACE_FIELD_DESC = new org.apache.thrift.protocol.TField("num_queries_to_trace", org.apache.thrift.protocol.TType.I32, (short)2);
@@ -28471,13 +28540,13 @@ public class Cassandra {
       tmpMap.put(_Fields.NUM_QUERIES_TO_TRACE, new org.apache.thrift.meta_data.FieldMetaData("num_queries_to_trace", org.apache.thrift.TFieldRequirementType.REQUIRED, 
           new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I32)));
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(system_enable_tracing_args.class, metaDataMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(enable_tracing_args.class, metaDataMap);
     }
 
-    public system_enable_tracing_args() {
+    public enable_tracing_args() {
     }
 
-    public system_enable_tracing_args(
+    public enable_tracing_args(
       double trace_probability,
       int num_queries_to_trace)
     {
@@ -28491,15 +28560,15 @@ public class Cassandra {
     /**
      * Performs a deep copy on <i>other</i>.
      */
-    public system_enable_tracing_args(system_enable_tracing_args other) {
+    public enable_tracing_args(enable_tracing_args other) {
       __isset_bit_vector.clear();
       __isset_bit_vector.or(other.__isset_bit_vector);
       this.trace_probability = other.trace_probability;
       this.num_queries_to_trace = other.num_queries_to_trace;
     }
 
-    public system_enable_tracing_args deepCopy() {
-      return new system_enable_tracing_args(this);
+    public enable_tracing_args deepCopy() {
+      return new enable_tracing_args(this);
     }
 
     @Override
@@ -28514,7 +28583,7 @@ public class Cassandra {
       return this.trace_probability;
     }
 
-    public system_enable_tracing_args setTrace_probability(double trace_probability) {
+    public enable_tracing_args setTrace_probability(double trace_probability) {
       this.trace_probability = trace_probability;
       setTrace_probabilityIsSet(true);
       return this;
@@ -28537,7 +28606,7 @@ public class Cassandra {
       return this.num_queries_to_trace;
     }
 
-    public system_enable_tracing_args setNum_queries_to_trace(int num_queries_to_trace) {
+    public enable_tracing_args setNum_queries_to_trace(int num_queries_to_trace) {
       this.num_queries_to_trace = num_queries_to_trace;
       setNum_queries_to_traceIsSet(true);
       return this;
@@ -28608,12 +28677,12 @@ public class Cassandra {
     public boolean equals(Object that) {
       if (that == null)
         return false;
-      if (that instanceof system_enable_tracing_args)
-        return this.equals((system_enable_tracing_args)that);
+      if (that instanceof enable_tracing_args)
+        return this.equals((enable_tracing_args)that);
       return false;
     }
 
-    public boolean equals(system_enable_tracing_args that) {
+    public boolean equals(enable_tracing_args that) {
       if (that == null)
         return false;
 
@@ -28655,13 +28724,13 @@ public class Cassandra {
       return builder.toHashCode();
     }
 
-    public int compareTo(system_enable_tracing_args other) {
+    public int compareTo(enable_tracing_args other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      system_enable_tracing_args typedOther = (system_enable_tracing_args)other;
+      enable_tracing_args typedOther = (enable_tracing_args)other;
 
       lastComparison = Boolean.valueOf(isSetTrace_probability()).compareTo(typedOther.isSetTrace_probability());
       if (lastComparison != 0) {
@@ -28749,7 +28818,7 @@ public class Cassandra {
 
     @Override
     public String toString() {
-      StringBuilder sb = new StringBuilder("system_enable_tracing_args(");
+      StringBuilder sb = new StringBuilder("enable_tracing_args(");
       boolean first = true;
 
       sb.append("trace_probability:");
@@ -28787,8 +28856,8 @@ public class Cassandra {
 
   }
 
-  public static class system_enable_tracing_result implements org.apache.thrift.TBase<system_enable_tracing_result, system_enable_tracing_result._Fields>, java.io.Serializable, Cloneable   {
-    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("system_enable_tracing_result");
+  public static class enable_tracing_result implements org.apache.thrift.TBase<enable_tracing_result, enable_tracing_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("enable_tracing_result");
 
 
 
@@ -28851,20 +28920,20 @@ public class Cassandra {
     static {
       Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
       metaDataMap = Collections.unmodifiableMap(tmpMap);
-      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(system_enable_tracing_result.class, metaDataMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(enable_tracing_result.class, metaDataMap);
     }
 
-    public system_enable_tracing_result() {
+    public enable_tracing_result() {
     }
 
     /**
      * Performs a deep copy on <i>other</i>.
      */
-    public system_enable_tracing_result(system_enable_tracing_result other) {
+    public enable_tracing_result(enable_tracing_result other) {
     }
 
-    public system_enable_tracing_result deepCopy() {
-      return new system_enable_tracing_result(this);
+    public enable_tracing_result deepCopy() {
+      return new enable_tracing_result(this);
     }
 
     @Override
@@ -28897,12 +28966,12 @@ public class Cassandra {
     public boolean equals(Object that) {
       if (that == null)
         return false;
-      if (that instanceof system_enable_tracing_result)
-        return this.equals((system_enable_tracing_result)that);
+      if (that instanceof enable_tracing_result)
+        return this.equals((enable_tracing_result)that);
       return false;
     }
 
-    public boolean equals(system_enable_tracing_result that) {
+    public boolean equals(enable_tracing_result that) {
       if (that == null)
         return false;
 
@@ -28916,13 +28985,13 @@ public class Cassandra {
       return builder.toHashCode();
     }
 
-    public int compareTo(system_enable_tracing_result other) {
+    public int compareTo(enable_tracing_result other) {
       if (!getClass().equals(other.getClass())) {
         return getClass().getName().compareTo(other.getClass().getName());
       }
 
       int lastComparison = 0;
-      system_enable_tracing_result typedOther = (system_enable_tracing_result)other;
+      enable_tracing_result typedOther = (enable_tracing_result)other;
 
       return 0;
     }
@@ -28961,7 +29030,414 @@ public class Cassandra {
 
     @Override
     public String toString() {
-      StringBuilder sb = new StringBuilder("system_enable_tracing_result(");
+      StringBuilder sb = new StringBuilder("enable_tracing_result(");
+      boolean first = true;
+
+      sb.append(")");
+      return sb.toString();
+    }
+
+    public void validate() throws org.apache.thrift.TException {
+      // check for required fields
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+  }
+
+  public static class disable_tracing_args implements org.apache.thrift.TBase<disable_tracing_args, disable_tracing_args._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("disable_tracing_args");
+
+
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
+;
+
+      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
+
+      static {
+        for (_Fields field : EnumSet.allOf(_Fields.class)) {
+          byName.put(field.getFieldName(), field);
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, or null if its not found.
+       */
+      public static _Fields findByThriftId(int fieldId) {
+        switch(fieldId) {
+          default:
+            return null;
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, throwing an exception
+       * if it is not found.
+       */
+      public static _Fields findByThriftIdOrThrow(int fieldId) {
+        _Fields fields = findByThriftId(fieldId);
+        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
+        return fields;
+      }
+
+      /**
+       * Find the _Fields constant that matches name, or null if its not found.
+       */
+      public static _Fields findByName(String name) {
+        return byName.get(name);
+      }
+
+      private final short _thriftId;
+      private final String _fieldName;
+
+      _Fields(short thriftId, String fieldName) {
+        _thriftId = thriftId;
+        _fieldName = fieldName;
+      }
+
+      public short getThriftFieldId() {
+        return _thriftId;
+      }
+
+      public String getFieldName() {
+        return _fieldName;
+      }
+    }
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
+    static {
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(disable_tracing_args.class, metaDataMap);
+    }
+
+    public disable_tracing_args() {
+    }
+
+    /**
+     * Performs a deep copy on <i>other</i>.
+     */
+    public disable_tracing_args(disable_tracing_args other) {
+    }
+
+    public disable_tracing_args deepCopy() {
+      return new disable_tracing_args(this);
+    }
+
+    @Override
+    public void clear() {
+    }
+
+    public void setFieldValue(_Fields field, Object value) {
+      switch (field) {
+      }
+    }
+
+    public Object getFieldValue(_Fields field) {
+      switch (field) {
+      }
+      throw new IllegalStateException();
+    }
+
+    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
+    public boolean isSet(_Fields field) {
+      if (field == null) {
+        throw new IllegalArgumentException();
+      }
+
+      switch (field) {
+      }
+      throw new IllegalStateException();
+    }
+
+    @Override
+    public boolean equals(Object that) {
+      if (that == null)
+        return false;
+      if (that instanceof disable_tracing_args)
+        return this.equals((disable_tracing_args)that);
+      return false;
+    }
+
+    public boolean equals(disable_tracing_args that) {
+      if (that == null)
+        return false;
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      HashCodeBuilder builder = new HashCodeBuilder();
+
+      return builder.toHashCode();
+    }
+
+    public int compareTo(disable_tracing_args other) {
+      if (!getClass().equals(other.getClass())) {
+        return getClass().getName().compareTo(other.getClass().getName());
+      }
+
+      int lastComparison = 0;
+      disable_tracing_args typedOther = (disable_tracing_args)other;
+
+      return 0;
+    }
+
+    public _Fields fieldForId(int fieldId) {
+      return _Fields.findByThriftId(fieldId);
+    }
+
+    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+      org.apache.thrift.protocol.TField field;
+      iprot.readStructBegin();
+      while (true)
+      {
+        field = iprot.readFieldBegin();
+        if (field.type == org.apache.thrift.protocol.TType.STOP) { 
+          break;
+        }
+        switch (field.id) {
+          default:
+            org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
+        }
+        iprot.readFieldEnd();
+      }
+      iprot.readStructEnd();
+
+      // check for required fields of primitive type, which can't be checked in the validate method
+      validate();
+    }
+
+    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+      validate();
+
+      oprot.writeStructBegin(STRUCT_DESC);
+      oprot.writeFieldStop();
+      oprot.writeStructEnd();
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder sb = new StringBuilder("disable_tracing_args(");
+      boolean first = true;
+
+      sb.append(")");
+      return sb.toString();
+    }
+
+    public void validate() throws org.apache.thrift.TException {
+      // check for required fields
+    }
+
+    private void writeObject(java.io.ObjectOutputStream out) throws java.io.IOException {
+      try {
+        write(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(out)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+    private void readObject(java.io.ObjectInputStream in) throws java.io.IOException, ClassNotFoundException {
+      try {
+        read(new org.apache.thrift.protocol.TCompactProtocol(new org.apache.thrift.transport.TIOStreamTransport(in)));
+      } catch (org.apache.thrift.TException te) {
+        throw new java.io.IOException(te);
+      }
+    }
+
+  }
+
+  public static class disable_tracing_result implements org.apache.thrift.TBase<disable_tracing_result, disable_tracing_result._Fields>, java.io.Serializable, Cloneable   {
+    private static final org.apache.thrift.protocol.TStruct STRUCT_DESC = new org.apache.thrift.protocol.TStruct("disable_tracing_result");
+
+
+
+    /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
+    public enum _Fields implements org.apache.thrift.TFieldIdEnum {
+;
+
+      private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
+
+      static {
+        for (_Fields field : EnumSet.allOf(_Fields.class)) {
+          byName.put(field.getFieldName(), field);
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, or null if its not found.
+       */
+      public static _Fields findByThriftId(int fieldId) {
+        switch(fieldId) {
+          default:
+            return null;
+        }
+      }
+
+      /**
+       * Find the _Fields constant that matches fieldId, throwing an exception
+       * if it is not found.
+       */
+      public static _Fields findByThriftIdOrThrow(int fieldId) {
+        _Fields fields = findByThriftId(fieldId);
+        if (fields == null) throw new IllegalArgumentException("Field " + fieldId + " doesn't exist!");
+        return fields;
+      }
+
+      /**
+       * Find the _Fields constant that matches name, or null if its not found.
+       */
+      public static _Fields findByName(String name) {
+        return byName.get(name);
+      }
+
+      private final short _thriftId;
+      private final String _fieldName;
+
+      _Fields(short thriftId, String fieldName) {
+        _thriftId = thriftId;
+        _fieldName = fieldName;
+      }
+
+      public short getThriftFieldId() {
+        return _thriftId;
+      }
+
+      public String getFieldName() {
+        return _fieldName;
+      }
+    }
+    public static final Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> metaDataMap;
+    static {
+      Map<_Fields, org.apache.thrift.meta_data.FieldMetaData> tmpMap = new EnumMap<_Fields, org.apache.thrift.meta_data.FieldMetaData>(_Fields.class);
+      metaDataMap = Collections.unmodifiableMap(tmpMap);
+      org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(disable_tracing_result.class, metaDataMap);
+    }
+
+    public disable_tracing_result() {
+    }
+
+    /**
+     * Performs a deep copy on <i>other</i>.
+     */
+    public disable_tracing_result(disable_tracing_result other) {
+    }
+
+    public disable_tracing_result deepCopy() {
+      return new disable_tracing_result(this);
+    }
+
+    @Override
+    public void clear() {
+    }
+
+    public void setFieldValue(_Fields field, Object value) {
+      switch (field) {
+      }
+    }
+
+    public Object getFieldValue(_Fields field) {
+      switch (field) {
+      }
+      throw new IllegalStateException();
+    }
+
+    /** Returns true if field corresponding to fieldID is set (has been assigned a value) and false otherwise */
+    public boolean isSet(_Fields field) {
+      if (field == null) {
+        throw new IllegalArgumentException();
+      }
+
+      switch (field) {
+      }
+      throw new IllegalStateException();
+    }
+
+    @Override
+    public boolean equals(Object that) {
+      if (that == null)
+        return false;
+      if (that instanceof disable_tracing_result)
+        return this.equals((disable_tracing_result)that);
+      return false;
+    }
+
+    public boolean equals(disable_tracing_result that) {
+      if (that == null)
+        return false;
+
+      return true;
+    }
+
+    @Override
+    public int hashCode() {
+      HashCodeBuilder builder = new HashCodeBuilder();
+
+      return builder.toHashCode();
+    }
+
+    public int compareTo(disable_tracing_result other) {
+      if (!getClass().equals(other.getClass())) {
+        return getClass().getName().compareTo(other.getClass().getName());
+      }
+
+      int lastComparison = 0;
+      disable_tracing_result typedOther = (disable_tracing_result)other;
+
+      return 0;
+    }
+
+    public _Fields fieldForId(int fieldId) {
+      return _Fields.findByThriftId(fieldId);
+    }
+
+    public void read(org.apache.thrift.protocol.TProtocol iprot) throws org.apache.thrift.TException {
+      org.apache.thrift.protocol.TField field;
+      iprot.readStructBegin();
+      while (true)
+      {
+        field = iprot.readFieldBegin();
+        if (field.type == org.apache.thrift.protocol.TType.STOP) { 
+          break;
+        }
+        switch (field.id) {
+          default:
+            org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
+        }
+        iprot.readFieldEnd();
+      }
+      iprot.readStructEnd();
+
+      // check for required fields of primitive type, which can't be checked in the validate method
+      validate();
+    }
+
+    public void write(org.apache.thrift.protocol.TProtocol oprot) throws org.apache.thrift.TException {
+      oprot.writeStructBegin(STRUCT_DESC);
+
+      oprot.writeFieldStop();
+      oprot.writeStructEnd();
+    }
+
+    @Override
+    public String toString() {
+      StringBuilder sb = new StringBuilder("disable_tracing_result(");
       boolean first = true;
 
       sb.append(")");

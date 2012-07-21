@@ -1477,9 +1477,16 @@ public class CassandraServer implements Cassandra.Iface
     }
     
     @Override
-    public void system_enable_tracing(double trace_probability, int num_queries_to_trace) throws TException
+    public void enable_tracing(double trace_probability, int num_queries_to_trace) throws TException
     {
         state().enableTracing(trace_probability, num_queries_to_trace);
+    }
+    
+    @Override
+    public void disable_tracing() throws TException
+    {
+        state().disableTracing();
+        
     }
     
     @Override

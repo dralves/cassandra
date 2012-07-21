@@ -127,6 +127,13 @@ public class ClientState
         }
     }
     
+    public void disableTracing()
+    {
+        this.traceProbability = 0.0;
+        this.traceNumber = 0;
+        this.preparedTracingSession = null;
+    }
+    
     public void prepareTracingSession(UUID sessionId)
     {
         this.preparedTracingSession = sessionId;

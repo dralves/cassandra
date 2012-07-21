@@ -32,7 +32,6 @@ import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Predicate;
@@ -44,8 +43,6 @@ import com.google.common.collect.Iterables;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import org.apache.cassandra.thrift.TimedOutException;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ConfigurationException;
@@ -69,6 +66,7 @@ import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.thrift.ConsistencyLevel;
 import org.apache.cassandra.thrift.InvalidRequestException;
+import org.apache.cassandra.thrift.TimedOutException;
 import org.apache.cassandra.thrift.UnavailableException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
@@ -155,8 +153,12 @@ public class TraceSessionContext
          * Signals a locally initiated trace session's end.
          */
         TRACE_SESSION_END;
-        
-        public String name(String desc) {
+
+        /**
+         * overload the default name() method to allow to include a description with the trace event
+         */
+        public String name(String desc)
+        {
             return new StringBuilder().append(name()).append("[").append(desc).append("]").toString();
         }
     }
@@ -195,12 +197,12 @@ public class TraceSessionContext
 
         this.localAddress = FBUtilities.getLocalAddress();
     }
-    
+
     public UUID prepareSession()
     {
         return UUIDGen.getUUID(ByteBuffer.wrap(UUIDGen.getTimeUUIDBytes()));
     }
-    
+
     public void startPreparedSession(UUID sessionId, String request)
     {
         startSession(sessionId, request, System.currentTimeMillis());
@@ -216,7 +218,7 @@ public class TraceSessionContext
     public void startSession(UUID sessionId, String request, long timestamp)
     {
         assert sessionContextThreadLocalState.get() == null;
-        
+
         byte[] sessionIdAsBB = TimeUUIDType.instance.decompose(sessionId).array();
 
         TraceSessionContextThreadLocalState tsctls = new TraceSessionContextThreadLocalState(localAddress,
@@ -226,8 +228,6 @@ public class TraceSessionContext
 
         newSession(sessionIdAsBB, localAddress, request, timestamp);
     }
-    
-    
 
     public UUID trace(TraceEvent traceEvent)
     {
