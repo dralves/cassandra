@@ -2051,9 +2051,9 @@ public class CliClient
         if (!CliMain.isConnected())
             return;
         
-        ByteBuffer sessionId = thriftClient.trace_next_query();
+        UUID sessionId = TimeUUIDType.instance.compose(thriftClient.trace_next_query());
         
-        sessionState.out.println("Will trace next query. Session ID: " + ByteBufferUtil.string(sessionId));
+        sessionState.out.println("Will trace next query. Session ID: " + sessionId.toString());
     }
 
     private void executeEnableTracing(final Tree statement) throws TException
@@ -2065,10 +2065,10 @@ public class CliClient
         final int tracingNumber = Integer.parseInt(statement.getChild(1).getText());
 
         thriftClient.enable_tracing(tracingProbability, tracingNumber);
-        
-        sessionState.out.println("Query Tracing is enabled, will trace requests from this client with "
+
+        sessionState.out.println("Query Tracing is enabled, will trace queries from this client with "
                 + new Double(tracingProbability).floatValue() + " probability up to "
-                + (tracingNumber == -1 ? "ALL" : tracingNumber));
+                + (tracingNumber == -1 ? "ALL" : tracingNumber) + " queries");
     }
 
     private void executeDisableTracing() throws TException
