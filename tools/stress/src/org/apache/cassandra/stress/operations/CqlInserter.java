@@ -54,7 +54,7 @@ public class CqlInserter extends Operation
         // Construct a query string once.
         if (cqlQuery == null)
         {
-            StringBuilder query = new StringBuilder("UPDATE Standard1 USING CONSISTENCY ")
+            StringBuilder query = new StringBuilder("UPDATE \"Standard1\" USING CONSISTENCY ")
                     .append(session.getConsistencyLevel().toString()).append(" SET ");
 
             for (int i = 0; i < session.getColumnsPerKey(); i++)
@@ -99,8 +99,9 @@ public class CqlInserter extends Operation
             {
                 if (session.usePreparedStatements())
                 {
+                    System.out.println(cqlQuery);
                     Integer stmntId = getPreparedStatement(client, cqlQuery);
-                    client.execute_prepared_cql_query(stmntId, queryParamsAsByteBuffer(queryParms));
+//                    client.execute_prepared_cql_query(stmntId, queryParamsAsByteBuffer(queryParms));
                 }
                 else
                 {
