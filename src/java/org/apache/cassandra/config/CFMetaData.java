@@ -151,7 +151,10 @@ public final class CFMetaData
                                                          + "message_version int,"
                                                          + "mutation blob,"
                                                          + "PRIMARY KEY (target_id, hint_id, message_version)"
-                                                         + ") WITH COMPACT STORAGE AND COMMENT='hints awaiting delivery'");
+                                                         + ") WITH COMPACT STORAGE "
+                                                         + "AND COMPACTION_STRATEGY_OPTIONS:MIN_COMPACTION_THRESHOLD=0 "
+                                                         + "AND COMPACTION_STRATEGY_OPTIONS:MAX_COMPACTION_THRESHOLD=0 "
+                                                         + "AND COMMENT='hints awaiting delivery'");
 
     public static final CFMetaData PeersCf = compile(12, "CREATE TABLE " + SystemTable.PEERS_CF + " ("
                                                          + "token_bytes blob PRIMARY KEY,"
@@ -882,6 +885,31 @@ public final class CFMetaData
      */
     public void addDefaultIndexNames() throws ConfigurationException
     {
+        // if this is ColumnFamily update we need to add previously defined index names to the existing columns first
+        UUID cfId = Schema.instance.getId(ksName, cfName);
+        if (cfId != null)
+        {
+            CFMetaData cfm = Schema.instance.getCFMetaData(cfId);
+
+            for (Map.Entry<ByteBuffer, ColumnDefinition> entry : column_metadata.entrySet())
+            {
+                ColumnDefinition newDef = entry.getValue();
+
+                if (!cfm.column_metadata.containsKey(entry.getKey()) || newDef.getIndexType() == null)
+                    continue;
+
+                String oldIndexName = cfm.column_metadata.get(entry.getKey()).getIndexName();
+
+                if (oldIndexName == null)
+                    continue;
+
+                if (newDef.getIndexName() != null && !oldIndexName.equals(newDef.getIndexName()))
+                    throw new ConfigurationException("Can't modify index name: was '" + oldIndexName + "' changed to '" + newDef.getIndexName() + "'.");
+
+                newDef.setIndexName(oldIndexName);
+            }
+        }
+
         Set<String> existingNames = existingIndexNames(null);
         for (ColumnDefinition column : column_metadata.values())
         {
@@ -1052,8 +1080,6 @@ public final class CFMetaData
     {
         if (alias != null)
         {
-            if (!alias.hasRemaining())
-                throw new ConfigurationException(msg + " alias may not be empty");
             try
             {
                 UTF8Type.instance.validate(alias);
@@ -1231,9 +1257,9 @@ public final class CFMetaData
             cfm.caching(Caching.valueOf(result.getString("caching")));
             cfm.compactionStrategyClass(createCompactionStrategy(result.getString("compaction_strategy_class")));
             cfm.compressionParameters(CompressionParameters.create(fromJsonMap(result.getString("compression_parameters"))));
+            cfm.columnAliases(columnAliasesFromStrings(fromJsonList(result.getString("column_aliases"))));
             if (result.has("value_alias"))
                 cfm.valueAlias(result.getBytes("value_alias"));
-            cfm.columnAliases(columnAliasesFromStrings(fromJsonList(result.getString("column_aliases"))));
             cfm.compactionStrategyOptions(fromJsonMap(result.getString("compaction_strategy_options")));
 
             return cfm;
