@@ -176,6 +176,7 @@ do_stop()
     done
     
     kill -9 $PIDFILE
+    return 2
 }
 
 case "$1" in
