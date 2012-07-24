@@ -168,13 +168,13 @@ do_stop()
     is_running || return 1
     $JSVC -stop -home $JAVA_HOME -pidfile $PIDFILE \
             org.apache.cassandra.thrift.CassandraDaemon
-            
+
     is_running || return 0
     for tries in `seq $WAIT_FOR_STOP`; do
         sleep 1
         is_running || return 0
     done
-    
+
     kill -9 $PIDFILE
     return 2
 }
