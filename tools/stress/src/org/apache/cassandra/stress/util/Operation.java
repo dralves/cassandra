@@ -289,18 +289,9 @@ public abstract class Operation
         Integer statementId = client.preparedStatements.get(cqlQuery.hashCode());
         if (statementId == null)
         {
-            try
-            {
-                client.execute_cql_query(ByteBufferUtil.bytes("UPDATE \"Standard1\" USING CONSISTENCY ONE SET 'C1'='a' WHERE KEY='1'"), Compression.NONE);
-            }
-            catch (Exception e)
-            {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
-//            CqlPreparedResult response = client.prepare_cql_query(ByteBufferUtil.bytes("UPDATE \"Standard1\" USING CONSISTENCY ONE SET 'C1'='a' WHERE KEY=?"), Compression.NONE);
-//            statementId = response.itemId;
-//            client.preparedStatements.put(cqlQuery.hashCode(), statementId);
+            CqlPreparedResult response = client.prepare_cql_query(ByteBufferUtil.bytes(cqlQuery), Compression.NONE);
+            statementId = response.itemId;
+            client.preparedStatements.put(cqlQuery.hashCode(), statementId);
         }
 
         return statementId;

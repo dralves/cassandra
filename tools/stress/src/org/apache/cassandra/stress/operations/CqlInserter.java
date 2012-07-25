@@ -31,7 +31,6 @@ import org.apache.cassandra.stress.Session;
 import org.apache.cassandra.stress.util.CassandraClient;
 import org.apache.cassandra.stress.util.Operation;
 import org.apache.cassandra.thrift.Compression;
-import org.apache.cassandra.utils.UUIDGen;
 
 public class CqlInserter extends Operation
 {
@@ -60,7 +59,7 @@ public class CqlInserter extends Operation
             for (int i = 0; i < session.getColumnsPerKey(); i++)
             {
                 if (i > 0) query.append(',');
-                query.append("?=?");
+                query.append("\"C" + i + "\" = ?");
             }
 
             query.append(" WHERE KEY=?");
@@ -72,9 +71,12 @@ public class CqlInserter extends Operation
         {
             // Column name
             if (session.timeUUIDComparator)
-                queryParms.add(UUIDGen.makeType1UUIDFromHost(Session.getLocalAddress()).toString());
-            else
-                queryParms.add(new String("C" + i));
+            {
+                throw new UnsupportedOperationException("CQL3 stress does not support UUIDs in column names");
+                // queryParms.add(UUIDGen.makeType1UUIDFromHost(Session.getLocalAddress()).toString());
+            }
+            // else
+            // queryParms.add(new String("C" + i));
 
             // Column value
             queryParms.add(new String(getUnQuotedCqlBlob(values.get(i % values.size()).array())));
@@ -99,9 +101,8 @@ public class CqlInserter extends Operation
             {
                 if (session.usePreparedStatements())
                 {
-                    System.out.println(cqlQuery);
                     Integer stmntId = getPreparedStatement(client, cqlQuery);
-//                    client.execute_prepared_cql_query(stmntId, queryParamsAsByteBuffer(queryParms));
+                    client.execute_prepared_cql_query(stmntId, queryParamsAsByteBuffer(queryParms));
                 }
                 else
                 {

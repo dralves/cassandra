@@ -535,6 +535,14 @@ public class Session implements Serializable
         standardCfDef.setComparator_type(defaultComparator)
                      .setDefault_validation_class(DEFAULT_VALIDATOR)
                      .setCompression_options(compressionOptions);
+        
+        if (!timeUUIDComparator)
+        {
+            for (int i = 0; i < getColumnsPerKey(); i++)
+            {
+                standardCfDef.addToColumn_metadata(new ColumnDef(ByteBufferUtil.bytes("C" + i), "BytesType"));
+            }
+        }
 
         if (indexType != null)
         {
