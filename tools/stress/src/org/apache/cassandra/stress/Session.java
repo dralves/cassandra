@@ -535,7 +535,7 @@ public class Session implements Serializable
         standardCfDef.setComparator_type(defaultComparator)
                      .setDefault_validation_class(DEFAULT_VALIDATOR)
                      .setCompression_options(compressionOptions);
-        
+
         if (!timeUUIDComparator)
         {
             for (int i = 0; i < getColumnsPerKey(); i++)
@@ -625,14 +625,14 @@ public class Session implements Serializable
         try
         {
             transport.open();
-            
+
             client.set_cql_version("3.0.0");
 
             if (setKeyspace)
             {
                 client.set_keyspace("Keyspace1");
             }
-            
+
         }
         catch (InvalidRequestException e)
         {
