@@ -25,8 +25,6 @@ import java.util.*;
 import java.util.concurrent.ExecutionException;
 
 import com.google.common.collect.HashMultimap;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Multimap;
 
 import org.slf4j.Logger;
@@ -46,11 +44,9 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.thrift.Constants;
-import org.apache.cassandra.thrift.IndexExpression;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.NodeId;
-import org.apache.cassandra.utils.UUIDGen;
 
 import static org.apache.cassandra.cql3.QueryProcessor.processInternal;
 
@@ -80,8 +76,8 @@ public class SystemTable
 
     public enum BootstrapState
     {
-        NEEDS_BOOTSTRAP, // ordered for boolean backward compatibility, false
-        COMPLETED, // true
+        NEEDS_BOOTSTRAP,
+        COMPLETED,
         IN_PROGRESS
     }
 
@@ -136,8 +132,8 @@ public class SystemTable
             Token token = StorageService.getPartitioner().getTokenFactory().fromByteArray(oldColumns.next().value());
             String tokenBytes = ByteBufferUtil.bytesToHex(serializeTokens(Collections.singleton(token)));
             // (assume that any node getting upgraded was bootstrapped, since that was stored in a separate row for no particular reason)
-            String req = "INSERT INTO system.%s (key, cluster_name, token_bytes, bootstrapped) VALUES ('%s', '%s', '%s', 'true')";
-            processInternal(String.format(req, LOCAL_CF, LOCAL_KEY, clusterName, tokenBytes));
+            String req = "INSERT INTO system.%s (key, cluster_name, token_bytes, bootstrapped) VALUES ('%s', '%s', '%s', '%s')";
+            processInternal(String.format(req, LOCAL_CF, LOCAL_KEY, clusterName, tokenBytes, BootstrapState.COMPLETED.name()));
 
             oldStatusCfs.truncate();
         }
@@ -372,7 +368,8 @@ public class SystemTable
 
         if (result.isEmpty() || !result.one().has("bootstrapped"))
             return BootstrapState.NEEDS_BOOTSTRAP;
-        return BootstrapState.values()[result.one().getInt("bootstrapped")];
+
+        return BootstrapState.valueOf(result.one().getString("bootstrapped"));
     }
 
     public static boolean bootstrapComplete()
@@ -387,8 +384,8 @@ public class SystemTable
 
     public static void setBootstrapState(BootstrapState state)
     {
-        String req = "INSERT INTO system.%s (key, bootstrapped) VALUES ('%s', '%b')";
-        processInternal(String.format(req, LOCAL_CF, LOCAL_KEY, getBootstrapState()));
+        String req = "INSERT INTO system.%s (key, bootstrapped) VALUES ('%s', '%s')";
+        processInternal(String.format(req, LOCAL_CF, LOCAL_KEY, state.name()));
         forceBlockingFlush(LOCAL_CF);
     }
 
