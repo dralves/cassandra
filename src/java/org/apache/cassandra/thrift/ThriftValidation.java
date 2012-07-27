@@ -29,15 +29,12 @@ import org.apache.cassandra.db.filter.IFilter;
 import org.apache.cassandra.db.filter.NamesQueryFilter;
 import org.apache.cassandra.db.filter.SliceQueryFilter;
 import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.db.marshal.AsciiType;
 import org.apache.cassandra.db.marshal.MarshalException;
-import org.apache.cassandra.db.marshal.TypeParser;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.RandomPartitioner;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.locator.*;
 import org.apache.cassandra.service.StorageService;
-import org.apache.cassandra.io.compress.CompressionParameters;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 
@@ -441,13 +438,13 @@ public class ThriftValidation
                                                             (isSubColumn ? metadata.subcolumnComparator : metadata.comparator).getString(column.name)));
         }
 
-        // Indexed column values cannot be larger than 64K.  See CASSANDRA-3057 for more details
-        if (columnDef != null && columnDef.getIndexType() != null && column.value.remaining() > FBUtilities.MAX_UNSIGNED_SHORT)
-            throw new InvalidRequestException(String.format("Can't index column value of size %d for index %s in CF %s of KS %s",
-                                                            column.value.remaining(),
-                                                            columnDef.getIndexName(),
-                                                            metadata.cfName,
-                                                            metadata.ksName));
+        // Indexed column values cannot be larger than 64K.  See CASSANDRA-3057/4240 for more details       
+        if (!Table.open(metadata.ksName).getColumnFamilyStore(metadata.cfName).indexManager.validate(column))
+                    throw new InvalidRequestException(String.format("Can't index column value of size %d for index %s in CF %s of KS %s",
+                                                                     column.value.remaining(),
+                                                                     columnDef.getIndexName(),
+                                                                     metadata.cfName,
+                                                                     metadata.ksName));
     }
 
     /**

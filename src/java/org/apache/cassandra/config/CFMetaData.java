@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.lang.reflect.Constructor;
 import java.lang.reflect.InvocationTargetException;
 import java.nio.ByteBuffer;
-import java.security.MessageDigest;
 import java.util.*;
 
 import com.google.common.collect.MapDifference;
@@ -34,7 +33,6 @@ import org.apache.commons.lang.builder.ToStringBuilder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.antlr.runtime.RecognitionException;
 import org.apache.cassandra.cql3.CFDefinition;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.UntypedResultSet;
@@ -166,7 +164,7 @@ public final class CFMetaData
                                                          + "token_bytes blob,"
                                                          + "cluster_name text,"
                                                          + "gossip_generation int,"
-                                                         + "bootstrapped boolean,"
+                                                         + "bootstrapped text,"
                                                          + "ring_id uuid,"
                                                          + "release_version text,"
                                                          + "thrift_version text,"

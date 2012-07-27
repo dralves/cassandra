@@ -229,8 +229,23 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
         if (loadSSTables)
         {
-            Directories.SSTableLister sstables = directories.sstableLister().skipCompacted(true).skipTemporary(true);
-            data.addInitialSSTables(SSTableReader.batchOpen(sstables.list().entrySet(), data, metadata, this.partitioner));
+            Directories.SSTableLister sstableFiles = directories.sstableLister().skipTemporary(true);
+            Collection<SSTableReader> sstables = SSTableReader.batchOpen(sstableFiles.list().entrySet(), data, metadata, this.partitioner);
+
+            // Filter non-compacted sstables, remove compacted ones
+            Set<Integer> compactedSSTables = new HashSet<Integer>();
+            for (SSTableReader sstable : sstables)
+                compactedSSTables.addAll(sstable.getAncestors());
+
+            Set<SSTableReader> liveSSTables = new HashSet<SSTableReader>();
+            for (SSTableReader sstable : sstables)
+            {
+                if (compactedSSTables.contains(sstable.descriptor.generation))
+                    sstable.releaseReference(); // this amount to deleting the sstable
+                else
+                    liveSSTables.add(sstable);
+            }
+            data.addInitialSSTables(liveSSTables);
         }
 
         if (caching == Caching.ALL || caching == Caching.KEYS_ONLY)
@@ -451,7 +466,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             currentDescriptors.add(sstable.descriptor);
         Set<SSTableReader> newSSTables = new HashSet<SSTableReader>();
 
-        Directories.SSTableLister lister = directories.sstableLister().skipCompacted(true).skipTemporary(true);
+        Directories.SSTableLister lister = directories.sstableLister().skipTemporary(true);
         for (Map.Entry<Descriptor, Set<Component>> entry : lister.list().entrySet())
         {
             Descriptor descriptor = entry.getKey();
@@ -478,7 +493,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             SSTableReader reader;
             try
             {
-                reader = SSTableReader.open(newDescriptor, entry.getValue(), data, metadata, partitioner);
+                reader = SSTableReader.open(newDescriptor, entry.getValue(), metadata, partitioner);
             }
             catch (IOException e)
             {
@@ -1833,6 +1848,18 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         return compactionStrategy;
     }
 
+    public void setCompactionThresholds(int minThreshold, int maxThreshold)
+    {
+        validateCompactionThresholds(minThreshold, maxThreshold);
+
+        minCompactionThreshold.set(minThreshold);
+        maxCompactionThreshold.set(maxThreshold);
+
+        // this is called as part of CompactionStrategy constructor; avoid circular dependency by checking for null
+        if (compactionStrategy != null)
+            CompactionManager.instance.submitBackground(this);
+    }
+
     public int getMinimumCompactionThreshold()
     {
         return minCompactionThreshold.value();
@@ -1840,14 +1867,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     public void setMinimumCompactionThreshold(int minCompactionThreshold)
     {
-        if ((minCompactionThreshold > this.maxCompactionThreshold.value()) && this.maxCompactionThreshold.value() != 0)
-            throw new RuntimeException("The min_compaction_threshold cannot be larger than the max.");
-
+        validateCompactionThresholds(minCompactionThreshold, maxCompactionThreshold.value());
         this.minCompactionThreshold.set(minCompactionThreshold);
-
-        // this is called as part of CompactionStrategy constructor; avoid circular dependency by checking for null
-        if (compactionStrategy != null)
-            CompactionManager.instance.submitBackground(this);
     }
 
     public int getMaximumCompactionThreshold()
@@ -1857,14 +1878,15 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     public void setMaximumCompactionThreshold(int maxCompactionThreshold)
     {
-        if (maxCompactionThreshold > 0 && maxCompactionThreshold < this.minCompactionThreshold.value())
-            throw new RuntimeException("The max_compaction_threshold cannot be smaller than the min.");
-
+        validateCompactionThresholds(minCompactionThreshold.value(), maxCompactionThreshold);
         this.maxCompactionThreshold.set(maxCompactionThreshold);
+    }
 
-        // this is called as part of CompactionStrategy constructor; avoid circular dependency by checking for null
-        if (compactionStrategy != null)
-            CompactionManager.instance.submitBackground(this);
+    private void validateCompactionThresholds(int minThreshold, int maxThreshold)
+    {
+        if (minThreshold > maxThreshold && maxThreshold != 0)
+            throw new RuntimeException(String.format("The min_compaction_threshold cannot be larger than the max_compaction_threshold. " +
+                                                     "Min is '%d', Max is '%d'.", minThreshold, maxThreshold));
     }
 
     public boolean isCompactionDisabled()
@@ -1944,9 +1966,18 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         ReplayPosition rp = ReplayPosition.getReplayPosition(sstables);
         SSTableMetadata.Collector sstableMetadataCollector = SSTableMetadata.createCollector().replayPosition(rp);
 
-        // get the max timestamp of the precompacted sstables
+        // Get the max timestamp of the precompacted sstables
+        // and adds generation of live ancestors
         for (SSTableReader sstable : sstables)
+        {
             sstableMetadataCollector.updateMaxTimestamp(sstable.getMaxTimestamp());
+            sstableMetadataCollector.addAncestor(sstable.descriptor.generation);
+            for (Integer i : sstable.getAncestors())
+            {
+                if (new File(sstable.descriptor.withGeneration(i).filenameFor(Component.DATA)).exists())
+                    sstableMetadataCollector.addAncestor(i);
+            }
+        }
 
         return new SSTableWriter(getTempSSTablePath(location), estimatedRows, metadata, partitioner, sstableMetadataCollector);
     }
