@@ -872,7 +872,7 @@ public class StorageProxy implements StorageProxyMBean
             List<ReadCallback<RangeSliceReply, Iterable<Row>>> scanHandlers = new ArrayList<ReadCallback<RangeSliceReply, Iterable<Row>>>(concurrencyFactor);
             
             int parallelHandlers = concurrencyFactor;
-            
+
             for (AbstractBounds<RowPosition> range : ranges)
             {
                 RangeSliceCommand nodeCmd = new RangeSliceCommand(command.keyspace,
@@ -907,7 +907,7 @@ public class StorageProxy implements StorageProxyMBean
                     {
                         throw new AssertionError(e);
                     }
-                    
+
                     parallelHandlers--;
                 }
                 else
