@@ -17,6 +17,10 @@
  */
 package org.apache.cassandra.cli;
 
+import static junit.framework.Assert.assertEquals;
+import static org.apache.cassandra.service.TraceSessionContext.EVENT_TYPE;
+import static org.apache.cassandra.service.TraceSessionContext.SESSION_TYPE;
+
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -29,19 +33,24 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Joiner;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Collections2;
+import com.google.common.collect.Iterables;
 
 import org.apache.commons.lang.StringUtils;
+
+import org.apache.cassandra.db.IColumn;
 
 import org.antlr.runtime.tree.Tree;
 import org.apache.cassandra.auth.IAuthenticator;
@@ -49,6 +58,7 @@ import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.db.ColumnFamilyStoreMBean;
 import org.apache.cassandra.db.compaction.CompactionManagerMBean;
 import org.apache.cassandra.db.compaction.OperationType;
+import org.apache.cassandra.db.marshal.AbstractCompositeType.CompositeComponent;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.AsciiType;
 import org.apache.cassandra.db.marshal.BytesType;
@@ -64,6 +74,7 @@ import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.locator.SimpleSnitch;
 import org.apache.cassandra.service.StorageProxy;
+import org.apache.cassandra.service.TraceSessionContext;
 import org.apache.cassandra.thrift.AuthenticationException;
 import org.apache.cassandra.thrift.AuthenticationRequest;
 import org.apache.cassandra.thrift.AuthorizationException;
@@ -315,6 +326,10 @@ public class CliClient
                     break;
                 case CliParser.NODE_TRACE_NEXT_QUERY:
                     executeTraceNextQuery();
+                    break;
+                case CliParser.NODE_EXPLAIN_TRACE_SESSION:
+                    executeExplainTraceSession(tree.getChild(0).getText());
+                    break;
                 case CliParser.NODE_ENABLE_TRACING:
                     executeEnableTracing(tree);
                     break;
@@ -2054,6 +2069,91 @@ public class CliClient
         UUID sessionId = TimeUUIDType.instance.compose(thriftClient.trace_next_query());
         
         sessionState.out.println("Will trace next query. Session ID: " + sessionId.toString());
+    }
+    
+    private void executeExplainTraceSession(String text) throws TException, UnavailableException, TimedOutException, CharacterCodingException
+    {
+        System.out.println("Session Id: " + text);
+        
+        if (!CliMain.isConnected())
+            return;
+
+        UUID sessionId = TimeUUIDType.instance.compose(ByteBufferUtil.bytes(text));
+        ByteBuffer sessionIdAsBB = TimeUUIDType.instance.decompose(sessionId);
+        
+        try
+        { 
+            ColumnParent sessions = new ColumnParent(TraceSessionContext.SESSIONS_TABLE);
+            ColumnParent events = new ColumnParent(TraceSessionContext.SESSIONS_TABLE);
+
+            SliceRange range = new SliceRange(ByteBufferUtil.EMPTY_BYTE_BUFFER, ByteBufferUtil.EMPTY_BYTE_BUFFER,
+                    false, Integer.MAX_VALUE);
+            SlicePredicate predicate = new SlicePredicate().setColumn_names(null).setSlice_range(range);
+
+            // get the session row
+            List<ColumnOrSuperColumn> sessionCols = thriftClient.get_slice(sessionIdAsBB, sessions, predicate,
+                    ConsistencyLevel.QUORUM);
+
+            // get all the events
+            List<ColumnOrSuperColumn> eventCols = thriftClient.get_slice(sessionIdAsBB, events, predicate,
+                    ConsistencyLevel.QUORUM);
+
+            Column requestColumn = Iterables.get(sessionCols, 0).getColumn();
+            List<CompositeComponent> components = SESSION_TYPE.deconstruct(requestColumn.name);
+            InetAddress address = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
+            String request = ByteBufferUtil.string(requestColumn.value);
+
+            Column startColumn = Iterables.get(sessionCols, 1).getColumn();
+            components = SESSION_TYPE.deconstruct(startColumn.name);
+            address = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
+            long startedAt = ByteBufferUtil.toLong(startColumn.value);
+            
+            System.out.println("Trace session: " + text);
+            System.out.println("Coordinator: " + address.toString());
+            System.out.println("StartedAt: " + new Date(startedAt));
+            System.out.println("Request: " + request);
+
+            for (ColumnOrSuperColumn traceEvent : eventCols)
+            {
+                Column durationColumn = Iterables.get(eventCols, 0).getColumn();
+                components = EVENT_TYPE.deconstruct(durationColumn.name);
+                UUID decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
+                long duration = ByteBufferUtil.toLong(durationColumn.value);
+
+                Column eventColumn = Iterables.get(eventCols, 1).getColumn();
+                components = EVENT_TYPE.deconstruct(eventColumn.name);
+                String event = ByteBufferUtil.string(eventColumn.value);
+
+                Column happenedAtColumn = Iterables.get(eventCols, 2).getColumn();
+                components = EVENT_TYPE.deconstruct(happenedAtColumn.name);
+                long happenedAt = ByteBufferUtil.toLong(happenedAtColumn.value);
+
+                Column sourceColumn = Iterables.get(eventCols, 3).getColumn();
+                components = EVENT_TYPE.deconstruct(sourceColumn.name);
+                InetAddress source = InetAddress.getByAddress(ByteBufferUtil.getArray(sourceColumn.value));
+                
+                System.out.println("------------");
+                System.out.println("Trace Event: "+decodedEventId.toString());
+                System.out.println("Source: "+source);
+                System.out.println("Event Desc: "+event);
+                System.out.println("Happened At: "+happenedAt);
+                System.out.println("Duration: "+TimeUnit.MILLISECONDS.convert(duration, TimeUnit.NANOSECONDS));
+            }
+
+        }
+        catch (InvalidRequestException e)
+        {
+            sessionState.out.println("Invalid request: " + e);
+        }
+        catch (UnknownHostException e)
+        {
+            sessionState.out.println("Invalid request: " + e);
+        }
+        catch (Throwable t)
+        {
+            sessionState.out.println("Invalid request: " + t);
+        }
+
     }
 
     private void executeEnableTracing(final Tree statement) throws TException

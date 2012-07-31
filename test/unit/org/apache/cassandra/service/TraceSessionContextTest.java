@@ -27,7 +27,9 @@ import static junit.framework.Assert.assertNotNull;
 import static junit.framework.Assert.assertSame;
 import static junit.framework.Assert.assertTrue;
 import static org.apache.cassandra.service.TraceSessionContext.EVENTS_TABLE;
+import static org.apache.cassandra.service.TraceSessionContext.EVENT_TYPE;
 import static org.apache.cassandra.service.TraceSessionContext.SESSIONS_TABLE;
+import static org.apache.cassandra.service.TraceSessionContext.SESSION_TYPE;
 import static org.apache.cassandra.service.TraceSessionContext.TRACE_KEYSPACE;
 import static org.apache.cassandra.service.TraceSessionContext.traceCtx;
 
@@ -45,7 +47,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.base.Throwables;
-import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 
@@ -62,11 +63,6 @@ import org.apache.cassandra.db.Table;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.db.filter.QueryPath;
 import org.apache.cassandra.db.marshal.AbstractCompositeType.CompositeComponent;
-import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.db.marshal.CompositeType;
-import org.apache.cassandra.db.marshal.InetAddressType;
-import org.apache.cassandra.db.marshal.TimeUUIDType;
-import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.net.IVerbHandler;
 import org.apache.cassandra.net.MessageDeliveryTask;
 import org.apache.cassandra.net.MessageIn;
@@ -78,13 +74,6 @@ import org.apache.cassandra.utils.UUIDGen;
 
 public class TraceSessionContextTest extends SchemaLoader
 {
-    public static final CompositeType SESSION_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(InetAddressType.instance, UTF8Type.instance
-            ));
-
-    public static final CompositeType EVENT_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(InetAddressType.instance, TimeUUIDType.instance, UTF8Type.instance
-            ));
 
     private static class LocalTraceSessionContext extends TraceSessionContext
     {
