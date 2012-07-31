@@ -396,7 +396,7 @@ traceNextQuery
 
 explainTraceSession
     : EXPLAIN TRACE SESSION traceSessionId
-        -> ^(NODE_EXPLAIN_TRACE_SESSION)
+        -> ^(NODE_EXPLAIN_TRACE_SESSION traceSessionId)
     ;
 
 enableTracing
@@ -567,7 +567,6 @@ ip_address
     : IP_ADDRESS 
         -> ^(NODE_ID_LIST IP_ADDRESS)
     ;
-
 
 port    
     : IntegerPositiveLiteral

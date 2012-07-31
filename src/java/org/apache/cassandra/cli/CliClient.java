@@ -17,7 +17,6 @@
  */
 package org.apache.cassandra.cli;
 
-import static junit.framework.Assert.assertEquals;
 import static org.apache.cassandra.service.TraceSessionContext.EVENT_TYPE;
 import static org.apache.cassandra.service.TraceSessionContext.SESSION_TYPE;
 
@@ -49,8 +48,6 @@ import com.google.common.collect.Collections2;
 import com.google.common.collect.Iterables;
 
 import org.apache.commons.lang.StringUtils;
-
-import org.apache.cassandra.db.IColumn;
 
 import org.antlr.runtime.tree.Tree;
 import org.apache.cassandra.auth.IAuthenticator;
@@ -2071,18 +2068,20 @@ public class CliClient
         sessionState.out.println("Will trace next query. Session ID: " + sessionId.toString());
     }
     
-    private void executeExplainTraceSession(String text) throws TException, UnavailableException, TimedOutException, CharacterCodingException
+    private void executeExplainTraceSession(String text) throws TException, UnavailableException, TimedOutException,
+            CharacterCodingException
     {
-        System.out.println("Session Id: " + text);
-        
+
         if (!CliMain.isConnected())
             return;
 
-        UUID sessionId = TimeUUIDType.instance.compose(ByteBufferUtil.bytes(text));
-        ByteBuffer sessionIdAsBB = TimeUUIDType.instance.decompose(sessionId);
-        
         try
-        { 
+        {
+            thriftClient.set_keyspace(TraceSessionContext.TRACE_KEYSPACE);
+            
+            UUID sessionId =  UUID.fromString(text);
+            ByteBuffer sessionIdAsBB = TimeUUIDType.instance.decompose(sessionId);
+
             ColumnParent sessions = new ColumnParent(TraceSessionContext.SESSIONS_TABLE);
             ColumnParent events = new ColumnParent(TraceSessionContext.SESSIONS_TABLE);
 
@@ -2107,7 +2106,7 @@ public class CliClient
             components = SESSION_TYPE.deconstruct(startColumn.name);
             address = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
             long startedAt = ByteBufferUtil.toLong(startColumn.value);
-            
+
             System.out.println("Trace session: " + text);
             System.out.println("Coordinator: " + address.toString());
             System.out.println("StartedAt: " + new Date(startedAt));
@@ -2131,13 +2130,13 @@ public class CliClient
                 Column sourceColumn = Iterables.get(eventCols, 3).getColumn();
                 components = EVENT_TYPE.deconstruct(sourceColumn.name);
                 InetAddress source = InetAddress.getByAddress(ByteBufferUtil.getArray(sourceColumn.value));
-                
+
                 System.out.println("------------");
-                System.out.println("Trace Event: "+decodedEventId.toString());
-                System.out.println("Source: "+source);
-                System.out.println("Event Desc: "+event);
-                System.out.println("Happened At: "+happenedAt);
-                System.out.println("Duration: "+TimeUnit.MILLISECONDS.convert(duration, TimeUnit.NANOSECONDS));
+                System.out.println("Trace Event: " + decodedEventId.toString());
+                System.out.println("Source: " + source);
+                System.out.println("Event Desc: " + event);
+                System.out.println("Happened At: " + happenedAt);
+                System.out.println("Duration: " + TimeUnit.MILLISECONDS.convert(duration, TimeUnit.NANOSECONDS));
             }
 
         }
@@ -2149,9 +2148,18 @@ public class CliClient
         {
             sessionState.out.println("Invalid request: " + e);
         }
-        catch (Throwable t)
+        finally
         {
-            sessionState.out.println("Invalid request: " + t);
+            try
+            {
+                if (this.keySpace != null)
+                {
+                    thriftClient.set_keyspace(this.keySpace);
+                }
+            }
+            catch (InvalidRequestException e)
+            {
+            }
         }
 
     }
