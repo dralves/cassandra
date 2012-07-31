@@ -133,7 +133,7 @@ public class TraceSessionContext
             "  " + EVENT_ID + "        timeuuid," +
             "  " + SOURCE + "          inet," +
             "  " + EVENT + "           text," +
-            "  " + DURATION + "        int," +
+            "  " + DURATION + "        bigint," +
             "  " + HAPPENED + "        timestamp," +
             "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + ", " + EVENT_ID + "));");
 

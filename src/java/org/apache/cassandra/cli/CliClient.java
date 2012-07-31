@@ -2112,7 +2112,6 @@ public class CliClient
             System.out.println("StartedAt: " + startedAt);
             System.out.println("Request: " + request);
             
-            System.out.println(eventCols.size());
             assert eventCols.size() % 4 == 0;
             
             for (int i = 0; i < eventCols.size(); i += 4)
