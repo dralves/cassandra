@@ -2083,7 +2083,7 @@ public class CliClient
             ByteBuffer sessionIdAsBB = TimeUUIDType.instance.decompose(sessionId);
 
             ColumnParent sessions = new ColumnParent(TraceSessionContext.SESSIONS_TABLE);
-            ColumnParent events = new ColumnParent(TraceSessionContext.SESSIONS_TABLE);
+            ColumnParent events = new ColumnParent(TraceSessionContext.EVENTS_TABLE);
 
             SliceRange range = new SliceRange(ByteBufferUtil.EMPTY_BYTE_BUFFER, ByteBufferUtil.EMPTY_BYTE_BUFFER,
                     false, Integer.MAX_VALUE);
@@ -2109,25 +2109,28 @@ public class CliClient
 
             System.out.println("Trace session: " + text);
             System.out.println("Coordinator: " + address.toString());
-            System.out.println("StartedAt: " + new Date(startedAt));
+            System.out.println("StartedAt: " + startedAt);
             System.out.println("Request: " + request);
-
-            for (ColumnOrSuperColumn traceEvent : eventCols)
+            
+            System.out.println(eventCols.size());
+            assert eventCols.size() % 4 == 0;
+            
+            for (int i = 0; i < eventCols.size(); i += 4)
             {
-                Column durationColumn = Iterables.get(eventCols, 0).getColumn();
+                Column durationColumn = Iterables.get(eventCols, i).getColumn();
                 components = EVENT_TYPE.deconstruct(durationColumn.name);
                 UUID decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
                 long duration = ByteBufferUtil.toLong(durationColumn.value);
 
-                Column eventColumn = Iterables.get(eventCols, 1).getColumn();
+                Column eventColumn = Iterables.get(eventCols, i + 1).getColumn();
                 components = EVENT_TYPE.deconstruct(eventColumn.name);
                 String event = ByteBufferUtil.string(eventColumn.value);
 
-                Column happenedAtColumn = Iterables.get(eventCols, 2).getColumn();
+                Column happenedAtColumn = Iterables.get(eventCols, i + 2).getColumn();
                 components = EVENT_TYPE.deconstruct(happenedAtColumn.name);
                 long happenedAt = ByteBufferUtil.toLong(happenedAtColumn.value);
 
-                Column sourceColumn = Iterables.get(eventCols, 3).getColumn();
+                Column sourceColumn = Iterables.get(eventCols, i + 3).getColumn();
                 components = EVENT_TYPE.deconstruct(sourceColumn.name);
                 InetAddress source = InetAddress.getByAddress(ByteBufferUtil.getArray(sourceColumn.value));
 
@@ -2138,7 +2141,6 @@ public class CliClient
                 System.out.println("Happened At: " + happenedAt);
                 System.out.println("Duration: " + TimeUnit.MILLISECONDS.convert(duration, TimeUnit.NANOSECONDS));
             }
-
         }
         catch (InvalidRequestException e)
         {
