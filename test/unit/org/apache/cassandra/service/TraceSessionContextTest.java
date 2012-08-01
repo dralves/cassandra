@@ -83,10 +83,12 @@ public class TraceSessionContextTest extends SchemaLoader
          * testing.
          */
         @Override
-        protected void mutate(RowMutation mutation)
+        protected void store(final byte[] key, final ColumnFamily family)
         {
             try
             {
+                RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBuffer.wrap(key));
+                mutation.add(family);
                 mutation.apply();
             }
             catch (IOException e)

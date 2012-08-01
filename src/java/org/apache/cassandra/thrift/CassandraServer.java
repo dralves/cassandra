@@ -1499,7 +1499,7 @@ public class CassandraServer implements Cassandra.Iface
     
     private void startSessionIfRequested(String sessionName)
     {
-        if (state().isTracingEnabled())
+        if (state().traceNextQuery())
         {
             if (state().isPreparedTracingSession())
                 traceCtx().startPreparedSession(state().getPreparedSessionIdAndReset(), sessionName);

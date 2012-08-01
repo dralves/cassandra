@@ -17,14 +17,18 @@
  */
 package org.apache.cassandra.service;
 
-import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Random;
+import java.util.Set;
+import java.util.UUID;
 
 import org.apache.commons.lang.StringUtils;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
-import com.sun.org.apache.bcel.internal.generic.RETURN;
 
 import org.apache.cassandra.auth.AuthenticatedUser;
 import org.apache.cassandra.auth.Permission;
@@ -38,12 +42,11 @@ import org.apache.cassandra.thrift.InvalidRequestException;
 import org.apache.cassandra.utils.SemanticVersion;
 
 /**
- * A container for per-client, thread-local state that Avro/Thrift threads must hold.
- * TODO: Kill thrift exceptions
+ * A container for per-client, thread-local state that Avro/Thrift threads must hold. TODO: Kill thrift exceptions
  */
 public class ClientState
 {
-    private static final int MAX_CACHE_PREPARED = 10000;    // Enough to keep buggy clients from OOM'ing us
+    private static final int MAX_CACHE_PREPARED = 10000; // Enough to keep buggy clients from OOM'ing us
     private static final Logger logger = LoggerFactory.getLogger(ClientState.class);
     public static final SemanticVersion DEFAULT_CQL_VERSION = org.apache.cassandra.cql.QueryProcessor.CQL_VERSION;
 
@@ -51,22 +54,29 @@ public class ClientState
     private AuthenticatedUser user;
     private String keyspace;
     private double traceProbability = 0.0;
-    private int traceNumber = 0;
+    private int maxTracedSessions = 0;
+    private int currentTracedSessions = 0;
     private UUID preparedTracingSession;
+    private Random random = new Random(1234L);
 
     // Reusable array for authorization
     private final List<Object> resource = new ArrayList<Object>();
     private SemanticVersion cqlVersion = DEFAULT_CQL_VERSION;
 
     // An LRU map of prepared statements
-    private final Map<Integer, CQLStatement> prepared = new LinkedHashMap<Integer, CQLStatement>(16, 0.75f, true) {
-        protected boolean removeEldestEntry(Map.Entry<Integer, CQLStatement> eldest) {
+    private final Map<Integer, CQLStatement> prepared = new LinkedHashMap<Integer, CQLStatement>(16, 0.75f, true)
+    {
+        protected boolean removeEldestEntry(Map.Entry<Integer, CQLStatement> eldest)
+        {
             return size() > MAX_CACHE_PREPARED;
         }
     };
 
-    private final Map<Integer, org.apache.cassandra.cql3.CQLStatement> cql3Prepared = new LinkedHashMap<Integer, org.apache.cassandra.cql3.CQLStatement>(16, 0.75f, true) {
-        protected boolean removeEldestEntry(Map.Entry<Integer, org.apache.cassandra.cql3.CQLStatement> eldest) {
+    private final Map<Integer, org.apache.cassandra.cql3.CQLStatement> cql3Prepared = new LinkedHashMap<Integer, org.apache.cassandra.cql3.CQLStatement>(
+            16, 0.75f, true)
+    {
+        protected boolean removeEldestEntry(Map.Entry<Integer, org.apache.cassandra.cql3.CQLStatement> eldest)
+        {
             return size() > MAX_CACHE_PREPARED;
         }
     };
@@ -110,42 +120,53 @@ public class ClientState
         keyspace = ks;
     }
 
-    public boolean isTracingEnabled()
+    public boolean traceNextQuery()
     {
-        return preparedTracingSession != null || (traceProbability > 0 && traceNumber > 0);
+        if (preparedTracingSession != null)
+        {
+            return true;
+        }
+
+        if (random.nextDouble() < traceProbability
+                && ((currentTracedSessions < maxTracedSessions) || (maxTracedSessions == -1)))
+        {
+            currentTracedSessions++;
+            return true;
+        }
+        return false;
     }
 
     public void enableTracing(double probability, int number)
     {
         this.traceProbability = probability;
-        this.traceNumber = number;
-        if (traceProbability > 0.0 && traceNumber > 0)
+        this.maxTracedSessions = number;
+        if (traceProbability > 0.0 && maxTracedSessions > 0)
         {
             if (logger.isDebugEnabled())
                 logger.debug("tracing enabled. Tracing a total of: " + number + " queries with a probability of "
                         + probability);
         }
     }
-    
+
     public void disableTracing()
     {
         this.traceProbability = 0.0;
-        this.traceNumber = 0;
+        this.maxTracedSessions = 0;
         this.preparedTracingSession = null;
     }
-    
+
     public void prepareTracingSession(UUID sessionId)
     {
         this.preparedTracingSession = sessionId;
     }
-    
+
     public UUID getPreparedSessionIdAndReset()
     {
         UUID preparedTracingSession = this.preparedTracingSession;
         this.preparedTracingSession = null;
         return preparedTracingSession;
     }
-    
+
     public boolean isPreparedTracingSession()
     {
         return this.preparedTracingSession != null;
@@ -153,9 +174,10 @@ public class ClientState
 
     public String getSchedulingValue()
     {
-        switch(DatabaseDescriptor.getRequestSchedulerId())
+        switch (DatabaseDescriptor.getRequestSchedulerId())
         {
-            case keyspace: return keyspace;
+        case keyspace:
+            return keyspace;
         }
         return "default";
     }
@@ -163,7 +185,7 @@ public class ClientState
     /**
      * Attempts to login this client with the given credentials map.
      */
-    public void login(Map<? extends CharSequence,? extends CharSequence> credentials) throws AuthenticationException
+    public void login(Map<? extends CharSequence, ? extends CharSequence> credentials) throws AuthenticationException
     {
         AuthenticatedUser user = DatabaseDescriptor.getAuthenticator().authenticate(credentials);
         if (logger.isDebugEnabled())
@@ -189,7 +211,7 @@ public class ClientState
     {
         user = DatabaseDescriptor.getAuthenticator().defaultUser();
         keyspace = null;
-        traceNumber = 0;
+        maxTracedSessions = 0;
         traceProbability = 0;
         preparedTracingSession = null;
         resourceClear();
@@ -216,8 +238,7 @@ public class ClientState
     }
 
     /**
-     * Confirms that the client thread has the given Permission for the ColumnFamily list of
-     * the provided keyspace.
+     * Confirms that the client thread has the given Permission for the ColumnFamily list of the provided keyspace.
      */
     public void hasColumnFamilySchemaAccess(String keyspace, Permission perm) throws InvalidRequestException
     {
@@ -236,15 +257,16 @@ public class ClientState
     }
 
     /**
-     * Confirms that the client thread has the given Permission in the context of the given
-     * ColumnFamily and the current keyspace.
+     * Confirms that the client thread has the given Permission in the context of the given ColumnFamily and the current
+     * keyspace.
      */
     public void hasColumnFamilyAccess(String columnFamily, Permission perm) throws InvalidRequestException
     {
         hasColumnFamilyAccess(keyspace, columnFamily, perm);
     }
 
-    public void hasColumnFamilyAccess(String keyspace, String columnFamily, Permission perm) throws InvalidRequestException
+    public void hasColumnFamilyAccess(String keyspace, String columnFamily, Permission perm)
+            throws InvalidRequestException
     {
         validateLogin();
         validateKeyspace(keyspace);
@@ -274,20 +296,21 @@ public class ClientState
             throw new InvalidRequestException("You have not set a keyspace for this session");
     }
 
-    private static void hasAccess(AuthenticatedUser user, Set<Permission> perms, Permission perm, List<Object> resource) throws InvalidRequestException
+    private static void hasAccess(AuthenticatedUser user, Set<Permission> perms, Permission perm, List<Object> resource)
+            throws InvalidRequestException
     {
         if (perms.contains(perm))
             return;
         throw new InvalidRequestException(String.format("%s does not have permission %s for %s",
-                                                        user,
-                                                        perm,
-                                                        Resources.toString(resource)));
+                user,
+                perm,
+                Resources.toString(resource)));
     }
 
     /**
-     * This clock guarantees that updates from a given client will be ordered in the sequence seen,
-     * even if multiple updates happen in the same millisecond.  This can be useful when a client
-     * wants to perform multiple updates to a single column.
+     * This clock guarantees that updates from a given client will be ordered in the sequence seen, even if multiple
+     * updates happen in the same millisecond. This can be useful when a client wants to perform multiple updates to a
+     * single column.
      */
     public long getTimestamp()
     {
@@ -316,9 +339,10 @@ public class ClientState
         else if (version.isSupportedBy(cql3))
             cqlVersion = cql3;
         else
-            throw new InvalidRequestException(String.format("Provided version %s is not supported by this server (supported: %s)",
-                                                            version,
-                                                            StringUtils.join(getCQLSupportedVersion(), ", ")));
+            throw new InvalidRequestException(String.format(
+                    "Provided version %s is not supported by this server (supported: %s)",
+                    version,
+                    StringUtils.join(getCQLSupportedVersion(), ", ")));
     }
 
     public SemanticVersion getCQLVersion()
@@ -331,7 +355,7 @@ public class ClientState
         SemanticVersion cql = org.apache.cassandra.cql.QueryProcessor.CQL_VERSION;
         SemanticVersion cql3 = org.apache.cassandra.cql3.QueryProcessor.CQL_VERSION;
 
-        return new SemanticVersion[]{ cql, cql3 };
+        return new SemanticVersion[] { cql, cql3 };
     }
 
 }

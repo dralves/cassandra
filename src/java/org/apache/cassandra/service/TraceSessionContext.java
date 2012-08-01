@@ -31,6 +31,7 @@ import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.UUID;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
 
 import com.google.common.annotations.VisibleForTesting;
@@ -44,11 +45,8 @@ import com.google.common.collect.Iterables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.db.marshal.CompositeType;
-import org.apache.cassandra.db.marshal.InetAddressType;
-import org.apache.cassandra.db.marshal.UTF8Type;
-
+import org.apache.cassandra.concurrent.Stage;
+import org.apache.cassandra.concurrent.StageManager;
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.config.KSMetaData;
@@ -61,14 +59,16 @@ import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.db.ExpiringColumn;
 import org.apache.cassandra.db.RowMutation;
+import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.CompositeType;
+import org.apache.cassandra.db.marshal.InetAddressType;
 import org.apache.cassandra.db.marshal.TimeUUIDType;
+import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.thrift.ConsistencyLevel;
 import org.apache.cassandra.thrift.InvalidRequestException;
-import org.apache.cassandra.thrift.TimedOutException;
-import org.apache.cassandra.thrift.UnavailableException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
@@ -110,7 +110,7 @@ public class TraceSessionContext
     public static final ByteBuffer SOURCE_BB = ByteBufferUtil.bytes(SOURCE);
 
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
-    
+
     public static final CompositeType SESSION_TYPE = CompositeType.getInstance(ImmutableList
             .<AbstractType<?>> of(InetAddressType.instance, UTF8Type.instance
             ));
@@ -416,19 +416,16 @@ public class TraceSessionContext
      */
     private void newSession(byte[] sessionId, InetAddress coordinator, String request, long startedAt)
     {
-        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBuffer.wrap(sessionId));
         ColumnFamily family = ColumnFamily.create(sessionsCfm);
         ByteBuffer coordinatorAsBb = ByteBuffer.wrap(coordinator.getAddress());
         family.addColumn(column(buildName(sessionsCfm, coordinatorAsBb, SESSION_START_BB), startedAt));
         family.addColumn(column(buildName(sessionsCfm, coordinatorAsBb, SESSION_REQUEST_BB), request));
-        mutation.add(family);
-        mutate(mutation);
+        store(sessionId, family);
     }
 
     public void trace(byte[] sessionId, InetAddress coordinator, byte[] eventId, InetAddress source,
             String traceEvent, long duration, long happenedAt)
     {
-        RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBuffer.wrap(sessionId));
         ColumnFamily family = ColumnFamily.create(eventsCfm);
         ByteBuffer coordinatorAsBB = bytes(coordinator);
         ByteBuffer eventIdAsBB = ByteBuffer.wrap(eventId);
@@ -436,8 +433,7 @@ public class TraceSessionContext
         family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, EVENT_BB), traceEvent));
         family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, DURATION_BB), duration));
         family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, HAPPENED_BB), happenedAt));
-        mutation.add(family);
-        mutate(mutation);
+        store(sessionId, family);
     }
 
     private ByteBuffer buildName(CFMetaData meta, ByteBuffer... args)
@@ -474,23 +470,36 @@ public class TraceSessionContext
      * Separated and made visible so that we can override the actual storage for testing purposes.
      */
     @VisibleForTesting
-    protected void mutate(RowMutation mutation)
+    protected void store(final byte[] key, final ColumnFamily family)
     {
         try
         {
-            StorageProxy.mutate(Arrays.asList(mutation), ConsistencyLevel.ANY);
+            StageManager.getStage(Stage.TRACING).execute(new Runnable()
+            {
+                public void run()
+                {
+                    RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBuffer.wrap(key));
+                    mutation.add(family);
+                    try
+                    {
+                        StorageProxy.mutate(Arrays.asList(mutation), ConsistencyLevel.ANY);
+                    }
+                    catch (Exception e)
+                    {
+                        log(key, family, "row mutation failed", e);
+                    }
+                }
+            });
         }
-        // log but tracing errors shouldn't affect the caller
-        catch (TimedOutException e)
+        catch (RejectedExecutionException e)
         {
-            logger.error("error while storing trace event", e);
-            Throwables.propagate(e);
+            log(key, family, "trace storage rejected", e);
         }
-        catch (UnavailableException e)
-        {
-            logger.error("error while storing trace event", e);
-            Throwables.propagate(e);
-        }
+    }
+
+    private void log(byte[] key, final ColumnFamily family, String message, Throwable t)
+    {
+
     }
 
     @VisibleForTesting
