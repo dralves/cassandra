@@ -30,7 +30,6 @@ import org.apache.cassandra.db.compaction.LeveledCompactionStrategy;
 import org.apache.cassandra.db.compaction.LeveledManifest;
 import org.apache.cassandra.db.compaction.Scrubber;
 import org.apache.cassandra.io.sstable.*;
-import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.service.CassandraDaemon;
 import org.apache.cassandra.utils.OutputHandler;
 import static org.apache.cassandra.tools.BulkLoader.CmdLineOptions;
@@ -67,7 +66,7 @@ public class StandaloneScrubber
             String snapshotName = "pre-scrub-" + System.currentTimeMillis();
 
             OutputHandler handler = new OutputHandler.SystemOutput(options.verbose, options.debug);
-            Directories.SSTableLister lister = cfs.directories.sstableLister().skipCompacted(true).skipTemporary(true);
+            Directories.SSTableLister lister = cfs.directories.sstableLister().skipTemporary(true);
 
             List<SSTableReader> sstables = new ArrayList<SSTableReader>();
 
@@ -168,7 +167,7 @@ public class StandaloneScrubber
         System.out.println(String.format("Checking leveled manifest"));
         for (int i = 1; i <= manifest.getLevelCount(); ++i)
         {
-            List<SSTableReader> sstables = new ArrayList(manifest.getLevel(i));
+            List<SSTableReader> sstables = new ArrayList<SSTableReader>(manifest.getLevel(i));
             Collections.sort(sstables, SSTable.sstableComparator);
             if (sstables.isEmpty())
                 continue;

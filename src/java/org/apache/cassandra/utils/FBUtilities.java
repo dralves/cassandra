@@ -34,6 +34,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 import com.google.common.base.Joiner;
+import com.google.common.base.Throwables;
 import com.google.common.collect.AbstractIterator;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
@@ -225,19 +226,6 @@ public class FBUtilities
         }
 
         return messageDigest.digest();
-    }
-
-    public static void renameWithConfirm(String tmpFilename, String filename) throws IOException
-    {
-        if (!new File(tmpFilename).renameTo(new File(filename)))
-        {
-            throw new IOException("rename failed of " + filename);
-        }
-    }
-
-    public static void renameWithOutConfirm(String tmpFilename, String filename) throws IOException
-    {
-        new File(tmpFilename).renameTo(new File(filename));
     }
 
     @Deprecated
@@ -609,10 +597,5 @@ public class FBUtilities
                : String.format("Final buffer length %s to accommodate data size of %s (predicted %s) for %s",
                                buffer.getData().length, buffer.getLength(), size, object);
         return buffer.getData();
-    }
-
-    public static RuntimeException unchecked(Exception e)
-    {
-        return e instanceof RuntimeException ? (RuntimeException) e : new RuntimeException(e);
     }
 }

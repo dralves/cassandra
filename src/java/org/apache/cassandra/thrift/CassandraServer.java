@@ -500,6 +500,7 @@ public class CassandraServer implements Cassandra.Iface
                 ByteBuffer firstName = getName(columns.get(0));
                 int newColumns = pages == 0 || !firstName.equals(predicate.slice_range.start) ? columns.size()
                         : columns.size() - 1;
+                
                 totalCount += newColumns;
                 requestedCount -= newColumns;
                 pages++;
@@ -985,7 +986,7 @@ public class CassandraServer implements Cassandra.Iface
     {
         return StorageService.instance.describeRing(keyspace);
     }
-    
+
     public Map<String, String> describe_token_map() throws InvalidRequestException
     {
         return StorageService.instance.getTokenToEndpointMap();

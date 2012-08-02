@@ -24,29 +24,29 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.*;
 
-import org.apache.cassandra.cache.KeyCacheKey;
-import org.apache.cassandra.concurrent.DebuggableThreadPoolExecutor;
-import org.apache.cassandra.config.ColumnDefinition;
-import org.apache.cassandra.config.Schema;
-import org.apache.cassandra.db.index.keys.KeysIndex;
-import org.apache.cassandra.dht.LocalPartitioner;
-import org.apache.cassandra.io.compress.CompressedRandomAccessReader;
-import org.apache.cassandra.service.CacheService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.cache.InstrumentingCache;
+import org.apache.cassandra.cache.KeyCacheKey;
+import org.apache.cassandra.concurrent.DebuggableThreadPoolExecutor;
 import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ColumnDefinition;
 import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.commitlog.ReplayPosition;
 import org.apache.cassandra.db.filter.QueryFilter;
+import org.apache.cassandra.db.index.keys.KeysIndex;
 import org.apache.cassandra.dht.AbstractBounds;
 import org.apache.cassandra.dht.IPartitioner;
+import org.apache.cassandra.dht.LocalPartitioner;
 import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
+import org.apache.cassandra.io.compress.CompressedRandomAccessReader;
 import org.apache.cassandra.io.compress.CompressionMetadata;
 import org.apache.cassandra.io.util.*;
+import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.*;
 
@@ -140,22 +140,16 @@ public class SSTableReader extends SSTable
 
     public static SSTableReader openNoValidation(Descriptor descriptor, Set<Component> components, CFMetaData metadata) throws IOException
     {
-        return open(descriptor, components, null, metadata, StorageService.getPartitioner(), false);
+        return open(descriptor, components, metadata, StorageService.getPartitioner(), false);
     }
 
     public static SSTableReader open(Descriptor descriptor, Set<Component> components, CFMetaData metadata, IPartitioner partitioner) throws IOException
     {
-        return open(descriptor, components, null, metadata, partitioner);
-    }
-
-    public static SSTableReader open(Descriptor descriptor, Set<Component> components, DataTracker tracker, CFMetaData metadata, IPartitioner partitioner) throws IOException
-    {
-        return open(descriptor, components, tracker, metadata, partitioner, true);
+        return open(descriptor, components, metadata, partitioner, true);
     }
 
     private static SSTableReader open(Descriptor descriptor,
                                       Set<Component> components,
-                                      DataTracker tracker,
                                       CFMetaData metadata,
                                       IPartitioner partitioner,
                                       boolean validate) throws IOException
@@ -190,8 +184,6 @@ public class SSTableReader extends SSTable
                                                   null,
                                                   System.currentTimeMillis(),
                                                   sstableMetadata);
-        sstable.setTrackedBy(tracker);
-
         // versions before 'c' encoded keys as utf-16 before hashing to the filter
         if (descriptor.version.hasStringsInBloomFilter)
         {
@@ -240,7 +232,7 @@ public class SSTableReader extends SSTable
                     SSTableReader sstable;
                     try
                     {
-                        sstable = open(entry.getKey(), entry.getValue(), tracker, metadata, partitioner);
+                        sstable = open(entry.getKey(), entry.getValue(), metadata, partitioner);
                     }
                     catch (IOException ex)
                     {
@@ -279,7 +271,7 @@ public class SSTableReader extends SSTable
                                       IndexSummary isummary,
                                       Filter bf,
                                       long maxDataAge,
-                                      SSTableMetadata sstableMetadata) throws IOException
+                                      SSTableMetadata sstableMetadata)
     {
         assert desc != null && partitioner != null && ifile != null && dfile != null && isummary != null && bf != null && sstableMetadata != null;
         return new SSTableReader(desc,
@@ -303,7 +295,6 @@ public class SSTableReader extends SSTable
                           Filter bloomFilter,
                           long maxDataAge,
                           SSTableMetadata sstableMetadata)
-    throws IOException
     {
         super(desc, components, metadata, partitioner);
         this.sstableMetadata = sstableMetadata;
@@ -318,11 +309,8 @@ public class SSTableReader extends SSTable
 
     public void setTrackedBy(DataTracker tracker)
     {
-        if (tracker != null)
-        {
-            keyCache = CacheService.instance.keyCache;
-            deletingTask.setTracker(tracker);
-        }
+        keyCache = CacheService.instance.keyCache;
+        deletingTask.setTracker(tracker);
     }
 
     void loadBloomFilter() throws IOException
@@ -799,7 +787,7 @@ public class SSTableReader extends SSTable
             catch (IOException e)
             {
                 markSuspect();
-                throw new IOError(e);
+                throw new CorruptSSTableException(e, input.getPath());
             }
             finally
             {
@@ -870,19 +858,7 @@ public class SSTableReader extends SSTable
         if (logger.isDebugEnabled())
             logger.debug("Marking " + getFilename() + " compacted");
 
-        if (isCompacted.getAndSet(true))
-            return false;
-
-        try
-        {
-            if (!new File(descriptor.filenameFor(Component.COMPACTED_MARKER)).createNewFile())
-                throw new IOException("Compaction marker already exists");
-        }
-        catch (IOException e)
-        {
-            throw new IOError(e);
-        }
-        return true;
+        return !isCompacted.getAndSet(true);
     }
 
     public void markSuspect()
@@ -953,13 +929,13 @@ public class SSTableReader extends SSTable
         return in.readLong();
     }
 
-    public void createLinks(String snapshotDirectoryPath) throws IOException
+    public void createLinks(String snapshotDirectoryPath)
     {
         for (Component component : components)
         {
             File sourceFile = new File(descriptor.filenameFor(component));
             File targetLink = new File(snapshotDirectoryPath, sourceFile.getName());
-            CLibrary.createHardLink(sourceFile, targetLink);
+            FileUtils.createHardLink(sourceFile, targetLink);
         }
     }
 
@@ -1064,14 +1040,19 @@ public class SSTableReader extends SSTable
         return sstableMetadata.maxTimestamp;
     }
 
-    public RandomAccessReader openDataReader(boolean skipIOCache) throws IOException
+    public Set<Integer> getAncestors()
+    {
+        return sstableMetadata.ancestors;
+    }
+
+    public RandomAccessReader openDataReader(boolean skipIOCache)
     {
         return compression
                ? CompressedRandomAccessReader.open(getFilename(), getCompressionMetadata(), skipIOCache)
                : RandomAccessReader.open(new File(getFilename()), skipIOCache);
     }
 
-    public RandomAccessReader openIndexReader(boolean skipIOCache) throws IOException
+    public RandomAccessReader openIndexReader(boolean skipIOCache)
     {
         return RandomAccessReader.open(new File(getIndexFilename()), skipIOCache);
     }
@@ -1108,14 +1089,7 @@ public class SSTableReader extends SSTable
     {
         for (SSTableReader sstable : sstables)
         {
-            try
-            {
-                sstable.releaseReference();
-            }
-            catch (Exception ex)
-            {
-                logger.error("Failed releasing reference on " + sstable, ex);
-            }
+            sstable.releaseReference();
         }
     }
 }

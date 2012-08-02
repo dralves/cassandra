@@ -582,7 +582,7 @@ request_scheduler: org.apache.cassandra.scheduler.NoScheduler
 # often lower memory usage without a impact on performance.
 index_interval: 128
 
-# Enable or disable inter-node encryption
+# Enable or disable inter-node and client-server encryption
 # Default settings are TLS v1, RSA 1024-bit keys (it is imperative that
 # users generate their own keys) TLS_RSA_WITH_AES_128_CBC_SHA as the cipher
 # suite for authentication, key exchange and encryption of the actual data transfers.
@@ -598,6 +598,7 @@ index_interval: 128
 #
 encryption_options:
     internode_encryption: none
+    client_server_encryption: off
     keystore: conf/.keystore
     keystore_password: cassandra
     truststore: conf/.truststore

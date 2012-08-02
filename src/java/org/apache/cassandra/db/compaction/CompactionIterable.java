@@ -17,24 +17,17 @@
  */
 package org.apache.cassandra.db.compaction;
 
-import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.cassandra.db.columniterator.OnDiskAtomIterator;
 import org.apache.cassandra.io.sstable.SSTableIdentityIterator;
-import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.utils.CloseableIterator;
 import org.apache.cassandra.utils.MergeIterator;
 
 public class CompactionIterable extends AbstractCompactionIterable
 {
-    private static final Logger logger = LoggerFactory.getLogger(CompactionIterable.class);
-
     private long row;
 
     private static final Comparator<OnDiskAtomIterator> comparator = new Comparator<OnDiskAtomIterator>()

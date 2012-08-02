@@ -17,7 +17,6 @@
  */
 package org.apache.cassandra.db.index;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.util.List;
@@ -26,6 +25,7 @@ import java.util.SortedSet;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.DecoratedKey;
 import org.apache.cassandra.db.IColumn;
+import org.apache.cassandra.thrift.Column;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 /**
@@ -41,13 +41,11 @@ public abstract class PerRowSecondaryIndex extends SecondaryIndex
      * @param cf the current rows data
      * @param mutatedIndexedColumns the set of columns that were changed or added
      * @param oldIndexedColumns the columns which were deleted
-     * @throws IOException
      */
     public abstract void applyIndexUpdates(ByteBuffer rowKey,
                                            ColumnFamily cf,
                                            SortedSet<ByteBuffer> mutatedIndexedColumns,
-                                           ColumnFamily oldIndexedColumns) throws IOException;
-
+                                           ColumnFamily oldIndexedColumns);
 
     /**
      * cleans up deleted columns from cassandra cleanup compaction
@@ -69,5 +67,11 @@ public abstract class PerRowSecondaryIndex extends SecondaryIndex
         {
             throw new RuntimeException(e);
         }
+    }
+    
+    @Override
+    public boolean validate(Column column)
+    {
+        return true;
     }
 }

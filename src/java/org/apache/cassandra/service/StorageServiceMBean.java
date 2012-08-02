@@ -21,7 +21,6 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ExecutionException;
@@ -420,12 +419,14 @@ public interface StorageServiceMBean
     public void loadNewSSTables(String ksName, String cfName);
 
     /**
-     * Return a List of Tokens representing a sample of keys
-     * across all ColumnFamilyStores
+     * Return a List of Tokens representing a sample of keys across all ColumnFamilyStores.
+     *
+     * Note: this should be left as an operation, not an attribute (methods starting with "get")
+     * to avoid sending potentially multiple MB of data when accessing this mbean by default.  See CASSANDRA-4452.
      *
      * @return set of Tokens as Strings
      */
-    public List<String> getRangeKeySample();
+    public List<String> sampleKeyRange();
 
     /**
      * rebuild the specified indexes

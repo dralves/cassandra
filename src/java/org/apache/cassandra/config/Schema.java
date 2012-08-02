@@ -19,9 +19,8 @@ package org.apache.cassandra.config;
 
 import java.nio.ByteBuffer;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.*;
-import java.util.concurrent.locks.ReadWriteLock;
-import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.google.common.collect.BiMap;
 import com.google.common.collect.HashBiMap;
@@ -66,8 +65,20 @@ public class Schema
     private final BiMap<Integer, UUID> oldCfIdMap = HashBiMap.create();
 
     private volatile UUID version;
-    private final ReadWriteLock versionLock = new ReentrantReadWriteLock();
 
+    public static final UUID emptyVersion;
+
+    static
+    {
+        try
+        {
+            emptyVersion = UUID.nameUUIDFromBytes(MessageDigest.getInstance("MD5").digest());
+        }
+        catch (NoSuchAlgorithmException e)
+        {
+            throw new AssertionError();
+        }
+    }
 
     /**
      * Initialize empty schema object
@@ -420,16 +431,7 @@ public class Schema
      */
     public UUID getVersion()
     {
-        versionLock.readLock().lock();
-
-        try
-        {
-            return version;
-        }
-        finally
-        {
-            versionLock.readLock().unlock();
-        }
+        return version;
     }
 
     /**
@@ -438,8 +440,6 @@ public class Schema
      */
     public void updateVersion()
     {
-        versionLock.writeLock().lock();
-
         try
         {
             MessageDigest versionDigest = MessageDigest.getInstance("MD5");
@@ -457,10 +457,6 @@ public class Schema
         catch (Exception e)
         {
             throw new RuntimeException(e);
-        }
-        finally
-        {
-            versionLock.writeLock().unlock();
         }
     }
 

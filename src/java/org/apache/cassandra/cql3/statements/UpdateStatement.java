@@ -25,12 +25,14 @@ import com.google.common.collect.ArrayListMultimap;
 
 import org.apache.cassandra.cql3.*;
 import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.cql3.operations.ColumnOperation;
 import org.apache.cassandra.cql3.operations.Operation;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.thrift.InvalidRequestException;
 import org.apache.cassandra.thrift.UnavailableException;
+import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.Pair;
 
 import static org.apache.cassandra.cql.QueryProcessor.validateKey;
@@ -102,37 +104,10 @@ public class UpdateStatement extends ModificationStatement
     /** {@inheritDoc} */
     public List<IMutation> getMutations(ClientState clientState, List<ByteBuffer> variables) throws UnavailableException, TimeoutException, InvalidRequestException
     {
-        // Check key
-        List<Term> keys = processedKeys.get(cfDef.key.name);
-        if (keys == null || keys.isEmpty())
-            throw new InvalidRequestException(String.format("Missing mandatory PRIMARY KEY part %s", cfDef.key));
+        List<ByteBuffer> keys = buildKeyNames(cfDef, processedKeys, variables);
 
         ColumnNameBuilder builder = cfDef.getColumnNameBuilder();
-        CFDefinition.Name firstEmpty = null;
-        for (CFDefinition.Name name : cfDef.columns.values())
-        {
-            List<Term> values = processedKeys.get(name.name);
-            if (values == null || values.isEmpty())
-            {
-                firstEmpty = name;
-                // For sparse, we must have all components
-                if (cfDef.isComposite && !cfDef.isCompact)
-                    throw new InvalidRequestException(String.format("Missing mandatory PRIMARY KEY part %s", name));
-            }
-            else if (firstEmpty != null)
-            {
-                throw new InvalidRequestException(String.format("Missing PRIMARY KEY part %s since %s is set", firstEmpty.name, name.name));
-            }
-            else
-            {
-                assert values.size() == 1; // We only allow IN for row keys so far
-                builder.add(values.get(0), Relation.Type.EQ, variables);
-            }
-        }
-
-        List<ByteBuffer> rawKeys = new ArrayList<ByteBuffer>(keys.size());
-        for (Term key: keys)
-            rawKeys.add(key.getByteBuffer(cfDef.key.type, variables));
+        buildColumnNames(cfDef, processedKeys, builder, variables, true);
 
         // Lists SET operation incurs a read. Do that now. Note that currently,
         // if there is at least one list, we just read the whole "row" (in the CQL sense of
@@ -153,15 +128,68 @@ public class UpdateStatement extends ModificationStatement
             }
         }
 
-        Map<ByteBuffer, ColumnGroupMap> rows = needsReading ? readRows(rawKeys, builder, (CompositeType)cfDef.cfm.comparator) : null;
+        Map<ByteBuffer, ColumnGroupMap> rows = needsReading ? readRows(keys, builder, (CompositeType)cfDef.cfm.comparator) : null;
 
         List<IMutation> rowMutations = new LinkedList<IMutation>();
         UpdateParameters params = new UpdateParameters(variables, getTimestamp(clientState), timeToLive);
 
-        for (ByteBuffer key: rawKeys)
+        for (ByteBuffer key: keys)
             rowMutations.add(mutationForKey(cfDef, key, builder, params, rows == null ? null : rows.get(key)));
 
         return rowMutations;
+    }
+
+    // Returns the first empty component or null if none are
+    static CFDefinition.Name buildColumnNames(CFDefinition cfDef, Map<ColumnIdentifier, List<Term>> processed, ColumnNameBuilder builder, List<ByteBuffer> variables, boolean requireAllComponent)
+    throws InvalidRequestException
+    {
+        CFDefinition.Name firstEmpty = null;
+        for (CFDefinition.Name name : cfDef.columns.values())
+        {
+            List<Term> values = processed.get(name.name);
+            if (values == null || values.isEmpty())
+            {
+                firstEmpty = name;
+                if (requireAllComponent && cfDef.isComposite && !cfDef.isCompact)
+                    throw new InvalidRequestException(String.format("Missing mandatory PRIMARY KEY part %s", name));
+            }
+            else if (firstEmpty != null)
+            {
+                throw new InvalidRequestException(String.format("Missing PRIMARY KEY part %s since %s is set", firstEmpty.name, name.name));
+            }
+            else
+            {
+                assert values.size() == 1; // We only allow IN for row keys so far
+                builder.add(values.get(0), Relation.Type.EQ, variables);
+            }
+        }
+        return firstEmpty;
+    }
+
+    static List<ByteBuffer> buildKeyNames(CFDefinition cfDef, Map<ColumnIdentifier, List<Term>> processed, List<ByteBuffer> variables)
+    throws InvalidRequestException
+    {
+        ColumnNameBuilder keyBuilder = cfDef.getKeyNameBuilder();
+        List<ByteBuffer> keys = new ArrayList<ByteBuffer>();
+        for (CFDefinition.Name name : cfDef.keys.values())
+        {
+            List<Term> values = processed.get(name.name);
+            if (values == null || values.isEmpty())
+                throw new InvalidRequestException(String.format("Missing mandatory PRIMARY KEY part %s", name));
+
+            if (keyBuilder.remainingCount() == 1)
+            {
+                for (Term t : values)
+                    keys.add(keyBuilder.copy().add(t, Relation.Type.EQ, variables).build());
+            }
+            else
+            {
+                if (values.size() > 1)
+                    throw new InvalidRequestException("IN is only supported on the last column of the partition key");
+                keyBuilder.add(values.get(0), Relation.Type.EQ, variables);
+            }
+        }
+        return keys;
     }
 
     /**
@@ -182,16 +210,41 @@ public class UpdateStatement extends ModificationStatement
         RowMutation rm = new RowMutation(cfDef.cfm.ksName, key);
         ColumnFamily cf = rm.addOrGet(cfDef.cfm.cfName);
 
+        // Inserting the CQL row marker (see #4361)
+        // We always need to insert a marker, because of the following situation:
+        //   CREATE TABLE t ( k int PRIMARY KEY, c text );
+        //   INSERT INTO t(k, c) VALUES (1, 1)
+        //   DELETE c FROM t WHERE k = 1;
+        //   SELECT * FROM t;
+        // The last query should return one row (but with c == null). Adding
+        // the marker with the insert make sure the semantic is correct (while making sure a
+        // 'DELETE FROM t WHERE k = 1' does remove the row entirely)
+        if (cfDef.isComposite && !cfDef.isCompact)
+        {
+            ByteBuffer name = builder.copy().add(ByteBufferUtil.EMPTY_BYTE_BUFFER).build();
+            cf.addColumn(params.makeColumn(name, ByteBufferUtil.EMPTY_BYTE_BUFFER));
+        }
+
         if (cfDef.isCompact)
         {
             if (builder.componentCount() == 0)
                 throw new InvalidRequestException(String.format("Missing PRIMARY KEY part %s", cfDef.columns.values().iterator().next()));
 
-            List<Operation> operation = processedColumns.get(cfDef.value);
-            if (operation.isEmpty())
-                throw new InvalidRequestException(String.format("Missing mandatory column %s", cfDef.value));
-            assert operation.size() == 1;
-            hasCounterColumn = addToMutation(cf, builder, cfDef.value, operation.get(0), params, null);
+            Operation operation;
+            if (cfDef.value == null)
+            {
+                // No value was defined, we set to the empty value
+                operation = ColumnOperation.SetToEmpty();
+            }
+            else
+            {
+                List<Operation> operations = processedColumns.get(cfDef.value);
+                if (operations.isEmpty())
+                    throw new InvalidRequestException(String.format("Missing mandatory column %s", cfDef.value));
+                assert operations.size() == 1;
+                operation = operations.get(0);
+            }
+            hasCounterColumn = addToMutation(cf, builder, cfDef.value, operation, params, null);
         }
         else
         {
@@ -212,15 +265,15 @@ public class UpdateStatement extends ModificationStatement
                                   UpdateParameters params,
                                   List<Pair<ByteBuffer, IColumn>> list) throws InvalidRequestException
     {
-
         Operation.Type type = valueOperation.getType();
 
         if (type == Operation.Type.COLUMN || type == Operation.Type.COUNTER)
         {
-            if (valueDef.type.isCollection())
+            if (valueDef != null && valueDef.type.isCollection())
                 throw new InvalidRequestException("Can't apply operation on column with " + valueDef.type + " type.");
 
-            valueOperation.execute(cf, builder.copy(), valueDef.type, params);
+            AbstractType<?> validator = valueDef == null ? null : valueDef.type;
+            valueOperation.execute(cf, builder.copy(), validator, params);
         }
         else
         {

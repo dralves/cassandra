@@ -26,7 +26,6 @@ import java.util.concurrent.*;
 import java.util.concurrent.locks.Condition;
 
 import com.google.common.collect.AbstractIterator;
-import com.google.common.collect.Iterables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,7 +35,6 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.columniterator.ICountableColumnIterator;
 import org.apache.cassandra.io.sstable.SSTableIdentityIterator;
-import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.utils.*;
 
 /**
@@ -57,7 +55,7 @@ public class ParallelCompactionIterable extends AbstractCompactionIterable
 
     private final int maxInMemorySize;
 
-    public ParallelCompactionIterable(OperationType type, List<ICompactionScanner> scanners, CompactionController controller) throws IOException
+    public ParallelCompactionIterable(OperationType type, List<ICompactionScanner> scanners, CompactionController controller)
     {
         this(type, scanners, controller, DatabaseDescriptor.getInMemoryCompactionLimit() / scanners.size());
     }

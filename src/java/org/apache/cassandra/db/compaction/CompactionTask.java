@@ -22,10 +22,11 @@ import java.io.IOException;
 import java.util.*;
 
 import com.google.common.base.Predicates;
+import com.google.common.base.Throwables;
 import com.google.common.collect.Iterators;
+import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.apache.commons.lang.StringUtils;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.ColumnFamilyStore;
@@ -36,7 +37,6 @@ import org.apache.cassandra.io.sstable.SSTable;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.sstable.SSTableWriter;
 import org.apache.cassandra.utils.CloseableIterator;
-import org.apache.cassandra.utils.FBUtilities;
 
 public class CompactionTask extends AbstractCompactionTask
 {
@@ -60,7 +60,7 @@ public class CompactionTask extends AbstractCompactionTask
      * which are properly serialized.
      * Caller is in charge of marking/unmarking the sstables as compacting.
      */
-    public int execute(CompactionExecutorStatsCollector collector) throws IOException
+    public int execute(CompactionExecutorStatsCollector collector)
     {
         // The collection of sstables passed may be empty (but not null); even if
         // it is not empty, it may compact down to nothing if all rows are deleted.
@@ -180,15 +180,23 @@ public class CompactionTask extends AbstractCompactionTask
                 }
             }
         }
-        catch (Exception e)
+        catch (Throwable t)
         {
             for (SSTableWriter writer : writers)
                 writer.abort();
-            throw FBUtilities.unchecked(e);
+            throw Throwables.propagate(t);
         }
         finally
         {
-            iter.close();
+            try
+            {
+                iter.close();
+            }
+            catch (IOException e)
+            {
+                throw new RuntimeException(e);
+            }
+
             if (collector != null)
                 collector.finishCompaction(ci);
         }
@@ -226,7 +234,7 @@ public class CompactionTask extends AbstractCompactionTask
     }
 
     //extensibility point for other strategies that may want to limit the upper bounds of the sstable segment size
-    protected boolean newSSTableSegmentThresholdReached(SSTableWriter writer) throws IOException
+    protected boolean newSSTableSegmentThresholdReached(SSTableWriter writer)
     {
         return false;
     }

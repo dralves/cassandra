@@ -239,7 +239,7 @@ public class CassandraDaemon
         // Thift
         InetAddress rpcAddr = DatabaseDescriptor.getRpcAddress();
         int rpcPort = DatabaseDescriptor.getRpcPort();
-        thriftServer = new ThriftServer(rpcAddr, rpcPort);
+        thriftServer = new ThriftServer(rpcAddr, rpcPort, DatabaseDescriptor.getEncryptionOptions());
 
         // Native transport
         InetAddress nativeAddr = DatabaseDescriptor.getNativeTransportAddress();

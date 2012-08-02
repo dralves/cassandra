@@ -22,9 +22,6 @@ import static org.apache.cassandra.tracing.TraceSessionContext.traceCtx;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.tracing.TraceSessionContext;
-
-
 public class MessageDeliveryTask implements Runnable
 {
     private static final Logger logger = LoggerFactory.getLogger(MessageDeliveryTask.class);

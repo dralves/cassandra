@@ -359,22 +359,30 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
                     return;
                 }
 
+                // prepare for the next slice to be read
+                KeySlice lastRow = rows.get(rows.size() - 1);
+                ByteBuffer rowkey = lastRow.key;
+                startToken = partitioner.getTokenFactory().toString(partitioner.getToken(rowkey));
+
                 // remove ghosts when fetching all columns
                 if (isEmptyPredicate)
                 {
                     Iterator<KeySlice> it = rows.iterator();
-                    while (it.hasNext())
+                    KeySlice ks;
+                    do
                     {
-                        KeySlice ks = it.next();
+                        ks = it.next();
                         if (ks.getColumnsSize() == 0)
                         {
-                           it.remove();
+                            it.remove();
                         }
-                    }
+                    } while (it.hasNext());
 
                     // all ghosts, spooky
                     if (rows.isEmpty())
                     {
+                        // maybeInit assumes it can get the start-with key from the rows collection, so add back the last
+                        rows.add(ks);
                         maybeInit();
                         return;
                     }

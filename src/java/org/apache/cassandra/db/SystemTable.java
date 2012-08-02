@@ -17,7 +17,6 @@
  */
 package org.apache.cassandra.db;
 
-import java.io.IOError;
 import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
@@ -25,10 +24,7 @@ import java.util.*;
 import java.util.concurrent.ExecutionException;
 
 import com.google.common.collect.HashMultimap;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.ImmutableSortedSet;
 import com.google.common.collect.Multimap;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -46,11 +42,9 @@ import org.apache.cassandra.dht.Range;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.thrift.Constants;
-import org.apache.cassandra.thrift.IndexExpression;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.NodeId;
-import org.apache.cassandra.utils.UUIDGen;
 
 import static org.apache.cassandra.cql3.QueryProcessor.processInternal;
 
@@ -78,6 +72,13 @@ public class SystemTable
     private static final ByteBuffer CURRENT_LOCAL_NODE_ID_KEY = ByteBufferUtil.bytes("CurrentLocal");
     private static final ByteBuffer ALL_LOCAL_NODE_ID_KEY = ByteBufferUtil.bytes("Local");
 
+    public enum BootstrapState
+    {
+        NEEDS_BOOTSTRAP,
+        COMPLETED,
+        IN_PROGRESS
+    }
+
     private static DecoratedKey decorate(ByteBuffer key)
     {
         return StorageService.getPartitioner().decorateKey(key);
@@ -100,7 +101,7 @@ public class SystemTable
         }
     }
 
-    private static void setupVersion() throws IOException
+    private static void setupVersion()
     {
         String req = "INSERT INTO system.%s (key, release_version, cql_version, thrift_version) VALUES ('%s', '%s', '%s', '%s')";
         processInternal(String.format(req, LOCAL_CF,
@@ -129,8 +130,8 @@ public class SystemTable
             Token token = StorageService.getPartitioner().getTokenFactory().fromByteArray(oldColumns.next().value());
             String tokenBytes = ByteBufferUtil.bytesToHex(serializeTokens(Collections.singleton(token)));
             // (assume that any node getting upgraded was bootstrapped, since that was stored in a separate row for no particular reason)
-            String req = "INSERT INTO system.%s (key, cluster_name, token_bytes, bootstrapped) VALUES ('%s', '%s', '%s', 'true')";
-            processInternal(String.format(req, LOCAL_CF, LOCAL_KEY, clusterName, tokenBytes));
+            String req = "INSERT INTO system.%s (key, cluster_name, token_bytes, bootstrapped) VALUES ('%s', '%s', '%s', '%s')";
+            processInternal(String.format(req, LOCAL_CF, LOCAL_KEY, clusterName, tokenBytes, BootstrapState.COMPLETED.name()));
 
             oldStatusCfs.truncate();
         }
@@ -276,9 +277,9 @@ public class SystemTable
      * 3. files are present but you can't read them: bad
      * @throws ConfigurationException
      */
-    public static void checkHealth() throws ConfigurationException, IOException
+    public static void checkHealth() throws ConfigurationException
     {
-        Table table = null;
+        Table table;
         try
         {
             table = Table.open(Table.SYSTEM_TABLE);
@@ -321,7 +322,7 @@ public class SystemTable
              : deserializeTokens(result.one().getBytes("token_bytes"));
     }
 
-    public static int incrementAndGetGeneration() throws IOException
+    public static int incrementAndGetGeneration()
     {
         String req = "SELECT gossip_generation FROM system.%s WHERE key='%s'";
         UntypedResultSet result = processInternal(String.format(req, LOCAL_CF, LOCAL_KEY));
@@ -358,20 +359,32 @@ public class SystemTable
         return generation;
     }
 
-    public static boolean isBootstrapped()
+    public static BootstrapState getBootstrapState()
     {
         String req = "SELECT bootstrapped FROM system.%s WHERE key='%s'";
         UntypedResultSet result = processInternal(String.format(req, LOCAL_CF, LOCAL_KEY));
 
         if (result.isEmpty() || !result.one().has("bootstrapped"))
-            return false;
-        return result.one().getBoolean("bootstrapped");
+            return BootstrapState.NEEDS_BOOTSTRAP;
+
+        return BootstrapState.valueOf(result.one().getString("bootstrapped"));
     }
 
-    public static void setBootstrapped(boolean isBootstrapped)
+    public static boolean bootstrapComplete()
     {
-        String req = "INSERT INTO system.%s (key, bootstrapped) VALUES ('%s', '%b')";
-        processInternal(String.format(req, LOCAL_CF, LOCAL_KEY, isBootstrapped));
+        return getBootstrapState() == BootstrapState.COMPLETED;
+    }
+
+    public static boolean bootstrapInProgress()
+    {
+        return getBootstrapState() == BootstrapState.IN_PROGRESS;
+    }
+
+    public static void setBootstrapState(BootstrapState state)
+    {
+        String req = "INSERT INTO system.%s (key, bootstrapped) VALUES ('%s', '%s')";
+        processInternal(String.format(req, LOCAL_CF, LOCAL_KEY, state.name()));
+        forceBlockingFlush(LOCAL_CF);
     }
 
     public static boolean isIndexBuilt(String table, String indexName)
@@ -389,15 +402,7 @@ public class SystemTable
         cf.addColumn(new Column(ByteBufferUtil.bytes(indexName), ByteBufferUtil.EMPTY_BYTE_BUFFER, FBUtilities.timestampMicros()));
         RowMutation rm = new RowMutation(Table.SYSTEM_TABLE, ByteBufferUtil.bytes(table));
         rm.add(cf);
-        try
-        {
-            rm.apply();
-        }
-        catch (IOException e)
-        {
-            throw new IOError(e);
-        }
-
+        rm.apply();
         forceBlockingFlush(INDEX_CF);
     }
 
@@ -405,15 +410,7 @@ public class SystemTable
     {
         RowMutation rm = new RowMutation(Table.SYSTEM_TABLE, ByteBufferUtil.bytes(table));
         rm.delete(new QueryPath(INDEX_CF, null, ByteBufferUtil.bytes(indexName)), FBUtilities.timestampMicros());
-        try
-        {
-            rm.apply();
-        }
-        catch (IOException e)
-        {
-            throw new IOError(e);
-        }
-
+        rm.apply();
         forceBlockingFlush(INDEX_CF);
     }
 
@@ -496,15 +493,8 @@ public class SystemTable
         RowMutation rmAll = new RowMutation(Table.SYSTEM_TABLE, ALL_LOCAL_NODE_ID_KEY);
         rmCurrent.add(cf2);
         rmAll.add(cf);
-        try
-        {
-            rmCurrent.apply();
-            rmAll.apply();
-        }
-        catch (IOException e)
-        {
-            throw new RuntimeException(e);
-        }
+        rmCurrent.apply();
+        rmAll.apply();
     }
 
     public static List<NodeId.NodeIdRecord> getOldLocalNodeIds()

@@ -21,11 +21,7 @@ package org.apache.cassandra.io.sstable;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.ByteBuffer;
 import java.util.*;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.Column;
 import org.apache.cassandra.db.ColumnFamily;
@@ -40,8 +36,6 @@ import static org.junit.Assert.assertEquals;
 
 public class SSTableUtils
 {
-    private static Logger logger = LoggerFactory.getLogger(SSTableUtils.class);
-
     // first configured table and cf
     public static String TABLENAME = "Keyspace1";
     public static String CFNAME = "Standard1";

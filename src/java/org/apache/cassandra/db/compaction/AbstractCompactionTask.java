@@ -19,7 +19,6 @@ package org.apache.cassandra.db.compaction;
 
 import java.util.Collection;
 import java.util.Set;
-import java.io.IOException;
 
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.db.ColumnFamilyStore;
@@ -40,7 +39,7 @@ public abstract class AbstractCompactionTask
         this.compactionType = OperationType.COMPACTION;
     }
 
-    public abstract int execute(CompactionExecutorStatsCollector collector) throws IOException;
+    public abstract int execute(CompactionExecutorStatsCollector collector);
 
     public ColumnFamilyStore getColumnFamilyStore()
     {

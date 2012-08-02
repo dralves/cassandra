@@ -20,8 +20,6 @@ package org.apache.cassandra.cql;
 import org.apache.cassandra.config.*;
 import org.apache.cassandra.db.marshal.TypeParser;
 import org.apache.cassandra.io.compress.CompressionParameters;
-import org.apache.cassandra.thrift.CfDef;
-import org.apache.cassandra.thrift.ColumnDef;
 import org.apache.cassandra.thrift.InvalidRequestException;
 
 import java.nio.ByteBuffer;
@@ -76,10 +74,10 @@ public class AlterTableStatement
         switch (oType)
         {
             case ADD:
-                if (cfm.getKeyAlias() != null && cfm.getKeyAlias().equals(columnName))
+                if (!cfm.getKeyAliases().isEmpty() && cfm.getKeyAliases().contains(columnName))
                     throw new InvalidRequestException("Invalid column name: "
                                                       + this.columnName
-                                                      + ", because it equals to key_alias.");
+                                                      + ", because it equals to a key alias.");
 
                 cfm.addColumnDefinition(new ColumnDefinition(columnName,
                                                              TypeParser.parse(validator),
@@ -90,7 +88,8 @@ public class AlterTableStatement
                 break;
 
             case ALTER:
-                if (cfm.getKeyAlias() != null && cfm.getKeyAlias().equals(columnName))
+                // We only look for the first key alias which is ok for CQL2
+                if (!cfm.getKeyAliases().isEmpty() && cfm.getKeyAliases().get(0).equals(columnName))
                 {
                     cfm.keyValidator(TypeParser.parse(validator));
                 }

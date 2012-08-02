@@ -18,7 +18,6 @@
 package org.apache.cassandra.db;
 
 import java.io.File;
-import java.io.IOError;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.nio.ByteBuffer;
@@ -142,7 +141,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
     /** ops count last time we computed liveRatio */
     private final AtomicLong liveRatioComputedAt = new AtomicLong(32);
 
-    public void reload() throws IOException
+    public void reload()
     {
         // metadata object has been mutated directly. make all the members jibe with new settings.
 
@@ -229,8 +228,23 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
         if (loadSSTables)
         {
-            Directories.SSTableLister sstables = directories.sstableLister().skipCompacted(true).skipTemporary(true);
-            data.addInitialSSTables(SSTableReader.batchOpen(sstables.list().entrySet(), data, metadata, this.partitioner));
+            Directories.SSTableLister sstableFiles = directories.sstableLister().skipTemporary(true);
+            Collection<SSTableReader> sstables = SSTableReader.batchOpen(sstableFiles.list().entrySet(), data, metadata, this.partitioner);
+
+            // Filter non-compacted sstables, remove compacted ones
+            Set<Integer> compactedSSTables = new HashSet<Integer>();
+            for (SSTableReader sstable : sstables)
+                compactedSSTables.addAll(sstable.getAncestors());
+
+            Set<SSTableReader> liveSSTables = new HashSet<SSTableReader>();
+            for (SSTableReader sstable : sstables)
+            {
+                if (compactedSSTables.contains(sstable.descriptor.generation))
+                    sstable.releaseReference(); // this amount to deleting the sstable
+                else
+                    liveSSTables.add(sstable);
+            }
+            data.addInitialSSTables(liveSSTables);
         }
 
         if (caching == Caching.ALL || caching == Caching.KEYS_ONLY)
@@ -356,14 +370,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
             if (components.contains(Component.COMPACTED_MARKER) || desc.temporary)
             {
-                try
-                {
-                    SSTable.delete(desc, components);
-                }
-                catch (IOException e)
-                {
-                    throw new IOError(e);
-                }
+                SSTable.delete(desc, components);
                 continue;
             }
 
@@ -376,14 +383,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             logger.warn("Removing orphans for {}: {}", desc, components);
             for (Component component : components)
             {
-                try
-                {
-                    FileUtils.deleteWithConfirm(desc.filenameFor(component));
-                }
-                catch (IOException e)
-                {
-                    throw new IOError(e);
-                }
+                FileUtils.deleteWithConfirm(desc.filenameFor(component));
             }
         }
 
@@ -451,7 +451,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             currentDescriptors.add(sstable.descriptor);
         Set<SSTableReader> newSSTables = new HashSet<SSTableReader>();
 
-        Directories.SSTableLister lister = directories.sstableLister().skipCompacted(true).skipTemporary(true);
+        Directories.SSTableLister lister = directories.sstableLister().skipTemporary(true);
         for (Map.Entry<Descriptor, Set<Component>> entry : lister.list().entrySet())
         {
             Descriptor descriptor = entry.getKey();
@@ -478,7 +478,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             SSTableReader reader;
             try
             {
-                reader = SSTableReader.open(newDescriptor, entry.getValue(), data, metadata, partitioner);
+                reader = SSTableReader.open(newDescriptor, entry.getValue(), metadata, partitioner);
             }
             catch (IOException e)
             {
@@ -500,10 +500,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         try
         {
             indexManager.maybeBuildSecondaryIndexes(newSSTables, indexManager.getIndexedColumns());
-        }
-        catch (IOException e)
-        {
-           throw new IOError(e);
         }
         finally
         {
@@ -532,10 +528,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             cfs.indexManager.maybeBuildSecondaryIndexes(sstables, indexes);
             cfs.indexManager.setIndexBuilt(indexes);
         }
-        catch (IOException e)
-        {
-            throw new IOError(e);
-        }
         finally
         {
             SSTableReader.releaseReferences(sstables);
@@ -563,7 +555,12 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         return getTempSSTablePath(location, version);
     }
 
-    public String getTempSSTablePath(File directory, Descriptor.Version version)
+    private String getTempSSTablePath(File directory)
+    {
+        return getTempSSTablePath(directory, Descriptor.Version.CURRENT);
+    }
+
+    private String getTempSSTablePath(File directory, Descriptor.Version version)
     {
         Descriptor desc = new Descriptor(version,
                                          directory,
@@ -572,11 +569,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                                          fileIndexGenerator.incrementAndGet(),
                                          true);
         return desc.filenameFor(Component.DATA);
-    }
-
-    public String getTempSSTablePath(File directory)
-    {
-        return getTempSSTablePath(directory, Descriptor.Version.CURRENT);
     }
 
     /** flush the given memtable and swap in a new one for its CFS, if it hasn't been frozen already.  threadsafe. */
@@ -640,7 +632,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             // while keeping the wait-for-flush (future.get) out of anything latency-sensitive.
             return postFlushExecutor.submit(new WrappedRunnable()
             {
-                public void runMayThrow() throws InterruptedException, IOException, ExecutionException
+                public void runMayThrow() throws InterruptedException, ExecutionException
                 {
                     latch.await();
 
@@ -1377,14 +1369,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 public void close() throws IOException
                 {
                     SSTableReader.releaseReferences(view.sstables);
-                    try
-                    {
-                        iterator.close();
-                    }
-                    catch (IOException e)
-                    {
-                        throw new IOError(e);
-                    }
+                    iterator.close();
                 }
             };
         }
@@ -1462,7 +1447,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             }
             catch (IOException e)
             {
-                throw new IOError(e);
+                throw new RuntimeException(e);
             }
         }
     }
@@ -1483,9 +1468,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
                 for (SSTableReader ssTable : currentView.sstables)
                 {
                     File snapshotDirectory = Directories.getSnapshotDirectory(ssTable.descriptor, snapshotName);
-
-                    // hard links
-                    ssTable.createLinks(snapshotDirectory.getPath());
+                    ssTable.createLinks(snapshotDirectory.getPath()); // hard links
                     if (logger.isDebugEnabled())
                         logger.debug("Snapshot for " + table + " keyspace data file " + ssTable.getFilename() +
                                      " created in " + snapshotDirectory);
@@ -1493,10 +1476,6 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
                 if (cfs.compactionStrategy instanceof LeveledCompactionStrategy)
                     cfs.directories.snapshotLeveledManifest(snapshotName);
-            }
-            catch (IOException e)
-            {
-                throw new IOError(e);
             }
             finally
             {
@@ -1542,7 +1521,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         return directories.snapshotExists(snapshotName);
     }
 
-    public void clearSnapshot(String snapshotName) throws IOException
+    public void clearSnapshot(String snapshotName)
     {
         directories.clearSnapshot(snapshotName);
     }
@@ -1693,7 +1672,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
      * @return a Future to the delete operation. Call the future's get() to make
      * sure the column family has been deleted
      */
-    public Future<?> truncate() throws IOException, ExecutionException, InterruptedException
+    public Future<?> truncate() throws ExecutionException, InterruptedException
     {
         // We have two goals here:
         // - truncate should delete everything written before truncate was invoked
@@ -1833,6 +1812,18 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         return compactionStrategy;
     }
 
+    public void setCompactionThresholds(int minThreshold, int maxThreshold)
+    {
+        validateCompactionThresholds(minThreshold, maxThreshold);
+
+        minCompactionThreshold.set(minThreshold);
+        maxCompactionThreshold.set(maxThreshold);
+
+        // this is called as part of CompactionStrategy constructor; avoid circular dependency by checking for null
+        if (compactionStrategy != null)
+            CompactionManager.instance.submitBackground(this);
+    }
+
     public int getMinimumCompactionThreshold()
     {
         return minCompactionThreshold.value();
@@ -1840,14 +1831,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     public void setMinimumCompactionThreshold(int minCompactionThreshold)
     {
-        if ((minCompactionThreshold > this.maxCompactionThreshold.value()) && this.maxCompactionThreshold.value() != 0)
-            throw new RuntimeException("The min_compaction_threshold cannot be larger than the max.");
-
+        validateCompactionThresholds(minCompactionThreshold, maxCompactionThreshold.value());
         this.minCompactionThreshold.set(minCompactionThreshold);
-
-        // this is called as part of CompactionStrategy constructor; avoid circular dependency by checking for null
-        if (compactionStrategy != null)
-            CompactionManager.instance.submitBackground(this);
     }
 
     public int getMaximumCompactionThreshold()
@@ -1857,14 +1842,15 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
     public void setMaximumCompactionThreshold(int maxCompactionThreshold)
     {
-        if (maxCompactionThreshold > 0 && maxCompactionThreshold < this.minCompactionThreshold.value())
-            throw new RuntimeException("The max_compaction_threshold cannot be smaller than the min.");
-
+        validateCompactionThresholds(minCompactionThreshold.value(), maxCompactionThreshold);
         this.maxCompactionThreshold.set(maxCompactionThreshold);
+    }
 
-        // this is called as part of CompactionStrategy constructor; avoid circular dependency by checking for null
-        if (compactionStrategy != null)
-            CompactionManager.instance.submitBackground(this);
+    private void validateCompactionThresholds(int minThreshold, int maxThreshold)
+    {
+        if (minThreshold > maxThreshold && maxThreshold != 0)
+            throw new RuntimeException(String.format("The min_compaction_threshold cannot be larger than the max_compaction_threshold. " +
+                                                     "Min is '%d', Max is '%d'.", minThreshold, maxThreshold));
     }
 
     public boolean isCompactionDisabled()
@@ -1929,24 +1915,30 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         return intern(name);
     }
 
-    public SSTableWriter createFlushWriter(long estimatedRows, long estimatedSize, ReplayPosition context) throws IOException
+    public SSTableWriter createFlushWriter(long estimatedRows, long estimatedSize, ReplayPosition context)
     {
         SSTableMetadata.Collector sstableMetadataCollector = SSTableMetadata.createCollector().replayPosition(context);
-        return new SSTableWriter(getFlushPath(estimatedSize, Descriptor.Version.CURRENT),
-                                 estimatedRows,
-                                 metadata,
-                                 partitioner,
-                                 sstableMetadataCollector);
+        String filename = getFlushPath(estimatedSize, Descriptor.Version.CURRENT);
+        return new SSTableWriter(filename, estimatedRows, metadata, partitioner, sstableMetadataCollector);
     }
 
-    public SSTableWriter createCompactionWriter(long estimatedRows, File location, Collection<SSTableReader> sstables) throws IOException
+    public SSTableWriter createCompactionWriter(long estimatedRows, File location, Collection<SSTableReader> sstables)
     {
         ReplayPosition rp = ReplayPosition.getReplayPosition(sstables);
         SSTableMetadata.Collector sstableMetadataCollector = SSTableMetadata.createCollector().replayPosition(rp);
 
-        // get the max timestamp of the precompacted sstables
+        // Get the max timestamp of the precompacted sstables
+        // and adds generation of live ancestors
         for (SSTableReader sstable : sstables)
+        {
             sstableMetadataCollector.updateMaxTimestamp(sstable.getMaxTimestamp());
+            sstableMetadataCollector.addAncestor(sstable.descriptor.generation);
+            for (Integer i : sstable.getAncestors())
+            {
+                if (new File(sstable.descriptor.withGeneration(i).filenameFor(Component.DATA)).exists())
+                    sstableMetadataCollector.addAncestor(i);
+            }
+        }
 
         return new SSTableWriter(getTempSSTablePath(location), estimatedRows, metadata, partitioner, sstableMetadataCollector);
     }

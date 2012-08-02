@@ -129,7 +129,7 @@ public abstract class SSTable
      *
      * @return true if the file was deleted
      */
-    public static boolean delete(Descriptor desc, Set<Component> components) throws IOException
+    public static boolean delete(Descriptor desc, Set<Component> components)
     {
         // remove the DATA component first if it exists
         if (components.contains(Component.DATA))
@@ -142,6 +142,8 @@ public abstract class SSTable
             FileUtils.deleteWithConfirm(desc.filenameFor(component));
         }
         // remove the COMPACTED_MARKER component last if it exists
+        // Note: newly created sstable should not have a marker, but we keep this for now to make sure
+        // we don't leave older marker around
         FileUtils.delete(desc.filenameFor(Component.COMPACTED_MARKER));
         FileUtils.delete(desc.filenameFor(Component.SUMMARY));
 

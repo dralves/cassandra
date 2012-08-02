@@ -18,13 +18,13 @@
 package org.apache.cassandra.db;
 
 import java.io.File;
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 
 import com.google.common.base.Function;
+import com.google.common.base.Throwables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -38,7 +38,6 @@ import org.apache.cassandra.db.filter.NamesQueryFilter;
 import org.apache.cassandra.db.filter.SliceQueryFilter;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.sstable.SSTableWriter;
-import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.SlabAllocator;
 import org.apache.cassandra.utils.WrappedRunnable;
@@ -256,8 +255,7 @@ public class Memtable
         return builder.toString();
     }
 
-
-    private SSTableReader writeSortedContents(Future<ReplayPosition> context) throws IOException, ExecutionException, InterruptedException
+    private SSTableReader writeSortedContents(Future<ReplayPosition> context) throws ExecutionException, InterruptedException
     {
         logger.info("Writing " + this);
 
@@ -294,15 +292,15 @@ public class Memtable
             }
 
             ssTable = writer.closeAndOpenReader();
+            logger.info(String.format("Completed flushing %s (%d bytes) for commitlog position %s",
+                        ssTable.getFilename(), new File(ssTable.getFilename()).length(), context.get()));
+            return ssTable;
         }
-        catch (Exception e)
+        catch (Throwable e)
         {
             writer.abort();
-            throw FBUtilities.unchecked(e);
+            throw Throwables.propagate(e);
         }
-        logger.info(String.format("Completed flushing %s (%d bytes) for commitlog position %s",
-                                  ssTable.getFilename(), new File(ssTable.getFilename()).length(), context.get()));
-        return ssTable;
     }
 
     public void flushAndSignal(final CountDownLatch latch, ExecutorService writer, final Future<ReplayPosition> context)

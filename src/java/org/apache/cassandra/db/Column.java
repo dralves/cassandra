@@ -25,13 +25,9 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.io.util.DataOutputBuffer;
-import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.utils.Allocator;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.HeapAllocator;
@@ -44,7 +40,6 @@ import org.apache.cassandra.utils.HeapAllocator;
 
 public class Column implements IColumn
 {
-    private static final Logger logger = LoggerFactory.getLogger(Column.class);
     private static final ColumnSerializer serializer = new ColumnSerializer();
     private static final OnDiskAtom.Serializer onDiskSerializer = new OnDiskAtom.Serializer(serializer);
 
