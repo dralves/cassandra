@@ -335,19 +335,12 @@ public class ByteBufferUtil
         }
     }
 
-    public static void writeWithShortLength(ByteBuffer buffer, DataOutput out)
+    public static void writeWithShortLength(ByteBuffer buffer, DataOutput out) throws IOException
     {
         int length = buffer.remaining();
         assert 0 <= length && length <= FBUtilities.MAX_UNSIGNED_SHORT : length;
-        try
-        {
-            out.writeShort(length);
-            write(buffer, out); // writing data bytes to output source
-        }
-        catch (IOException e)
-        {
-            throw new RuntimeException(e);
-        }
+        out.writeShort(length);
+        write(buffer, out); // writing data bytes to output source
     }
 
     public static ByteBuffer readWithLength(DataInput in) throws IOException
@@ -455,7 +448,7 @@ public class ByteBufferUtil
 
         return new InputStream()
         {
-            public int read() throws IOException
+            public int read()
             {
                 if (!copy.hasRemaining())
                     return -1;
@@ -464,7 +457,7 @@ public class ByteBufferUtil
             }
 
             @Override
-            public int read(byte[] bytes, int off, int len) throws IOException
+            public int read(byte[] bytes, int off, int len)
             {
                 if (!copy.hasRemaining())
                     return -1;
@@ -475,7 +468,7 @@ public class ByteBufferUtil
             }
 
             @Override
-            public int available() throws IOException
+            public int available()
             {
                 return copy.remaining();
             }
@@ -513,20 +506,17 @@ public class ByteBufferUtil
      */
     public static int compareSubArrays(ByteBuffer bytes1, int offset1, ByteBuffer bytes2, int offset2, int length)
     {
-        if ( null == bytes1 )
-        {
-            if ( null == bytes2) return 0;
-            else return -1;
-        }
-        if (null == bytes2 ) return 1;
+        if (bytes1 == null)
+            return bytes2 == null ? 0 : -1;
+        if (bytes2 == null) return 1;
 
         assert bytes1.limit() >= offset1 + length : "The first byte array isn't long enough for the specified offset and length.";
         assert bytes2.limit() >= offset2 + length : "The second byte array isn't long enough for the specified offset and length.";
-        for ( int i = 0; i < length; i++ )
+        for (int i = 0; i < length; i++)
         {
             byte byte1 = bytes1.get(offset1 + i);
             byte byte2 = bytes2.get(offset2 + i);
-            if ( byte1 == byte2 )
+            if (byte1 == byte2)
                 continue;
             // compare non-equal bytes as unsigned
             return (byte1 & 0xFF) < (byte2 & 0xFF) ? -1 : 1;

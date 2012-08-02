@@ -15,23 +15,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.utils;
+package org.apache.cassandra.io.sstable;
 
-import com.google.common.base.Throwables;
+import java.io.File;
 
-public abstract class WrappedRunnable implements Runnable
+public class CorruptSSTableException extends RuntimeException
 {
-    public final void run()
+    public final File path;
+
+    public CorruptSSTableException(Exception cause, File path)
     {
-        try
-        {
-            runMayThrow();
-        }
-        catch (Exception e)
-        {
-            throw Throwables.propagate(e);
-        }
+        super(cause);
+        this.path = path;
     }
 
-    abstract protected void runMayThrow() throws Exception;
+    public CorruptSSTableException(Exception cause, String path)
+    {
+        this(cause, new File(path));
+    }
+
+    public CorruptSSTableException(Exception cause, Descriptor descriptor)
+    {
+        this(cause, descriptor.baseFilename());
+    }
 }

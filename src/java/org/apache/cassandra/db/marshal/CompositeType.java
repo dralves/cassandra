@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.db.marshal;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.ArrayList;
@@ -272,12 +273,24 @@ public class CompositeType extends AbstractCompositeType
             return components.size();
         }
 
+        public int remainingCount()
+        {
+            return composite.types.size() - components.size();
+        }
+
         public ByteBuffer build()
         {
             DataOutputBuffer out = new DataOutputBuffer(serializedSize);
             for (int i = 0; i < components.size(); i++)
             {
-                ByteBufferUtil.writeWithShortLength(components.get(i), out);
+                try
+                {
+                    ByteBufferUtil.writeWithShortLength(components.get(i), out);
+                }
+                catch (IOException e)
+                {
+                    throw new RuntimeException(e);
+                }
                 out.write(endOfComponents[i]);
             }
             return ByteBuffer.wrap(out.getData(), 0, out.getLength());

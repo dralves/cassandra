@@ -15,23 +15,34 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.utils;
+package org.apache.cassandra.io;
 
-import com.google.common.base.Throwables;
+import java.io.File;
+import java.io.IOError;
 
-public abstract class WrappedRunnable implements Runnable
+public abstract class FSError extends IOError
 {
-    public final void run()
+    public final File path;
+
+    public FSError(Throwable cause, File path)
     {
-        try
-        {
-            runMayThrow();
-        }
-        catch (Exception e)
-        {
-            throw Throwables.propagate(e);
-        }
+        super(cause);
+        this.path = path;
     }
 
-    abstract protected void runMayThrow() throws Exception;
+    /**
+     * Unwraps the Throwable cause chain looking for an FSError instance
+     * @param top the top-level Throwable to unwrap
+     * @return FSError if found any, null otherwise
+     */
+    public static FSError findNested(Throwable top)
+    {
+        for (Throwable t = top; t != null; t = t.getCause())
+        {
+            if (t instanceof FSError)
+                return (FSError) t;
+        }
+
+        return null;
+    }
 }

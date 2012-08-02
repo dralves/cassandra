@@ -18,16 +18,12 @@
 package org.apache.cassandra.db.compaction;
 
 import java.io.DataOutput;
-import java.io.IOError;
 import java.io.IOException;
 import java.security.MessageDigest;
 import java.util.List;
 
-import org.apache.cassandra.io.sstable.ColumnStats;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.cassandra.db.*;
+import org.apache.cassandra.io.sstable.ColumnStats;
 import org.apache.cassandra.io.sstable.SSTableIdentityIterator;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.utils.HeapAllocator;
@@ -37,8 +33,6 @@ import org.apache.cassandra.utils.HeapAllocator;
  */
 public class PrecompactedRow extends AbstractCompactedRow
 {
-    private static final Logger logger = LoggerFactory.getLogger(PrecompactedRow.class);
-
     private final ColumnFamily compactedCf;
     private ColumnIndex columnIndex;
 
@@ -108,7 +102,7 @@ public class PrecompactedRow extends AbstractCompactedRow
             }
             catch (IOException e)
             {
-                throw new IOError(e);
+                throw new RuntimeException("Failed merge of rows on row with key: " + row.getKey(), e);
             }
 
             if (cf == null)
@@ -174,7 +168,7 @@ public class PrecompactedRow extends AbstractCompactedRow
      * We do not provide this method for other AbstractCompactedRow, because this fits the whole row into
      * memory and don't make sense for those other implementations.
      */
-    public ColumnFamily getFullColumnFamily()  throws IOException
+    public ColumnFamily getFullColumnFamily()
     {
         return compactedCf;
     }

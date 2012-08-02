@@ -17,7 +17,6 @@
  */
 package org.apache.cassandra.db.index;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
 import java.util.concurrent.ConcurrentNavigableMap;
@@ -80,9 +79,8 @@ public class SecondaryIndexManager
 
     /**
      * Drops and adds new indexes associated with the underlying CF
-     * @throws IOException
      */
-    public void reload() throws IOException
+    public void reload()
     {
         // figure out what needs to be added and dropped.
         // future: if/when we have modifiable settings for secondary indexes,
@@ -115,9 +113,8 @@ public class SecondaryIndexManager
      *
      * @param sstables the data to build from
      * @param columns the list of columns to index, ordered by comparator
-     * @throws IOException
      */
-    public void maybeBuildSecondaryIndexes(Collection<SSTableReader> sstables, SortedSet<ByteBuffer> columns) throws IOException
+    public void maybeBuildSecondaryIndexes(Collection<SSTableReader> sstables, SortedSet<ByteBuffer> columns)
     {
         if (columns.isEmpty())
             return;
@@ -130,7 +127,6 @@ public class SecondaryIndexManager
         try
         {
             future.get();
-            flushIndexesBlocking();
         }
         catch (InterruptedException e)
         {
@@ -140,6 +136,8 @@ public class SecondaryIndexManager
         {
             throw new RuntimeException(e);
         }
+
+        flushIndexesBlocking();
 
         logger.info("Index build of " + baseCfs.metadata.comparator.getString(columns) + " complete");
     }
@@ -175,9 +173,8 @@ public class SecondaryIndexManager
     /**
      * Removes a existing index
      * @param column the indexed column to remove
-     * @throws IOException
      */
-    public void removeIndexedColumn(ByteBuffer column) throws IOException
+    public void removeIndexedColumn(ByteBuffer column)
     {
         SecondaryIndex index = indexesByColumn.remove(column);
 
@@ -279,10 +276,8 @@ public class SecondaryIndexManager
 
     /**
      * Flush all indexes to disk
-     * @throws ExecutionException
-     * @throws InterruptedException
      */
-    public void flushIndexesBlocking() throws IOException
+    public void flushIndexesBlocking()
     {
         for (Map.Entry<ByteBuffer, SecondaryIndex> entry : indexesByColumn.entrySet())
             entry.getValue().forceBlockingFlush();
@@ -415,12 +410,11 @@ public class SecondaryIndexManager
      * @param cf the current rows data
      * @param mutatedIndexedColumns the set of columns that were changed or added
      * @param oldIndexedColumns the columns what were deleted
-     * @throws IOException
      */
     public void applyIndexUpdates(ByteBuffer rowKey,
                                   ColumnFamily cf,
                                   SortedSet<ByteBuffer> mutatedIndexedColumns,
-                                  ColumnFamily oldIndexedColumns) throws IOException
+                                  ColumnFamily oldIndexedColumns)
     {
 
         // Identify the columns with PerRowSecondaryIndexes
@@ -504,7 +498,7 @@ public class SecondaryIndexManager
      * @param key the row key
      * @param indexedColumnsInRow all column names in row
      */
-    public void deleteFromIndexes(DecoratedKey key, List<IColumn> indexedColumnsInRow) throws IOException
+    public void deleteFromIndexes(DecoratedKey key, List<IColumn> indexedColumnsInRow)
     {
 
         // Identify the columns with isRowLevelIndex == true
@@ -611,7 +605,7 @@ public class SecondaryIndexManager
         for (ByteBuffer colName : indexes)
             indexesByColumn.get(colName).setIndexRemoved(colName);
     }
-    
+
     public boolean validate(Column column)
     {
         SecondaryIndex index = getIndexForColumn(column.name);

@@ -40,8 +40,8 @@ import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.DefsTable;
 import org.apache.cassandra.db.SystemTable;
 import org.apache.cassandra.dht.IPartitioner;
+import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.util.FileUtils;
-import org.apache.cassandra.io.util.MmappedSegmentedFile;
 import org.apache.cassandra.locator.DynamicEndpointSnitch;
 import org.apache.cassandra.locator.EndpointSnitchInfo;
 import org.apache.cassandra.locator.IEndpointSnitch;
@@ -70,7 +70,7 @@ public class DatabaseDescriptor
     private static SeedProvider seedProvider;
 
     /* Hashing strategy Random or OPHF */
-    private static IPartitioner partitioner;
+    private static IPartitioner<?> partitioner;
 
     private static Config.DiskAccessMode indexAccessMode;
 
@@ -198,9 +198,6 @@ public class DatabaseDescriptor
                 indexAccessMode = conf.disk_access_mode;
                 logger.info("DiskAccessMode is " + conf.disk_access_mode + ", indexAccessMode is " + indexAccessMode );
             }
-            // We could enable cleaner for index only mmap but it probably doesn't matter much
-            if (conf.disk_access_mode == Config.DiskAccessMode.mmap)
-                MmappedSegmentedFile.initCleaner();
 
 	        logger.debug("page_cache_hinting is " + conf.populate_io_cache_on_flush);
 
@@ -355,7 +352,7 @@ public class DatabaseDescriptor
                     {
                         requestSchedulerOptions = new RequestSchedulerOptions();
                     }
-                    Class cls = Class.forName(conf.request_scheduler);
+                    Class<?> cls = Class.forName(conf.request_scheduler);
                     requestScheduler = (IRequestScheduler) cls.getConstructor(RequestSchedulerOptions.class).newInstance(requestSchedulerOptions);
                 }
                 catch (ClassNotFoundException e)
@@ -472,7 +469,7 @@ public class DatabaseDescriptor
             }
             try
             {
-                Class seedProviderClass = Class.forName(conf.seed_provider.class_name);
+                Class<?> seedProviderClass = Class.forName(conf.seed_provider.class_name);
                 seedProvider = (SeedProvider)seedProviderClass.getConstructor(Map.class).newInstance(conf.seed_provider.parameters);
             }
             // there are about 5 checked exceptions that could be thrown here.
@@ -599,42 +596,50 @@ public class DatabaseDescriptor
 
     /**
      * Creates all storage-related directories.
-     * @throws IOException when a disk problem is encountered.
      */
-    public static void createAllDirectories() throws IOException
+    public static void createAllDirectories()
     {
-        try {
+        try
+        {
             if (conf.data_file_directories.length == 0)
-            {
                 throw new ConfigurationException("At least one DataFileDirectory must be specified");
-            }
-            for ( String dataFileDirectory : conf.data_file_directories )
+
+            for (String dataFileDirectory : conf.data_file_directories)
+            {
                 FileUtils.createDirectory(dataFileDirectory);
+            }
+
             if (conf.commitlog_directory == null)
-            {
                 throw new ConfigurationException("commitlog_directory must be specified");
-            }
+
             FileUtils.createDirectory(conf.commitlog_directory);
+
             if (conf.saved_caches_directory == null)
-            {
                 throw new ConfigurationException("saved_caches_directory must be specified");
-            }
+
             FileUtils.createDirectory(conf.saved_caches_directory);
         }
-        catch (ConfigurationException ex) {
-            logger.error("Fatal error: " + ex.getMessage());
+        catch (ConfigurationException e)
+        {
+            logger.error("Fatal error: " + e.getMessage());
             System.err.println("Bad configuration; unable to start server");
+            System.exit(1);
+        }
+        catch (FSWriteError e)
+        {
+            logger.error("Fatal error: " + e.getMessage());
+            System.err.println(e.getCause().getMessage() + "; unable to start server");
             System.exit(1);
         }
     }
 
-    public static IPartitioner getPartitioner()
+    public static IPartitioner<?> getPartitioner()
     {
         return partitioner;
     }
 
     /* For tests ONLY, don't use otherwise or all hell will break loose */
-    public static void setPartitioner(IPartitioner newPartitioner)
+    public static void setPartitioner(IPartitioner<?> newPartitioner)
     {
         partitioner = newPartitioner;
     }
@@ -884,7 +889,7 @@ public class DatabaseDescriptor
 
     public static Set<InetAddress> getSeeds()
     {
-        return Collections.unmodifiableSet(new HashSet(seedProvider.getSeeds()));
+        return Collections.unmodifiableSet(new HashSet<InetAddress>(seedProvider.getSeeds()));
     }
 
     public static InetAddress getListenAddress()

@@ -17,13 +17,9 @@
  */
 package org.apache.cassandra.io.sstable;
 
-import java.io.IOError;
 import java.io.IOException;
 import java.util.Arrays;
 import java.util.Iterator;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.db.compaction.ICompactionScanner;
 import org.apache.cassandra.db.DecoratedKey;
@@ -37,8 +33,6 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 
 public class SSTableScanner implements ICompactionScanner
 {
-    private static final Logger logger = LoggerFactory.getLogger(SSTableScanner.class);
-
     protected final RandomAccessReader dfile;
     protected final RandomAccessReader ifile;
     public final SSTableReader sstable;
@@ -52,16 +46,8 @@ public class SSTableScanner implements ICompactionScanner
      */
     SSTableScanner(SSTableReader sstable, boolean skipCache)
     {
-        try
-        {
-            this.dfile = sstable.openDataReader(skipCache);
-            this.ifile = sstable.openIndexReader(skipCache);
-        }
-        catch (IOException e)
-        {
-            sstable.markSuspect();
-            throw new IOError(e);
-        }
+        this.dfile = sstable.openDataReader(skipCache);
+        this.ifile = sstable.openIndexReader(skipCache);
         this.sstable = sstable;
         this.filter = null;
     }
@@ -72,16 +58,8 @@ public class SSTableScanner implements ICompactionScanner
      */
     SSTableScanner(SSTableReader sstable, QueryFilter filter)
     {
-        try
-        {
-            this.dfile = sstable.openDataReader(false);
-            this.ifile = sstable.openIndexReader(false);
-        }
-        catch (IOException e)
-        {
-            sstable.markSuspect();
-            throw new IOError(e);
-        }
+        this.dfile = sstable.openDataReader(false);
+        this.ifile = sstable.openIndexReader(false);
         this.sstable = sstable;
         this.filter = filter;
     }
@@ -126,20 +104,13 @@ public class SSTableScanner implements ICompactionScanner
         catch (IOException e)
         {
             sstable.markSuspect();
-            throw new RuntimeException("corrupt sstable", e);
+            throw new CorruptSSTableException(e, ifile.getPath());
         }
     }
 
     public long getLengthInBytes()
     {
-        try
-        {
-            return dfile.length();
-        }
-        catch (IOException e)
-        {
-            throw new IOError(e);
-        }
+        return dfile.length();
     }
 
     public long getCurrentPosition()
@@ -182,17 +153,9 @@ public class SSTableScanner implements ICompactionScanner
 
         public boolean hasNext()
         {
-            try
-            {
-                if (row == null)
-                    return !dfile.isEOF();
-                return finishedAt < dfile.length();
-            }
-            catch (IOException e)
-            {
-                sstable.markSuspect();
-                throw new RuntimeException(e);
-            }
+            if (row == null)
+                return !dfile.isEOF();
+            return finishedAt < dfile.length();
         }
 
         public OnDiskAtomIterator next()
@@ -215,7 +178,7 @@ public class SSTableScanner implements ICompactionScanner
             catch (IOException e)
             {
                 sstable.markSuspect();
-                throw new RuntimeException(SSTableScanner.this + " failed to provide next columns from " + this, e);
+                throw new CorruptSSTableException(e, dfile.getPath());
             }
         }
 
@@ -238,17 +201,9 @@ public class SSTableScanner implements ICompactionScanner
 
         public boolean hasNext()
         {
-            try
-            {
-                if (row == null)
-                    return !ifile.isEOF();
-                return nextKey != null;
-            }
-            catch (IOException e)
-            {
-                sstable.markSuspect();
-                throw new RuntimeException(e);
-            }
+            if (row == null)
+                return !ifile.isEOF();
+            return nextKey != null;
         }
 
         public OnDiskAtomIterator next()
@@ -286,7 +241,7 @@ public class SSTableScanner implements ICompactionScanner
             catch (IOException e)
             {
                 sstable.markSuspect();
-                throw new RuntimeException(SSTableScanner.this + " failed to provide next columns from " + this, e);
+                throw new CorruptSSTableException(e, ifile.getPath());
             }
         }
 

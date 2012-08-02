@@ -18,6 +18,9 @@
 package org.apache.cassandra.io.util;
 
 import java.io.*;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.nio.MappedByteBuffer;
 import java.text.DecimalFormat;
 import java.util.Arrays;
 import java.util.Comparator;
@@ -25,9 +28,10 @@ import java.util.Comparator;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.io.FSReadError;
+import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.service.StorageService;
-import org.apache.cassandra.utils.WrappedRunnable;
-
+import org.apache.cassandra.utils.CLibrary;
 
 public class FileUtils
 {
@@ -39,34 +43,97 @@ public class FileUtils
 
     private static final DecimalFormat df = new DecimalFormat("#.##");
 
-    public static void deleteWithConfirm(String file) throws IOException
+    private static final Method cleanerMethod;
+
+    static
+    {
+        Method m;
+        try
+        {
+            m = Class.forName("sun.nio.ch.DirectBuffer").getMethod("cleaner");
+        }
+        catch (Exception e)
+        {
+            // Perhaps a non-sun-derived JVM - contributions welcome
+            logger.info("Cannot initialize un-mmaper.  (Are you using a non-SUN JVM?)  Compacted data files will not be removed promptly.  Consider using a SUN JVM or using standard disk access mode");
+            m = null;
+        }
+        cleanerMethod = m;
+    }
+
+    public static void createHardLink(File from, File to)
+    {
+        if (to.exists())
+            throw new RuntimeException("Tried to create duplicate hard link to " + to);
+        if (!from.exists())
+            throw new RuntimeException("Tried to hard link to file that does not exist " + from);
+
+        try
+        {
+            CLibrary.createHardLink(from, to);
+        }
+        catch (IOException e)
+        {
+            throw new FSWriteError(e, to);
+        }
+    }
+
+    public static File createTempFile(String prefix, String suffix, File directory)
+    {
+        try
+        {
+            return File.createTempFile(prefix, suffix, directory);
+        }
+        catch (IOException e)
+        {
+            throw new FSWriteError(e, directory);
+        }
+    }
+
+    public static File createTempFile(String prefix, String suffix)
+    {
+        return createTempFile(prefix, suffix, new File(System.getProperty("java.io.tmpdir")));
+    }
+
+    public static void deleteWithConfirm(String file)
     {
         deleteWithConfirm(new File(file));
     }
 
-    public static void deleteWithConfirm(File file) throws IOException
+    public static void deleteWithConfirm(File file)
     {
         assert file.exists() : "attempted to delete non-existing file " + file.getName();
         if (logger.isDebugEnabled())
             logger.debug("Deleting " + file.getName());
         if (!file.delete())
-        {
-            throw new IOException("Failed to delete " + file.getAbsolutePath());
-        }
+            throw new FSWriteError(new IOException("Failed to delete " + file.getAbsolutePath()), file);
     }
 
-    public static void renameWithConfirm(File from, File to) throws IOException
+    public static void renameWithOutConfirm(String from, String to)
+    {
+        new File(from).renameTo(new File(to));
+    }
+
+    public static void renameWithConfirm(String from, String to)
+    {
+        renameWithConfirm(new File(from), new File(to));
+    }
+
+    public static void renameWithConfirm(File from, File to)
     {
         assert from.exists();
         if (logger.isDebugEnabled())
             logger.debug((String.format("Renaming %s to %s", from.getPath(), to.getPath())));
+        // this is not FSWE because usually when we see it it's because we didn't close the file before renaming it,
+        // and Windows is picky about that.
         if (!from.renameTo(to))
-            throw new IOException(String.format("Failed to rename %s to %s", from.getPath(), to.getPath()));
+            throw new RuntimeException(String.format("Failed to rename %s to %s", from.getPath(), to.getPath()));
     }
 
-    public static void truncate(String path, long size) throws IOException
+    public static void truncate(String path, long size)
     {
         RandomAccessFile file;
+
         try
         {
             file = new RandomAccessFile(path, "rw");
@@ -75,13 +142,18 @@ public class FileUtils
         {
             throw new RuntimeException(e);
         }
+
         try
         {
             file.getChannel().truncate(size);
         }
+        catch (IOException e)
+        {
+            throw new FSWriteError(e, path);
+        }
         finally
         {
-            file.close();
+            closeQuietly(file);
         }
     }
 
@@ -123,6 +195,56 @@ public class FileUtils
             throw e;
     }
 
+    public static String getCanonicalPath(String filename)
+    {
+        try
+        {
+            return new File(filename).getCanonicalPath();
+        }
+        catch (IOException e)
+        {
+            throw new FSReadError(e, filename);
+        }
+    }
+
+    public static String getCanonicalPath(File file)
+    {
+        try
+        {
+            return file.getCanonicalPath();
+        }
+        catch (IOException e)
+        {
+            throw new FSReadError(e, file);
+        }
+    }
+
+    public static boolean isCleanerAvailable()
+    {
+        return cleanerMethod != null;
+    }
+
+    public static void clean(MappedByteBuffer buffer)
+    {
+        try
+        {
+            Object cleaner = cleanerMethod.invoke(buffer);
+            cleaner.getClass().getMethod("clean").invoke(cleaner);
+        }
+        catch (IllegalAccessException e)
+        {
+            throw new RuntimeException(e);
+        }
+        catch (InvocationTargetException e)
+        {
+            throw new RuntimeException(e);
+        }
+        catch (NoSuchMethodException e)
+        {
+            throw new RuntimeException(e);
+        }
+    }
+
     public static class FileComparator implements Comparator<File>
     {
         public int compare(File f, File f2)
@@ -131,19 +253,17 @@ public class FileUtils
         }
     }
 
-    public static void createDirectory(String directory) throws IOException
+    public static void createDirectory(String directory)
     {
         createDirectory(new File(directory));
     }
 
-    public static void createDirectory(File directory) throws IOException
+    public static void createDirectory(File directory)
     {
         if (!directory.exists())
         {
             if (!directory.mkdirs())
-            {
-                throw new IOException("unable to mkdirs " + directory);
-            }
+                throw new FSWriteError(new IOException("Failed to mkdirs " + directory), directory);
         }
     }
 
@@ -163,9 +283,9 @@ public class FileUtils
 
     public static void deleteAsync(final String file)
     {
-        Runnable runnable = new WrappedRunnable()
+        Runnable runnable = new Runnable()
         {
-            protected void runMayThrow() throws IOException
+            public void run()
             {
                 deleteWithConfirm(new File(file));
             }
@@ -210,9 +330,9 @@ public class FileUtils
     /**
      * Deletes all files and subdirectories under "dir".
      * @param dir Directory to be deleted
-     * @throws IOException if any part of the tree cannot be deleted
+     * @throws FSWriteError if any part of the tree cannot be deleted
      */
-    public static void deleteRecursive(File dir) throws IOException
+    public static void deleteRecursive(File dir)
     {
         if (dir.isDirectory())
         {

@@ -17,13 +17,7 @@
  */
 package org.apache.cassandra.io.util;
 
-import java.io.DataInput;
-import java.io.DataOutput;
-import java.io.File;
-import java.io.IOError;
-import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.lang.reflect.Method;
+import java.io.*;
 import java.nio.MappedByteBuffer;
 import java.nio.channels.FileChannel;
 import java.util.ArrayList;
@@ -33,14 +27,14 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.io.FSReadError;
+
 public class MmappedSegmentedFile extends SegmentedFile
 {
     private static final Logger logger = LoggerFactory.getLogger(MmappedSegmentedFile.class);
 
     // in a perfect world, MAX_SEGMENT_SIZE would be final, but we need to test with a smaller size to stay sane.
     public static long MAX_SEGMENT_SIZE = Integer.MAX_VALUE;
-
-    private static Method cleanerMethod = null;
 
     /**
      * Sorted array of segment offsets and MappedByteBuffers for segments. If mmap is completely disabled, or if the
@@ -83,40 +77,15 @@ public class MmappedSegmentedFile extends SegmentedFile
         }
 
         // not mmap'd: open a braf covering the segment
-        try
-        {
-            // FIXME: brafs are unbounded, so this segment will cover the rest of the file, rather than just the row
-            RandomAccessReader file = RandomAccessReader.open(new File(path));
-            file.seek(position);
-            return file;
-        }
-        catch (IOException e)
-        {
-            throw new IOError(e);
-        }
-    }
-
-    public static void initCleaner()
-    {
-        try
-        {
-            cleanerMethod = Class.forName("sun.nio.ch.DirectBuffer").getMethod("cleaner");
-        }
-        catch (Exception e)
-        {
-            // Perhaps a non-sun-derived JVM - contributions welcome
-            logger.info("Cannot initialize un-mmaper.  (Are you using a non-SUN JVM?)  Compacted data files will not be removed promptly.  Consider using a SUN JVM or using standard disk access mode");
-        }
-    }
-
-    public static boolean isCleanerAvailable()
-    {
-        return cleanerMethod != null;
+        // FIXME: brafs are unbounded, so this segment will cover the rest of the file, rather than just the row
+        RandomAccessReader file = RandomAccessReader.open(new File(path));
+        file.seek(position);
+        return file;
     }
 
     public void cleanup()
     {
-        if (cleanerMethod == null)
+        if (!FileUtils.isCleanerAvailable())
             return;
 
         /*
@@ -130,9 +99,7 @@ public class MmappedSegmentedFile extends SegmentedFile
             {
                 if (segment.right == null)
                     continue;
-
-                Object cleaner = cleanerMethod.invoke(segment.right);
-                cleaner.getClass().getMethod("clean").invoke(cleaner);
+                FileUtils.clean(segment.right);
             }
             logger.debug("All segments have been unmapped successfully");
         }
@@ -205,10 +172,19 @@ public class MmappedSegmentedFile extends SegmentedFile
         {
             int segcount = boundaries.size() - 1;
             Segment[] segments = new Segment[segcount];
-            RandomAccessFile raf = null;
+            RandomAccessFile raf;
+
             try
             {
                 raf = new RandomAccessFile(path, "r");
+            }
+            catch (FileNotFoundException e)
+            {
+                throw new RuntimeException(e);
+            }
+
+            try
+            {
                 for (int i = 0; i < segcount; i++)
                 {
                     long start = boundaries.get(i);
@@ -221,7 +197,7 @@ public class MmappedSegmentedFile extends SegmentedFile
             }
             catch (IOException e)
             {
-                throw new IOError(e);
+                throw new FSReadError(e, path);
             }
             finally
             {

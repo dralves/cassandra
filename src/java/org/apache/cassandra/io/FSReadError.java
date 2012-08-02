@@ -15,23 +15,26 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.utils;
+package org.apache.cassandra.io;
 
-import com.google.common.base.Throwables;
+import java.io.File;
 
-public abstract class WrappedRunnable implements Runnable
+import org.apache.cassandra.io.sstable.Descriptor;
+
+public class FSReadError extends FSError
 {
-    public final void run()
+    public FSReadError(Throwable cause, File path)
     {
-        try
-        {
-            runMayThrow();
-        }
-        catch (Exception e)
-        {
-            throw Throwables.propagate(e);
-        }
+        super(cause, path);
     }
 
-    abstract protected void runMayThrow() throws Exception;
+    public FSReadError(Throwable cause, String path)
+    {
+        this(cause, new File(path));
+    }
+
+    public FSReadError(Throwable cause, Descriptor descriptor)
+    {
+        this(cause, descriptor.baseFilename());
+    }
 }

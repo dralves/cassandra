@@ -21,13 +21,14 @@ import java.nio.ByteBuffer;
 import java.io.*;
 import java.util.*;
 
+import com.google.common.base.Throwables;
+
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.io.sstable.*;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.RandomAccessReader;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.OutputHandler;
 
 public class Scrubber implements Closeable
@@ -255,11 +256,11 @@ public class Scrubber implements Closeable
             if (writer.getFilePointer() > 0)
                 newSstable = writer.closeAndOpenReader(sstable.maxDataAge);
         }
-        catch (Exception e)
+        catch (Throwable t)
         {
             if (writer != null)
                 writer.abort();
-            throw FBUtilities.unchecked(e);
+            throw Throwables.propagate(t);
         }
 
         if (!outOfOrderRows.isEmpty())
