@@ -17,8 +17,8 @@
  */
 package org.apache.cassandra.cli;
 
-import static org.apache.cassandra.service.TraceSessionContext.EVENT_TYPE;
-import static org.apache.cassandra.service.TraceSessionContext.SESSION_TYPE;
+import static org.apache.cassandra.tracing.TraceSessionContext.EVENT_TYPE;
+import static org.apache.cassandra.tracing.TraceSessionContext.SESSION_TYPE;
 
 import java.io.File;
 import java.io.IOException;
@@ -49,6 +49,8 @@ import com.google.common.collect.Iterables;
 
 import org.apache.commons.lang.StringUtils;
 
+import org.apache.cassandra.tracing.TraceSessionContext;
+
 import org.antlr.runtime.tree.Tree;
 import org.apache.cassandra.auth.IAuthenticator;
 import org.apache.cassandra.config.ConfigurationException;
@@ -71,7 +73,6 @@ import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.locator.SimpleSnitch;
 import org.apache.cassandra.service.StorageProxy;
-import org.apache.cassandra.service.TraceSessionContext;
 import org.apache.cassandra.thrift.AuthenticationException;
 import org.apache.cassandra.thrift.AuthenticationRequest;
 import org.apache.cassandra.thrift.AuthorizationException;

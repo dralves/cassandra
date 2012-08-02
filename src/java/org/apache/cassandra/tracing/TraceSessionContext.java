@@ -18,9 +18,8 @@
  * under the License.
  *
  */
-package org.apache.cassandra.service;
+package org.apache.cassandra.tracing;
 
-import static com.google.common.base.Preconditions.checkNotNull;
 import static com.google.common.base.Preconditions.checkState;
 
 import java.io.ByteArrayInputStream;
@@ -30,19 +29,15 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
-import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.TimeUnit;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Predicate;
-import com.google.common.base.Stopwatch;
 import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
-import com.google.common.collect.Maps;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,13 +57,17 @@ import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.db.ExpiringColumn;
 import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.BytesType;
 import org.apache.cassandra.db.marshal.CompositeType;
 import org.apache.cassandra.db.marshal.InetAddressType;
+import org.apache.cassandra.db.marshal.MapType;
 import org.apache.cassandra.db.marshal.TimeUUIDType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.net.MessageIn;
+import org.apache.cassandra.service.MigrationManager;
+import org.apache.cassandra.service.StorageProxy;
 import org.apache.cassandra.thrift.ConsistencyLevel;
 import org.apache.cassandra.thrift.InvalidRequestException;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -117,6 +116,8 @@ public class TraceSessionContext
 
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
 
+    public static final MapType PAYLOAD_TYPE = MapType.getInstance(UTF8Type.instance, BytesType.instance);
+
     public static final CompositeType SESSION_TYPE = CompositeType.getInstance(ImmutableList
             .<AbstractType<?>> of(InetAddressType.instance, UTF8Type.instance
             ));
@@ -124,8 +125,6 @@ public class TraceSessionContext
     public static final CompositeType EVENT_TYPE = CompositeType.getInstance(ImmutableList
             .<AbstractType<?>> of(InetAddressType.instance, TimeUUIDType.instance, UTF8Type.instance
             ));
-
-    private static Map<String, TraceEventPayloadSerializer> requestTraceSerialzers = Maps.newHashMap();
 
     public static final CFMetaData sessionsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + SESSIONS_TABLE
             + " (" +
@@ -143,14 +142,13 @@ public class TraceSessionContext
             "  " + EVENT + "             text," +
             "  " + DURATION + "          bigint," +
             "  " + HAPPENED + "          timestamp," +
-            "  " + PAYLOAD + "           blob," +
-            "  " + PAYLOAD_DESCRIPTOR + "blob," +
+            "  " + PAYLOAD + "           map<text, blob>," +
             "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + ", " + EVENT_ID + "));");
 
     /**
      * Trace session meta events.
      */
-    public enum TraceEvent
+    public enum TraceEventEnum
     {
         /**
          * Signals the start of a trace session (is possibly accompanied with arguments and/or argument descriptors)
@@ -245,47 +243,9 @@ public class TraceSessionContext
         newSession(sessionIdAsBB, localAddress, request, timestamp);
     }
 
-    public UUID trace(TraceEvent traceEvent)
-    {
-        return trace(traceEvent.name(), System.currentTimeMillis());
-    }
-
-    public UUID trace(String traceEvent)
-    {
-        return trace(traceEvent, System.currentTimeMillis());
-    }
-
-    public UUID trace(TraceEvent traceEvent, long timestamp)
-    {
-        return trace(traceEvent.name());
-    }
-
-    public UUID trace(String traceEvent, long timestamp)
-    {
-        if (isTracing())
-        {
-            TraceSessionContextThreadLocalState state = sessionContextThreadLocalState.get();
-            return trace(traceEvent, state.watch.elapsedTime(TimeUnit.NANOSECONDS), timestamp);
-        }
-        return null;
-    }
-
-    public UUID trace(String traceEvent, long duration, long timestamp)
-    {
-        if (isTracing())
-        {
-            byte[] eventId = UUIDGen.getTimeUUIDBytes();
-            TraceSessionContextThreadLocalState state = sessionContextThreadLocalState.get();
-            trace(state.sessionId, state.origin, eventId, state.source, traceEvent,
-                    duration, timestamp);
-            return UUIDGen.getUUID(ByteBuffer.wrap(eventId));
-        }
-        return null;
-    }
-
     public void stopSession()
     {
-        trace(TraceEvent.TRACE_SESSION_END);
+        trace(TraceEventEnum.TRACE_SESSION_END);
         reset();
     }
 
@@ -438,17 +398,20 @@ public class TraceSessionContext
         store(sessionId, family);
     }
 
-    public void trace(byte[] sessionId, InetAddress coordinator, byte[] eventId, InetAddress source,
-            String traceEvent, long duration, long happenedAt)
+    public UUID trace(TraceEvent event)
     {
+        if (isTracing()){
         ColumnFamily family = ColumnFamily.create(eventsCfm);
-        ByteBuffer coordinatorAsBB = bytes(coordinator);
-        ByteBuffer eventIdAsBB = ByteBuffer.wrap(eventId);
+        ByteBuffer coordinatorAsBB = bytes(event.coordinator());
+        ByteBuffer eventIdAsBB = ByteBuffer.wrap(event.eventId());
         family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, SOURCE_BB), source));
         family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, EVENT_BB), traceEvent));
         family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, DURATION_BB), duration));
         family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, HAPPENED_BB), happenedAt));
         store(sessionId, family);
+        return UUIDGen.getUUID(ByteBuffer.wrap(eventId)
+        }
+        return null;
     }
 
     private ByteBuffer buildName(CFMetaData meta, ByteBuffer... args)
@@ -558,14 +521,6 @@ public class TraceSessionContext
         }
     }
 
-    public static void addRequestSerializer(TraceEventPayloadSerializer serializer)
-    {
-        if (requestTraceSerialzers.containsKey(serializer.getEventName()))
-            throw new IllegalStateException("There is already a TraceEventPayloadSerializer for trace event: "
-                    + serializer.getEventName());
-        requestTraceSerialzers.put(serializer.getEventName(), serializer);
-    }
-
     @VisibleForTesting
     public static void setCtx(TraceSessionContext context)
     {
@@ -583,52 +538,5 @@ public class TraceSessionContext
     public static void initialize()
     {
         ctx = new TraceSessionContext();
-    }
-
-    public static class TraceSessionContextThreadLocalState
-    {
-        public final byte[] sessionId;
-        public final InetAddress origin;
-        public final InetAddress source;
-        public final String messageId;
-        public final Stopwatch watch;
-
-        public TraceSessionContextThreadLocalState(final TraceSessionContextThreadLocalState other)
-        {
-            this(other.origin, other.source, other.sessionId, other.messageId);
-        }
-
-        public TraceSessionContextThreadLocalState(final InetAddress coordinator, final InetAddress source,
-                final byte[] sessionId)
-        {
-            this(coordinator, source, sessionId, null);
-        }
-
-        public TraceSessionContextThreadLocalState(final InetAddress coordinator, final InetAddress source,
-                final byte[] sessionId,
-                final String messageId)
-        {
-            checkNotNull(coordinator);
-            checkNotNull(source);
-            checkNotNull(sessionId);
-
-            this.origin = coordinator;
-            this.source = source;
-            this.sessionId = sessionId;
-            this.messageId = ((messageId == null) || (messageId.length() == 0)) ? null : messageId;
-            this.watch = new Stopwatch();
-            this.watch.start();
-        }
-    }
-
-    public interface TraceEventPayloadSerializer
-    {
-
-        public ByteBuffer compose(Object... payload);
-
-        public <T> T decompose(ByteBuffer encoded);
-
-        public String getEventName();
-
     }
 }

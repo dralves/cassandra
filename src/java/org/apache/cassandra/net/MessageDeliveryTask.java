@@ -17,12 +17,13 @@
  */
 package org.apache.cassandra.net;
 
-import static org.apache.cassandra.service.TraceSessionContext.traceCtx;
+import static org.apache.cassandra.tracing.TraceSessionContext.traceCtx;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.service.TraceSessionContext;
+import org.apache.cassandra.tracing.TraceSessionContext;
+
 
 public class MessageDeliveryTask implements Runnable
 {

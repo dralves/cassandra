@@ -17,7 +17,7 @@
  */
 package org.apache.cassandra.concurrent;
 
-import static org.apache.cassandra.service.TraceSessionContext.traceCtx;
+import static org.apache.cassandra.tracing.TraceSessionContext.traceCtx;
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
@@ -35,9 +35,12 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import org.apache.cassandra.tracing.TraceSessionContextThreadLocalState;
+
+import org.apache.cassandra.tracing.TraceSessionContext;
+
 import antlr.debug.TraceEvent;
 
-import org.apache.cassandra.service.TraceSessionContext;
 
 /**
  * This class encorporates some Executor best practices for Cassandra.  Most of the executors in the system
@@ -153,12 +156,12 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
             if (getThreadFactory() instanceof NamedThreadFactory)
             {
                 traceCtx().trace(
-                        TraceSessionContext.TraceEvent.STAGE_FINISH.name(((NamedThreadFactory) getThreadFactory()).id));
+                        TraceSessionContext.TraceEventEnum.STAGE_FINISH.name(((NamedThreadFactory) getThreadFactory()).id));
             }
             else
             {
                 traceCtx().trace(
-                        TraceSessionContext.TraceEvent.STAGE_FINISH);
+                        TraceSessionContext.TraceEventEnum.STAGE_FINISH);
             }
             // we modified the TraceSessionContext when this task started, so reset it
             traceCtx().reset();
@@ -236,12 +239,12 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
             if (getThreadFactory() instanceof NamedThreadFactory)
             {
                 traceCtx().trace(
-                        TraceSessionContext.TraceEvent.STAGE_BEGIN.name(((NamedThreadFactory) getThreadFactory()).id));
+                        TraceSessionContext.TraceEventEnum.STAGE_BEGIN.name(((NamedThreadFactory) getThreadFactory()).id));
             }
             else
             {
                 traceCtx().trace(
-                        TraceSessionContext.TraceEvent.STAGE_BEGIN);
+                        TraceSessionContext.TraceEventEnum.STAGE_BEGIN);
             }
         }
         super.beforeExecute(t, r);
@@ -303,7 +306,7 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
      */
     private static class TraceSessionWrapper<T> extends FutureTask<T> implements Callable<T>
     {
-        private final TraceSessionContext.TraceSessionContextThreadLocalState traceSessionThreadLocalState;
+        private final TraceSessionContextThreadLocalState traceSessionThreadLocalState;
 
         // Using initializer because the ctor's provided by the FutureTask<> are all we need
         {

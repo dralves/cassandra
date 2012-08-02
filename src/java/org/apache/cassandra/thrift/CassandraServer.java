@@ -18,7 +18,7 @@
 package org.apache.cassandra.thrift;
 
 
-import static org.apache.cassandra.service.TraceSessionContext.traceCtx;
+import static org.apache.cassandra.tracing.TraceSessionContext.traceCtx;
 
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;

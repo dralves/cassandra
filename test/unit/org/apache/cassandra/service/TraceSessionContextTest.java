@@ -26,12 +26,12 @@ import static junit.framework.Assert.assertFalse;
 import static junit.framework.Assert.assertNotNull;
 import static junit.framework.Assert.assertSame;
 import static junit.framework.Assert.assertTrue;
-import static org.apache.cassandra.service.TraceSessionContext.EVENTS_TABLE;
-import static org.apache.cassandra.service.TraceSessionContext.EVENT_TYPE;
-import static org.apache.cassandra.service.TraceSessionContext.SESSIONS_TABLE;
-import static org.apache.cassandra.service.TraceSessionContext.SESSION_TYPE;
-import static org.apache.cassandra.service.TraceSessionContext.TRACE_KEYSPACE;
-import static org.apache.cassandra.service.TraceSessionContext.traceCtx;
+import static org.apache.cassandra.tracing.TraceSessionContext.EVENTS_TABLE;
+import static org.apache.cassandra.tracing.TraceSessionContext.EVENT_TYPE;
+import static org.apache.cassandra.tracing.TraceSessionContext.SESSIONS_TABLE;
+import static org.apache.cassandra.tracing.TraceSessionContext.SESSION_TYPE;
+import static org.apache.cassandra.tracing.TraceSessionContext.TRACE_KEYSPACE;
+import static org.apache.cassandra.tracing.TraceSessionContext.traceCtx;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -52,6 +52,8 @@ import com.google.common.collect.Iterables;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import org.apache.cassandra.tracing.TraceSessionContext;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
