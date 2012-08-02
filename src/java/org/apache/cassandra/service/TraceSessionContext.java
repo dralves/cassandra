@@ -30,6 +30,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -41,6 +42,7 @@ import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
+import com.google.common.collect.Maps;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -100,14 +102,18 @@ public class TraceSessionContext
     public static final ByteBuffer SESSION_START_BB = ByteBufferUtil.bytes(SESSION_START);
 
     /* event table columns */
+    public static final String SOURCE = "source";
+    public static final ByteBuffer SOURCE_BB = ByteBufferUtil.bytes(SOURCE);
     public static final String EVENT = "event";
     public static final ByteBuffer EVENT_BB = ByteBufferUtil.bytes(EVENT);
     public static final String DURATION = "duration";
     public static final ByteBuffer DURATION_BB = ByteBufferUtil.bytes(DURATION);
     public static final String HAPPENED = "happened_at";
     public static final ByteBuffer HAPPENED_BB = ByteBufferUtil.bytes(HAPPENED);
-    public static final String SOURCE = "source";
-    public static final ByteBuffer SOURCE_BB = ByteBufferUtil.bytes(SOURCE);
+    public static final String PAYLOAD = "payload";
+    public static final ByteBuffer PAYLOAD_BB = ByteBufferUtil.bytes(PAYLOAD);
+    public static final String PAYLOAD_DESCRIPTOR = "payload_descriptor";
+    public static final ByteBuffer PAYLOAD_DESCRIPTOR_BB = ByteBufferUtil.bytes(PAYLOAD_DESCRIPTOR);
 
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
 
@@ -119,22 +125,26 @@ public class TraceSessionContext
             .<AbstractType<?>> of(InetAddressType.instance, TimeUUIDType.instance, UTF8Type.instance
             ));
 
+    private static Map<String, TraceEventPayloadSerializer> requestTraceSerialzers = Maps.newHashMap();
+
     public static final CFMetaData sessionsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + SESSIONS_TABLE
             + " (" +
-            "  " + SESSION_ID + "      timeuuid," +
-            "  " + COORDINATOR + "     inet," +
-            "  " + SESSION_START + "   timestamp," +
-            "  " + SESSION_REQUEST + " text," +
+            "  " + SESSION_ID + "        timeuuid," +
+            "  " + COORDINATOR + "       inet," +
+            "  " + SESSION_START + "     timestamp," +
+            "  " + SESSION_REQUEST + "   text," +
             "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + "));");
 
     private static final CFMetaData eventsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + EVENTS_TABLE + " (" +
-            "  " + SESSION_ID + "      timeuuid," +
-            "  " + COORDINATOR + "     inet," +
-            "  " + EVENT_ID + "        timeuuid," +
-            "  " + SOURCE + "          inet," +
-            "  " + EVENT + "           text," +
-            "  " + DURATION + "        bigint," +
-            "  " + HAPPENED + "        timestamp," +
+            "  " + SESSION_ID + "        timeuuid," +
+            "  " + COORDINATOR + "       inet," +
+            "  " + EVENT_ID + "          timeuuid," +
+            "  " + SOURCE + "            inet," +
+            "  " + EVENT + "             text," +
+            "  " + DURATION + "          bigint," +
+            "  " + HAPPENED + "          timestamp," +
+            "  " + PAYLOAD + "           blob," +
+            "  " + PAYLOAD_DESCRIPTOR + "blob," +
             "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + ", " + EVENT_ID + "));");
 
     /**
@@ -142,6 +152,10 @@ public class TraceSessionContext
      */
     public enum TraceEvent
     {
+        /**
+         * Signals the start of a trace session (is possibly accompanied with arguments and/or argument descriptors)
+         */
+        TRACE_SESSION_BEGIN,
         /**
          * Signals a new stage runnable was started within this trace.
          */
@@ -151,7 +165,8 @@ public class TraceSessionContext
          */
         STAGE_FINISH,
         /**
-         * Signals a locally initiated trace session's end.
+         * Signals a locally initiated trace session's end (is possibly accompanied with results and/or result
+         * descriptors)
          */
         TRACE_SESSION_END;
 
@@ -543,6 +558,14 @@ public class TraceSessionContext
         }
     }
 
+    public static void addRequestSerializer(TraceEventPayloadSerializer serializer)
+    {
+        if (requestTraceSerialzers.containsKey(serializer.getEventName()))
+            throw new IllegalStateException("There is already a TraceEventPayloadSerializer for trace event: "
+                    + serializer.getEventName());
+        requestTraceSerialzers.put(serializer.getEventName(), serializer);
+    }
+
     @VisibleForTesting
     public static void setCtx(TraceSessionContext context)
     {
@@ -563,7 +586,6 @@ public class TraceSessionContext
     }
 
     public static class TraceSessionContextThreadLocalState
-
     {
         public final byte[] sessionId;
         public final InetAddress origin;
@@ -597,5 +619,16 @@ public class TraceSessionContext
             this.watch = new Stopwatch();
             this.watch.start();
         }
+    }
+
+    public interface TraceEventPayloadSerializer
+    {
+
+        public ByteBuffer compose(Object... payload);
+
+        public <T> T decompose(ByteBuffer encoded);
+
+        public String getEventName();
+
     }
 }
