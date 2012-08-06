@@ -25,6 +25,7 @@ public class TraceEventBuilder
     private InetAddress source;
     private Map<String, AbstractType<?>> payloadTypes;
     private Map<ByteBuffer, ByteBuffer> payload;
+    private TraceEvent.Type type;
 
     public TraceEventBuilder sessionId(byte[] sessionId)
     {
@@ -74,6 +75,12 @@ public class TraceEventBuilder
         return this;
     }
 
+    public TraceEventBuilder type(TraceEvent.Type type)
+    {
+        this.type = type;
+        return this;
+    }
+
     public TraceEventBuilder payloadTypes(Map<String, AbstractType<?>> payloadTypes)
     {
         this.payloadTypes = payloadTypes;
@@ -118,6 +125,17 @@ public class TraceEventBuilder
         {
             eventId = UUIDGen.getTimeUUIDBytes();
         }
+
+        if (type == null)
+        {
+            type = TraceEvent.Type.MISC;
+        }
+
+        if (name == null)
+        {
+            name = type.name();
+        }
+
         if (sessionId == null)
         {
             sessionId = traceCtx().threadLocalState().sessionId;

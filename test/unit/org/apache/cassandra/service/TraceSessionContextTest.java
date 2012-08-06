@@ -46,14 +46,11 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
-import com.google.common.base.Throwables;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import org.apache.cassandra.tracing.TraceSessionContext;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
@@ -70,6 +67,7 @@ import org.apache.cassandra.net.MessageDeliveryTask;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.net.MessagingService.Verb;
+import org.apache.cassandra.tracing.TraceSessionContext;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
@@ -81,22 +79,15 @@ public class TraceSessionContextTest extends SchemaLoader
     {
 
         /**
-         * Override the paren't mutation that applies mutation to the cluster to instead apply mutations locally for
-         * testing.
+         * Override the paren't mutation that applies mutation to the cluster to instead apply mutations locally and
+         * immediately for testing.
          */
         @Override
         protected void store(final byte[] key, final ColumnFamily family)
         {
-            try
-            {
-                RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBuffer.wrap(key));
-                mutation.add(family);
-                mutation.apply();
-            }
-            catch (IOException e)
-            {
-                Throwables.propagate(e);
-            }
+            RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBuffer.wrap(key));
+            mutation.add(family);
+            mutation.apply();
         }
     }
 

@@ -2,7 +2,13 @@ package org.apache.cassandra.tracing;
 
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.util.Collections;
 import java.util.Map;
+import java.util.Set;
+
+import com.google.common.base.Throwables;
+import com.google.common.collect.Sets;
 
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -11,9 +17,10 @@ public class TraceEvent
 {
 
     /**
-     * A predefined set of events with fixed names and 
+     * A predefined set of events with fixed names and
+     * 
      * @author David Alves
-     *
+     * 
      */
     public enum Type
     {
@@ -22,8 +29,11 @@ public class TraceEvent
         STAGE_FINISH,
         SESSION_END,
         MISC;
-        
-        
+
+        public TraceEventBuilder builder()
+        {
+            return new TraceEventBuilder().type(this);
+        }
 
     }
 
@@ -80,7 +90,7 @@ public class TraceEvent
         return sessionId;
     }
 
-    public byte[] eventId()
+    public byte[] id()
     {
         return eventId;
     }
@@ -108,6 +118,28 @@ public class TraceEvent
             return (T) rawPayload.get(nameAsBB);
         }
         return null;
+    }
+
+    public Set<String> payloadNames()
+    {
+        Set<String> names = Sets.newLinkedHashSet();
+        for (ByteBuffer payloadNameAsBB : rawPayload.keySet())
+        {
+            try
+            {
+                names.add(ByteBufferUtil.string(payloadNameAsBB));
+            }
+            catch (CharacterCodingException e)
+            {
+                Throwables.propagate(e);
+            }
+        }
+        return names;
+    }
+
+    public Map<ByteBuffer, ByteBuffer> rawPayload()
+    {
+        return Collections.unmodifiableMap(rawPayload);
     }
 
     public Map<String, AbstractType<?>> payloadTypes()

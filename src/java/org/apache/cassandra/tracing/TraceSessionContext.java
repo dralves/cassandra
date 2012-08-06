@@ -29,6 +29,7 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.RejectedExecutionException;
 
@@ -55,6 +56,7 @@ import org.apache.cassandra.db.Column;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.db.ExpiringColumn;
+import org.apache.cassandra.db.IColumn;
 import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.BytesType;
@@ -103,16 +105,20 @@ public class TraceSessionContext
     /* event table columns */
     public static final String SOURCE = "source";
     public static final ByteBuffer SOURCE_BB = ByteBufferUtil.bytes(SOURCE);
-    public static final String EVENT = "event";
-    public static final ByteBuffer EVENT_BB = ByteBufferUtil.bytes(EVENT);
+    public static final String TYPE = "type";
+    public static final ByteBuffer TYPE_BB = ByteBufferUtil.bytes(TYPE);
+    public static final String NAME = "name";
+    public static final ByteBuffer NAME_BB = ByteBufferUtil.bytes(NAME);
+    public static final String DESCRIPTION = "description";
+    public static final ByteBuffer DESCRIPTION_BB = ByteBufferUtil.bytes(DESCRIPTION);
     public static final String DURATION = "duration";
     public static final ByteBuffer DURATION_BB = ByteBufferUtil.bytes(DURATION);
     public static final String HAPPENED = "happened_at";
     public static final ByteBuffer HAPPENED_BB = ByteBufferUtil.bytes(HAPPENED);
+    public static final String PAYLOAD_TYPES = "payload_types";
+    public static final ByteBuffer PAYLOAD_TYPES_BB = ByteBufferUtil.bytes(PAYLOAD_TYPES);
     public static final String PAYLOAD = "payload";
     public static final ByteBuffer PAYLOAD_BB = ByteBufferUtil.bytes(PAYLOAD);
-    public static final String PAYLOAD_DESCRIPTOR = "payload_descriptor";
-    public static final ByteBuffer PAYLOAD_DESCRIPTOR_BB = ByteBufferUtil.bytes(PAYLOAD_DESCRIPTOR);
 
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
 
@@ -138,10 +144,13 @@ public class TraceSessionContext
             "  " + SESSION_ID + "        timeuuid," +
             "  " + COORDINATOR + "       inet," +
             "  " + EVENT_ID + "          timeuuid," +
+            "  " + TYPE + "              text," +
             "  " + SOURCE + "            inet," +
-            "  " + EVENT + "             text," +
+            "  " + NAME + "              text," +
             "  " + DURATION + "          bigint," +
             "  " + HAPPENED + "          timestamp," +
+            "  " + DESCRIPTION + "       text," +
+            "  " + PAYLOAD_TYPES + "     map<text, text>," +
             "  " + PAYLOAD + "           map<text, blob>," +
             "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + ", " + EVENT_ID + "));");
 
@@ -245,7 +254,7 @@ public class TraceSessionContext
 
     public void stopSession()
     {
-        trace(TraceEventEnum.TRACE_SESSION_END);
+        trace(TraceEvent.Type.SESSION_END.builder().build());
         reset();
     }
 
@@ -400,16 +409,23 @@ public class TraceSessionContext
 
     public UUID trace(TraceEvent event)
     {
-        if (isTracing()){
-        ColumnFamily family = ColumnFamily.create(eventsCfm);
-        ByteBuffer coordinatorAsBB = bytes(event.coordinator());
-        ByteBuffer eventIdAsBB = ByteBuffer.wrap(event.eventId());
-        family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, SOURCE_BB), source));
-        family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, EVENT_BB), traceEvent));
-        family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, DURATION_BB), duration));
-        family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, HAPPENED_BB), happenedAt));
-        store(sessionId, family);
-        return UUIDGen.getUUID(ByteBuffer.wrap(eventId)
+        if (isTracing())
+        {
+            ColumnFamily family = ColumnFamily.create(eventsCfm);
+            ByteBuffer coordinatorAsBB = bytes(event.coordinator());
+            ByteBuffer eventIdAsBB = ByteBuffer.wrap(event.id());
+            family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, SOURCE_BB), event.source()));
+            family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, NAME_BB), event.name()));
+            family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, DURATION_BB), event.duration()));
+            family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, HAPPENED_BB), event.timestamp()));
+            family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, DESCRIPTION_BB),
+                    event.description()));
+            family.addColumn(typeColumns(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, PAYLOAD_TYPES_BB),
+                    event.payloadTypes()));
+            family.addColumn(payloadColumn(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, PAYLOAD_BB),
+                    event.rawPayload()));
+            store(event.sessionId(), family);
+            return UUIDGen.getUUID(ByteBuffer.wrap(event.id()));
         }
         return null;
     }
@@ -437,6 +453,17 @@ public class TraceSessionContext
     private Column column(ByteBuffer columnName, InetAddress address)
     {
         return new ExpiringColumn(columnName, bytes(address), System.currentTimeMillis(), timeToLive);
+    }
+
+    private IColumn typeColumns(ByteBuffer columnName, Map<String, AbstractType<?>> payloadTypes)
+    {
+        return new ExpiringColumn(columnName, MapType.getInstance(BytesType.instance, BytesType.instance).decompose(
+                columnName), System.currentTimeMillis(), timeToLive);
+    }
+
+    private IColumn payloadColumn(ByteBuffer columnName, Map<ByteBuffer, ByteBuffer> rawPayload)
+    {
+        return null;
     }
 
     private ByteBuffer bytes(InetAddress address)
