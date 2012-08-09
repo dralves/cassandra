@@ -67,6 +67,7 @@ import org.apache.cassandra.net.MessageDeliveryTask;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.net.MessagingService.Verb;
+import org.apache.cassandra.tracing.TraceEventBuilder;
 import org.apache.cassandra.tracing.TraceSessionContext;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
@@ -145,7 +146,8 @@ public class TraceSessionContextTest extends SchemaLoader
     @Test
     public void testNewLocalTraceEvent() throws CharacterCodingException, UnknownHostException
     {
-        UUID eventId = traceCtx().trace("simple trace event", 4321L, 1234L);
+        UUID eventId = traceCtx().trace(
+                new TraceEventBuilder().name("simple trace event").duration(4321L).timestamp(1234L).build());
 
         ColumnFamily family = Table
                 .open(TRACE_KEYSPACE)
@@ -215,7 +217,9 @@ public class TraceSessionContextTest extends SchemaLoader
             {
                 assertTrue(traceCtx().isTracing());
                 assertEquals(sessionId, traceCtx().getSessionId());
-                reference.set(traceCtx().trace("multi threaded trace event", 8765L, 5678L));
+                reference.set(traceCtx().trace(
+                        new TraceEventBuilder().name("multi threaded trace event").duration(8765L).timestamp(5678L)
+                                .build()));
             }
         }).get();
         assertNotNull(reference.get());
@@ -332,7 +336,9 @@ public class TraceSessionContextTest extends SchemaLoader
                 assertTrue(traceCtx().isTracing());
                 assertFalse(traceCtx().isLocalTraceSession());
                 assertEquals(sessionId, traceCtx().getSessionId());
-                reference.set(traceCtx().trace("remote trace event", 9123L, 3219L));
+                reference.set(traceCtx().trace(
+                        new TraceEventBuilder().name("remote trace event").duration(9123L).timestamp(3219L)
+                                .build()));
             }
         });
         poolExecutor.submit(new MessageDeliveryTask(messageIn, "id")).get();

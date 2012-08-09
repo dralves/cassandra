@@ -23,6 +23,13 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
+import org.apache.cassandra.db.marshal.CompositeType;
+
+import org.apache.cassandra.tracing.TraceSessionContext;
+
 import org.apache.cassandra.cql3.ColumnNameBuilder;
 import org.apache.cassandra.cql3.Term;
 import org.apache.cassandra.cql3.UpdateParameters;
@@ -83,12 +90,18 @@ public class MapOperation implements Operation
                 throw new AssertionError("Unsupported Map operation: " + kind);
         }
     }
+    
+    private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
 
     private void doPut(ColumnFamily cf, ColumnNameBuilder builder, CollectionType validator, UpdateParameters params) throws InvalidRequestException
     {
         for (Map.Entry<Term, Term> entry : values.entrySet())
         {
             ByteBuffer name = builder.copy().add(entry.getKey().getByteBuffer(validator.nameComparator(), params.variables)).build();
+            logger.info("comparator type: "+validator.nameComparator());
+            if (validator.nameComparator() instanceof CompositeType){
+                logger.info(((CompositeType) validator.nameComparator()).types.toString());
+            }
             ByteBuffer value = entry.getValue().getByteBuffer(validator.valueComparator(), params.variables);
             cf.addColumn(params.makeColumn(name, value));
         }

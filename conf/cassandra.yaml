@@ -598,7 +598,6 @@ index_interval: 128
 #
 encryption_options:
     internode_encryption: none
-    client_server_encryption: off
     keystore: conf/.keystore
     keystore_password: cassandra
     truststore: conf/.truststore

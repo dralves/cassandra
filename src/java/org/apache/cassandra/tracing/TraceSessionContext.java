@@ -254,7 +254,10 @@ public class TraceSessionContext
 
     public void stopSession()
     {
-        trace(TraceEvent.Type.SESSION_END.builder().build());
+        if (isTracing())
+        {
+            trace(TraceEvent.Type.SESSION_END.builder().build());
+        }
         reset();
     }
 
