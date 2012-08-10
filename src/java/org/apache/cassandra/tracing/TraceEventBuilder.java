@@ -109,9 +109,7 @@ public class TraceEventBuilder
 
     public TraceEventBuilder addPayload(String name, TEnum thriftEnum)
     {
-        ThriftObjectType type = ThriftObjectType.getInstance(thriftObject.getClass());
-        this.payloadTypes.put(name, type);
-        this.payload.put(name, type.decompose(thriftObject));
+        // TODO finish serializing thrift enums (important for consistency level)
         return this;
     }
 
