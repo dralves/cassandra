@@ -2059,17 +2059,17 @@ public class CliClient
             sessionState.err.println("Login failure. Did you specify 'keyspace', 'username' and 'password'?");
         }
     }
-    
+
     private void executeTraceNextQuery() throws TException, CharacterCodingException
     {
         if (!CliMain.isConnected())
             return;
-        
+
         UUID sessionId = TimeUUIDType.instance.compose(thriftClient.trace_next_query());
-        
+
         sessionState.out.println("Will trace next query. Session ID: " + sessionId.toString());
     }
-    
+
     private void executeExplainTraceSession(String text) throws TException, UnavailableException, TimedOutException,
             CharacterCodingException
     {
@@ -2080,7 +2080,7 @@ public class CliClient
         try
         {
             thriftClient.set_keyspace(TraceSessionContext.TRACE_KEYSPACE);
-            
+
             UUID sessionId =  UUID.fromString(text);
             ByteBuffer sessionIdAsBB = TimeUUIDType.instance.decompose(sessionId);
 
@@ -2113,9 +2113,9 @@ public class CliClient
             System.out.println("Coordinator: " + address.toString());
             System.out.println("StartedAt: " + startedAt);
             System.out.println("Request: " + request);
-            
+
             assert eventCols.size() % 4 == 0;
-            
+
             for (int i = 0; i < eventCols.size(); i += 4)
             {
                 Column durationColumn = Iterables.get(eventCols, i).getColumn();
@@ -2186,9 +2186,9 @@ public class CliClient
     {
         if (!CliMain.isConnected())
             return;
-        
+
         thriftClient.disable_tracing();
-        
+
         sessionState.out.println("Query tracing is disabled.");
     }
 

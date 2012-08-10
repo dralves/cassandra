@@ -262,7 +262,7 @@ public class TraceSessionContext
         sessionContextThreadLocalState.set(tsctls);
 
         newSession(sessionIdAsBB, localAddress, request, timestamp);
-        
+
         return sessionId;
     }
 
@@ -277,8 +277,6 @@ public class TraceSessionContext
 
     /**
      * Indicates if the current thread's execution is being traced.
-     * 
-     * @return
      */
     public boolean isTracing()
     {
@@ -287,8 +285,6 @@ public class TraceSessionContext
 
     /**
      * Indicates if the query originated on this node.
-     * 
-     * @return
      */
     public boolean isLocalTraceSession()
     {
@@ -349,7 +345,7 @@ public class TraceSessionContext
 
     /**
      * Updates the threads query context from a message
-     * 
+     *
      * @param message
      *            The internode message
      */
@@ -379,9 +375,9 @@ public class TraceSessionContext
     }
 
     /**
-     * Creates a byte[] to use a message header to serialise this context to another node, if any. The context is only
+     * Creates a byte[] to use a message header to serialize this context to another node, if any. The context is only
      * included in the message if it started locally.
-     * 
+     *
      * @return
      */
     public byte[] getSessionContextHeader()
@@ -407,7 +403,7 @@ public class TraceSessionContext
 
     /**
      * Stores a "new session" event in the sessions table. This will allow to track all the subsequent "trace" events.
-     * 
+     *
      * @param sessionId
      *            the sessionId - unique in a per-host basis
      * @param coordinator

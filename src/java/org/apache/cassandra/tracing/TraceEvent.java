@@ -13,9 +13,6 @@ public class TraceEvent
 
     /**
      * A predefined set of events with fixed names and
-     * 
-     * @author David Alves
-     * 
      */
     public enum Type
     {

@@ -300,7 +300,7 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
     /**
      * Used to wrap a Runnable or Callable passed to submit or execute so we can clone the TraceSessionContext and move
      * it into the worker thread.
-     * 
+     *
      * @param <T>
      */
     private static class TraceSessionWrapper<T> extends FutureTask<T> implements Callable<T>

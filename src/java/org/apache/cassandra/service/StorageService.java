@@ -513,7 +513,7 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         Gossiper.instance.addLocalApplicationState(ApplicationState.RELEASE_VERSION, valueFactory.releaseVersion());
 
         HintedHandOffManager.instance.start();
-        
+
         // Start the tracing session context
         TraceSessionContext.initialize();
 
