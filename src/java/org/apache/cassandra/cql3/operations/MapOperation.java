@@ -17,29 +17,20 @@
  */
 package org.apache.cassandra.cql3.operations;
 
-import java.lang.reflect.Field;
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
-import org.apache.cassandra.db.marshal.ColumnToCollectionType;
-
 import org.apache.cassandra.cql3.ColumnNameBuilder;
 import org.apache.cassandra.cql3.Term;
 import org.apache.cassandra.cql3.UpdateParameters;
-import org.apache.cassandra.db.Column;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.IColumn;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.CollectionType;
-import org.apache.cassandra.db.marshal.CompositeType;
 import org.apache.cassandra.thrift.InvalidRequestException;
-import org.apache.cassandra.tracing.TraceSessionContext;
 import org.apache.cassandra.utils.Pair;
 
 public class MapOperation implements Operation
@@ -92,52 +83,14 @@ public class MapOperation implements Operation
                 throw new AssertionError("Unsupported Map operation: " + kind);
         }
     }
-    
-    private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
 
     private void doPut(ColumnFamily cf, ColumnNameBuilder builder, CollectionType validator, UpdateParameters params) throws InvalidRequestException
     {
         for (Map.Entry<Term, Term> entry : values.entrySet())
         {
             ByteBuffer name = builder.copy().add(entry.getKey().getByteBuffer(validator.nameComparator(), params.variables)).build();
-            logger.info("complete name type count: "+builder.componentCount());
-            try
-            {
-                Field field = CompositeType.Builder.class.getDeclaredField("composite");
-                field.setAccessible(true);
-                CompositeType type = (CompositeType)field.get(builder);
-                logger.info("complete name type: "+ type);
-                
-            }
-            catch (SecurityException e)
-            {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
-            catch (NoSuchFieldException e)
-            {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
-            catch (IllegalArgumentException e)
-            {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
-            catch (IllegalAccessException e)
-            {
-                // TODO Auto-generated catch block
-                e.printStackTrace();
-            }
-            
-            logger.info("comparator type: "+validator.nameComparator());
-            if (validator.nameComparator() instanceof CompositeType){
-                logger.info(((CompositeType) validator.nameComparator()).types.toString());
-            }
             ByteBuffer value = entry.getValue().getByteBuffer(validator.valueComparator(), params.variables);
             cf.addColumn(params.makeColumn(name, value));
-            Column col = params.makeColumn(name, value);
-            
         }
     }
 
