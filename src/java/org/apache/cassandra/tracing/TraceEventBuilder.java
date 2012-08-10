@@ -43,7 +43,7 @@ public class TraceEventBuilder
 
     public TraceEventBuilder sessionId(byte[] sessionId)
     {
-        // check if isTracing so that we can have noop when not tracing (avoids messing the code with null checks)
+        // check if isTracing so that we can have noop when not tracing (avoids having to do isTracing checks everywhere on traced code)
         if (traceCtx().isTracing())
             this.sessionId = sessionId;
         return this;

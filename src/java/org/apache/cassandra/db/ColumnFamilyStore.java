@@ -1214,6 +1214,8 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
 
             builder.addPayload("result_col_count", result.getColumnCount());
             builder.addPayload("result_col_totalsize", totalColSize);
+            
+            TraceSessionContext.traceCtx().trace(builder.build());
         }
 
         return result;
