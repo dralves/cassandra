@@ -14,7 +14,9 @@ import com.google.common.collect.Maps;
 
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.BytesType;
-import org.apache.cassandra.db.marshal.ListType;
+import org.apache.cassandra.db.marshal.Int32Type;
+import org.apache.cassandra.db.marshal.LongType;
+import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.thrift.TBase;
 import org.apache.thrift.TEnum;
@@ -128,10 +130,30 @@ public class TraceEventBuilder
         return this;
     }
 
+    public TraceEventBuilder addPayload(String name, int value)
+    {
+        this.payloadTypes.put(name, Int32Type.instance);
+        this.payload.put(name, Int32Type.instance.decompose(value));
+        return this;
+    }
+
+    public TraceEventBuilder addPayload(String name, long value)
+    {
+        this.payloadTypes.put(name, LongType.instance);
+        this.payload.put(name, LongType.instance.decompose(value));
+        return this;
+    }
+
+    public TraceEventBuilder addPayload(String name, String value)
+    {
+        this.payloadTypes.put(name, UTF8Type.instance);
+        this.payload.put(name, UTF8Type.instance.decompose(value));
+        return this;
+    }
+
     public <T> TraceEventBuilder addPayload(String name, AbstractType<T> componentsType, List<T> componentList)
     {
-        this.payloadTypes.put(name, ListType.getInstance(componentsType));
-        // this.payload.put(name, );
+        // TODO finish serializing lists
         return this;
     }
 

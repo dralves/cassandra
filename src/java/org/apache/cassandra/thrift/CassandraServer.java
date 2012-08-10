@@ -354,13 +354,11 @@ public class CassandraServer implements Cassandra.Iface
             ConsistencyLevel consistency_level)
             throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        UUID sessionId = startSessionIfRequested("get_slice");
-        if (sessionId != null)
+        if (startSessionIfRequested("get_slice") != null)
         {
             traceCtx().trace(new TraceEventBuilder()
                     .name("get_slice")
                     .type(Type.SESSION_START)
-                    .sessionId(sessionId)
                     .addPayload("key", key)
                     .addPayload("column_parent", column_parent)
                     .addPayload("predicate", predicate)
@@ -385,18 +383,17 @@ public class CassandraServer implements Cassandra.Iface
             SlicePredicate predicate, ConsistencyLevel consistency_level)
             throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        UUID sessionId = startSessionIfRequested("multiget_slice");
-        if (sessionId != null)
+        if (startSessionIfRequested("multiget_slice") != null)
         {
             traceCtx().trace(new TraceEventBuilder()
                     .name("get_slice")
                     .type(Type.SESSION_START)
-                    .sessionId(sessionId)
                     .addPayload("keys", BytesType.instance, keys)
                     .addPayload("column_parent", column_parent)
                     .addPayload("predicate", predicate)
                     .build());
         }
+        
         try
         {
             logger.debug("multiget_slice");
@@ -475,7 +472,18 @@ public class CassandraServer implements Cassandra.Iface
     public ColumnOrSuperColumn get(ByteBuffer key, ColumnPath column_path, ConsistencyLevel consistency_level)
             throws InvalidRequestException, NotFoundException, UnavailableException, TimedOutException
     {
-        startSessionIfRequested("get");
+        
+        if (startSessionIfRequested("get") != null)
+        {
+            traceCtx().trace(new TraceEventBuilder()
+                    .name("get")
+                    .type(Type.SESSION_START)
+                    .addPayload("key", key)
+                    .addPayload("column_path", column_path)
+                    .addPayload("consistency_level", consistency_level)
+                    .build());
+        }
+        
         try
         {
             logger.debug("get");
@@ -491,7 +499,18 @@ public class CassandraServer implements Cassandra.Iface
             ConsistencyLevel consistency_level)
             throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        startSessionIfRequested("get_count");
+        if (startSessionIfRequested("get_count") != null)
+        {
+            traceCtx().trace(new TraceEventBuilder()
+                    .name("get_count")
+                    .type(Type.SESSION_START)
+                    .addPayload("key", key)
+                    .addPayload("column_parent", column_parent)
+                    .addPayload("predicate", predicate)
+                    .addPayload("consistency_level", consistency_level)
+                    .build());
+        }
+        
         try
         {
             logger.debug("get_count");
@@ -574,7 +593,18 @@ public class CassandraServer implements Cassandra.Iface
             SlicePredicate predicate, ConsistencyLevel consistency_level)
             throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        startSessionIfRequested("multiget_count");
+        if (startSessionIfRequested("multiget_count") != null)
+        {
+            traceCtx().trace(new TraceEventBuilder()
+                    .name("multiget_count")
+                    .type(Type.SESSION_START)
+                    .addPayload("keys", BytesType.instance, keys)
+                    .addPayload("column_parent", column_parent)
+                    .addPayload("predicate", predicate)
+                    .addPayload("consistency_level", consistency_level)
+                    .build());
+        }
+        
         try
         {
             logger.debug("multiget_count");
@@ -635,7 +665,18 @@ public class CassandraServer implements Cassandra.Iface
     public void insert(ByteBuffer key, ColumnParent column_parent, Column column, ConsistencyLevel consistency_level)
             throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        startSessionIfRequested("insert");
+        if (startSessionIfRequested("insert") != null)
+        {
+            traceCtx().trace(new TraceEventBuilder()
+                    .name("insert")
+                    .type(Type.SESSION_START)
+                    .addPayload("insert", key)
+                    .addPayload("column_parent", column_parent)
+                    .addPayload("column", column)
+                    .addPayload("consistency_level", consistency_level)
+                    .build());
+        }
+        
         try
         {
             logger.debug("insert");
@@ -720,7 +761,16 @@ public class CassandraServer implements Cassandra.Iface
             ConsistencyLevel consistency_level)
             throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        startSessionIfRequested("batch_mutate");
+        if (startSessionIfRequested("batch_mutate") != null)
+        {
+            traceCtx().trace(new TraceEventBuilder()
+                    .name("batch_mutate")
+                    .type(Type.SESSION_START)
+                    .addPayload("num_keys", mutation_map.keySet().size())
+                    .addPayload("consistency_level", consistency_level)
+                    .build());
+        }
+        
         try
         {
             logger.debug("batch_mutate");
@@ -758,7 +808,18 @@ public class CassandraServer implements Cassandra.Iface
     public void remove(ByteBuffer key, ColumnPath column_path, long timestamp, ConsistencyLevel consistency_level)
             throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        startSessionIfRequested("remove");
+        if (startSessionIfRequested("remove") != null)
+        {
+            traceCtx().trace(new TraceEventBuilder()
+                    .name("remove")
+                    .type(Type.SESSION_START)
+                    .addPayload("key", key)
+                    .addPayload("column_path", column_path)
+                    .addPayload("timestamp", timestamp)
+                    .addPayload("consistency_level", consistency_level)
+                    .build());
+        }
+        
         try
         {
             logger.debug("remove");
@@ -803,10 +864,21 @@ public class CassandraServer implements Cassandra.Iface
             ConsistencyLevel consistency_level)
             throws InvalidRequestException, UnavailableException, TException, TimedOutException
     {
-        startSessionIfRequested("get_range_slices");
+        if (startSessionIfRequested("get_range_slices") != null)
+        {
+            traceCtx().trace(new TraceEventBuilder()
+                    .name("get_range_slices")
+                    .type(Type.SESSION_START)
+                    .addPayload("column_parent", column_parent)
+                    .addPayload("predicate", predicate)
+                    .addPayload("range", range)
+                    .addPayload("consistency_level", consistency_level)
+                    .build());
+        }
+        
         try
         {
-            logger.debug("range_slice");
+            logger.debug("get_range_slices");
 
             ClientState cState = state();
             String keyspace = cState.getKeyspace();
@@ -871,7 +943,18 @@ public class CassandraServer implements Cassandra.Iface
             ConsistencyLevel consistency_level)
             throws InvalidRequestException, UnavailableException, TimedOutException, TException
     {
-        startSessionIfRequested("get_paged_slice");
+        if (startSessionIfRequested("get_paged_slice") != null)
+        {
+            traceCtx().trace(new TraceEventBuilder()
+                    .name("get_paged_slice")
+                    .type(Type.SESSION_START)
+                    .addPayload("column_family", column_family)
+                    .addPayload("range", range)
+                    .addPayload("start_column", start_column)
+                    .addPayload("consistency_level", consistency_level)
+                    .build());
+        }
+        
         try
         {
             logger.debug("get_paged_slice");
@@ -957,7 +1040,18 @@ public class CassandraServer implements Cassandra.Iface
             SlicePredicate column_predicate, ConsistencyLevel consistency_level) throws InvalidRequestException,
             UnavailableException, TimedOutException, TException
     {
-        startSessionIfRequested("get_indexed_slices");
+        if (startSessionIfRequested("get_indexed_slices") != null)
+        {
+            traceCtx().trace(new TraceEventBuilder()
+                    .name("get_indexed_slices")
+                    .type(Type.SESSION_START)
+                    .addPayload("column_parent", column_parent)
+                    .addPayload("index_clause", index_clause)
+                    .addPayload("column_predicate", column_predicate)
+                    .addPayload("consistency_level", consistency_level)
+                    .build());
+        }
+        
         try
         {
             logger.debug("scan");
@@ -1336,7 +1430,18 @@ public class CassandraServer implements Cassandra.Iface
     public void add(ByteBuffer key, ColumnParent column_parent, CounterColumn column, ConsistencyLevel consistency_level)
             throws InvalidRequestException, UnavailableException, TimedOutException, TException
     {
-        startSessionIfRequested("add");
+        if (startSessionIfRequested("add") != null)
+        {
+            traceCtx().trace(new TraceEventBuilder()
+                    .name("add")
+                    .type(Type.SESSION_START)
+                    .addPayload("key", key)
+                    .addPayload("column_parent", column_parent)
+                    .addPayload("column", column)
+                    .addPayload("consistency_level", consistency_level)
+                    .build());
+        }
+        
         try
         {
             logger.debug("add");
@@ -1378,7 +1483,17 @@ public class CassandraServer implements Cassandra.Iface
     public void remove_counter(ByteBuffer key, ColumnPath path, ConsistencyLevel consistency_level)
             throws InvalidRequestException, UnavailableException, TimedOutException, TException
     {
-        startSessionIfRequested("remove_counter");
+        if (startSessionIfRequested("remove_counter") != null)
+        {
+            traceCtx().trace(new TraceEventBuilder()
+                    .name("remove_counter")
+                    .type(Type.SESSION_START)
+                    .addPayload("key", key)
+                    .addPayload("path", path)
+                    .addPayload("consistency_level", consistency_level)
+                    .build());
+        }
+        
         try
         {
             logger.debug("remove_counter");
@@ -1453,7 +1568,16 @@ public class CassandraServer implements Cassandra.Iface
             throws InvalidRequestException, UnavailableException, TimedOutException, SchemaDisagreementException,
             TException
     {
-        startSessionIfRequested("execute_cql_query");
+        if (startSessionIfRequested("execute_cql_query") != null)
+        {
+            traceCtx().trace(new TraceEventBuilder()
+                    .name("execute_cql_query")
+                    .type(Type.SESSION_START)
+                    .addPayload("query", query)
+                    .addPayload("compression", compression)
+                    .build());
+        }
+        
         try
         {
             if (logger.isDebugEnabled())
@@ -1500,7 +1624,16 @@ public class CassandraServer implements Cassandra.Iface
             throws InvalidRequestException, UnavailableException, TimedOutException, SchemaDisagreementException,
             TException
     {
-        startSessionIfRequested("execute_prepared_cql_query");
+        if (startSessionIfRequested("execute_prepared_cql_query") != null)
+        {
+            traceCtx().trace(new TraceEventBuilder()
+                    .name("execute_prepared_cql_query")
+                    .type(Type.SESSION_START)
+                    .addPayload("itemId", itemId)
+                    .addPayload("bindVariables", BytesType.instance, bindVariables)
+                    .build());
+        }
+        
         try
         {
             if (logger.isDebugEnabled())
