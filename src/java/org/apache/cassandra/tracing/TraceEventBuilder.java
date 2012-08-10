@@ -2,15 +2,22 @@ package org.apache.cassandra.tracing;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.cassandra.tracing.TraceSessionContext.traceCtx;
-import static org.apache.cassandra.utils.ByteBufferUtil.bytes;
 
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
+import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.collect.Maps;
+
 import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.BytesType;
+import org.apache.cassandra.db.marshal.ListType;
 import org.apache.cassandra.utils.UUIDGen;
+import org.apache.thrift.TBase;
+import org.apache.thrift.TEnum;
 
 public class TraceEventBuilder
 {
@@ -23,13 +30,23 @@ public class TraceEventBuilder
     private byte[] eventId;
     private InetAddress coordinator;
     private InetAddress source;
-    private Map<String, AbstractType<?>> payloadTypes;
-    private Map<ByteBuffer, ByteBuffer> payload;
+    private Map<String, AbstractType<?>> payloadTypes = Maps.newHashMap();
+    private Map<String, ByteBuffer> payload = Maps.newHashMap();
     private TraceEvent.Type type;
+
+    public TraceEventBuilder()
+    {
+    }
 
     public TraceEventBuilder sessionId(byte[] sessionId)
     {
         this.sessionId = sessionId;
+        return this;
+    }
+
+    public TraceEventBuilder sessionId(UUID sessionId)
+    {
+        this.sessionId = UUIDGen.decompose(sessionId);
         return this;
     }
 
@@ -81,30 +98,43 @@ public class TraceEventBuilder
         return this;
     }
 
-    public TraceEventBuilder payloadTypes(Map<String, AbstractType<?>> payloadTypes)
+    public <T> TraceEventBuilder addPayload(String name, AbstractType<?> type, T value)
     {
-        this.payloadTypes = payloadTypes;
+        @SuppressWarnings("unchecked")
+        ByteBuffer encoded = ((AbstractType<T>) type).decompose(value);
+        this.payloadTypes.put(name, type);
+        this.payload.put(name, encoded);
         return this;
     }
 
-    @SuppressWarnings({ "unchecked", "rawtypes" })
-    public <T> TraceEventBuilder addPayload(String name, Object value)
+    public TraceEventBuilder addPayload(String name, TEnum thriftEnum)
     {
-        ByteBuffer nameAsBB = bytes(name);
-        if (value instanceof ByteBuffer)
-        {
-            payload.put(nameAsBB, (ByteBuffer) value);
-            return this;
-        }
+        ThriftObjectType type = ThriftObjectType.getInstance(thriftObject.getClass());
+        this.payloadTypes.put(name, type);
+        this.payload.put(name, type.decompose(thriftObject));
+        return this;
+    }
 
-        if (payloadTypes.containsValue(bytes(name)))
-        {
-            AbstractType type = payloadTypes.get(nameAsBB);
-            payload.put(nameAsBB, type.decompose(value));
-            return this;
-        }
+    public TraceEventBuilder addPayload(String name, TBase<?, ?> thriftObject)
+    {
+        ThriftObjectType type = ThriftObjectType.getInstance(thriftObject.getClass());
+        this.payloadTypes.put(name, type);
+        this.payload.put(name, type.decompose(thriftObject));
+        return this;
+    }
 
-        throw new IllegalArgumentException("value type must be either mapped in payload types or be of type bytebuffer");
+    public TraceEventBuilder addPayload(String name, ByteBuffer byteBuffer)
+    {
+        this.payloadTypes.put(name, BytesType.instance);
+        this.payload.put(name, byteBuffer);
+        return this;
+    }
+
+    public <T> TraceEventBuilder addPayload(String name, AbstractType<T> componentsType, List<T> componentList)
+    {
+        this.payloadTypes.put(name, ListType.getInstance(componentsType));
+        // this.payload.put(name, );
+        return this;
     }
 
     public TraceEvent build()
@@ -135,7 +165,10 @@ public class TraceEventBuilder
         {
             name = type.name();
         }
-
+        if (description == null)
+        {
+            description = "";
+        }
         if (sessionId == null)
         {
             sessionId = traceCtx().threadLocalState().sessionId;
@@ -154,7 +187,7 @@ public class TraceEventBuilder
             timestamp = System.currentTimeMillis();
         }
 
-        return new TraceEvent(name, description, duration, timestamp, sessionId, eventId, coordinator, source, payload,
-                payloadTypes);
+        return new TraceEvent(name, description, duration, timestamp, sessionId, eventId, coordinator, source, type,
+                payload, payloadTypes);
     }
 }

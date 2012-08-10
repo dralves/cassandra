@@ -2,16 +2,11 @@ package org.apache.cassandra.tracing;
 
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
-import java.nio.charset.CharacterCodingException;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
 
-import com.google.common.base.Throwables;
-import com.google.common.collect.Sets;
-
 import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.utils.ByteBufferUtil;
 
 public class TraceEvent
 {
@@ -45,11 +40,12 @@ public class TraceEvent
     private final byte[] eventId;
     private final InetAddress coordinator;
     private final InetAddress source;
-    private final Map<ByteBuffer, ByteBuffer> rawPayload;
+    private final Map<String, ByteBuffer> rawPayload;
     private final Map<String, AbstractType<?>> payloadTypes;
+    private final Type type;
 
     TraceEvent(String name, String description, long duration, long timestamp, byte[] sessionId, byte[] eventId,
-            InetAddress coordinator, InetAddress source, Map<ByteBuffer, ByteBuffer> rawPayload,
+            InetAddress coordinator, InetAddress source, Type type, Map<String, ByteBuffer> rawPayload,
             Map<String, AbstractType<?>> payloadTypes)
     {
         this.name = name;
@@ -62,6 +58,7 @@ public class TraceEvent
         this.source = source;
         this.rawPayload = rawPayload;
         this.payloadTypes = payloadTypes;
+        this.type = type;
 
     }
 
@@ -105,45 +102,37 @@ public class TraceEvent
         return source;
     }
 
+    public Type type()
+    {
+        return type;
+    }
+
     @SuppressWarnings("unchecked")
     public <T> T getFromPayload(String name)
     {
-        ByteBuffer nameAsBB = ByteBufferUtil.bytes(name);
-        if (rawPayload.containsKey(nameAsBB))
+        if (rawPayload.containsKey(name))
         {
-            if (payloadTypes.containsKey(nameAsBB))
+            if (payloadTypes.containsKey(name))
             {
-                return (T) payloadTypes.get(nameAsBB).compose(rawPayload.get(nameAsBB));
+                return (T) payloadTypes.get(name).compose(rawPayload.get(name));
             }
-            return (T) rawPayload.get(nameAsBB);
+            return (T) rawPayload.get(name);
         }
         return null;
     }
 
     public Set<String> payloadNames()
     {
-        Set<String> names = Sets.newLinkedHashSet();
-        for (ByteBuffer payloadNameAsBB : rawPayload.keySet())
-        {
-            try
-            {
-                names.add(ByteBufferUtil.string(payloadNameAsBB));
-            }
-            catch (CharacterCodingException e)
-            {
-                Throwables.propagate(e);
-            }
-        }
-        return names;
+        return rawPayload.keySet();
     }
 
-    public Map<ByteBuffer, ByteBuffer> rawPayload()
+    public Map<String, ByteBuffer> rawPayload()
     {
         return Collections.unmodifiableMap(rawPayload);
     }
 
     public Map<String, AbstractType<?>> payloadTypes()
     {
-        return payloadTypes;
+        return Collections.unmodifiableMap(payloadTypes);
     }
 }

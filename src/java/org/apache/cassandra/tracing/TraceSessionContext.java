@@ -26,6 +26,7 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOError;
 import java.io.IOException;
+import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -52,14 +53,14 @@ import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql3.ColumnNameBuilder;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.statements.CreateColumnFamilyStatement;
-import org.apache.cassandra.db.Column;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.db.ExpiringColumn;
-import org.apache.cassandra.db.IColumn;
 import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.BytesType;
+import org.apache.cassandra.db.marshal.CollectionType;
+import org.apache.cassandra.db.marshal.ColumnToCollectionType;
 import org.apache.cassandra.db.marshal.CompositeType;
 import org.apache.cassandra.db.marshal.InetAddressType;
 import org.apache.cassandra.db.marshal.MapType;
@@ -128,9 +129,20 @@ public class TraceSessionContext
             .<AbstractType<?>> of(InetAddressType.instance, UTF8Type.instance
             ));
 
+    // public static final CompositeType EVENT_TYPE = CompositeType.getInstance(ImmutableList
+    // .<AbstractType<?>> of(InetAddressType.instance, TimeUUIDType.instance, UTF8Type.instance
+    // ));
+
+    public static ColumnToCollectionType collectionsType = ColumnToCollectionType.getInstance(ImmutableMap
+            .<ByteBuffer, CollectionType> of(PAYLOAD_BB,
+                    MapType.getInstance(UTF8Type.instance, BytesType.instance), PAYLOAD_TYPES_BB,
+                    MapType.getInstance(UTF8Type.instance, UTF8Type.instance)));
+
     public static final CompositeType EVENT_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(InetAddressType.instance, TimeUUIDType.instance, UTF8Type.instance
-            ));
+            .<AbstractType<?>> of(
+                    InetAddressType.instance,
+                    TimeUUIDType.instance,
+                    UTF8Type.instance, collectionsType));
 
     public static final CFMetaData sessionsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + SESSIONS_TABLE
             + " (" +
@@ -144,14 +156,14 @@ public class TraceSessionContext
             "  " + SESSION_ID + "        timeuuid," +
             "  " + COORDINATOR + "       inet," +
             "  " + EVENT_ID + "          timeuuid," +
-            "  " + TYPE + "              text," +
-            "  " + SOURCE + "            inet," +
-            "  " + NAME + "              text," +
+            "  " + DESCRIPTION + "       text," +
             "  " + DURATION + "          bigint," +
             "  " + HAPPENED + "          timestamp," +
-            "  " + DESCRIPTION + "       text," +
+            "  " + NAME + "              text," +
             "  " + PAYLOAD_TYPES + "     map<text, text>," +
             "  " + PAYLOAD + "           map<text, blob>," +
+            "  " + SOURCE + "            inet," +
+            "  " + TYPE + "              text," +
             "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + ", " + EVENT_ID + "));");
 
     /**
@@ -226,9 +238,9 @@ public class TraceSessionContext
         return UUIDGen.getUUID(ByteBuffer.wrap(UUIDGen.getTimeUUIDBytes()));
     }
 
-    public void startPreparedSession(UUID sessionId, String request)
+    public UUID startPreparedSession(UUID sessionId, String request)
     {
-        startSession(sessionId, request, System.currentTimeMillis());
+        return startSession(sessionId, request, System.currentTimeMillis());
     }
 
     public UUID startSession(String request)
@@ -238,7 +250,7 @@ public class TraceSessionContext
         return sessionId;
     }
 
-    public void startSession(UUID sessionId, String request, long timestamp)
+    public UUID startSession(UUID sessionId, String request, long timestamp)
     {
         assert sessionContextThreadLocalState.get() == null;
 
@@ -250,6 +262,8 @@ public class TraceSessionContext
         sessionContextThreadLocalState.set(tsctls);
 
         newSession(sessionIdAsBB, localAddress, request, timestamp);
+        
+        return sessionId;
     }
 
     public void stopSession()
@@ -405,8 +419,8 @@ public class TraceSessionContext
     {
         ColumnFamily family = ColumnFamily.create(sessionsCfm);
         ByteBuffer coordinatorAsBb = ByteBuffer.wrap(coordinator.getAddress());
-        family.addColumn(column(buildName(sessionsCfm, coordinatorAsBb, SESSION_START_BB), startedAt));
-        family.addColumn(column(buildName(sessionsCfm, coordinatorAsBb, SESSION_REQUEST_BB), request));
+        addColumn(family, buildName(sessionsCfm, coordinatorAsBb, SESSION_START_BB), startedAt);
+        addColumn(family, buildName(sessionsCfm, coordinatorAsBb, SESSION_REQUEST_BB), request);
         store(sessionId, family);
     }
 
@@ -417,16 +431,14 @@ public class TraceSessionContext
             ColumnFamily family = ColumnFamily.create(eventsCfm);
             ByteBuffer coordinatorAsBB = bytes(event.coordinator());
             ByteBuffer eventIdAsBB = ByteBuffer.wrap(event.id());
-            family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, SOURCE_BB), event.source()));
-            family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, NAME_BB), event.name()));
-            family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, DURATION_BB), event.duration()));
-            family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, HAPPENED_BB), event.timestamp()));
-            family.addColumn(column(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, DESCRIPTION_BB),
-                    event.description()));
-            family.addColumn(typeColumns(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, PAYLOAD_TYPES_BB),
-                    event.payloadTypes()));
-            family.addColumn(payloadColumn(buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, PAYLOAD_BB),
-                    event.rawPayload()));
+            addColumn(family, buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, SOURCE_BB), event.source());
+            addColumn(family, buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, NAME_BB), event.name());
+            addColumn(family, buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, DURATION_BB), event.duration());
+            addColumn(family, buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, HAPPENED_BB), event.timestamp());
+            addColumn(family, buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, DESCRIPTION_BB), event.description());
+            addColumn(family, buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, TYPE_BB), event.type().name());
+            addPayloadTypeColumns(family, event.payloadTypes(), coordinatorAsBB, eventIdAsBB);
+            addPayloadColumns(family, event.rawPayload(), coordinatorAsBB, eventIdAsBB);
             store(event.sessionId(), family);
             return UUIDGen.getUUID(ByteBuffer.wrap(event.id()));
         }
@@ -436,6 +448,20 @@ public class TraceSessionContext
     private ByteBuffer buildName(CFMetaData meta, ByteBuffer... args)
     {
         ColumnNameBuilder builder = meta.getCfDef().getColumnNameBuilder();
+        CompositeType.Builder compositeBuilder = (CompositeType.Builder) builder;
+        System.out.println(compositeBuilder.remainingCount());
+        try
+        {
+            Field compositeField = builder.getClass().getDeclaredField("composite");
+            compositeField.setAccessible(true);
+            CompositeType type = (CompositeType) compositeField.get(builder);
+            System.out.println(type);
+        }
+        catch (Exception e)
+        {
+            e.printStackTrace();
+        }
+
         for (ByteBuffer arg : args)
         {
             builder.add(arg);
@@ -443,30 +469,43 @@ public class TraceSessionContext
         return builder.build();
     }
 
-    private Column column(ByteBuffer columnName, long value)
+    private void addColumn(ColumnFamily cf, ByteBuffer columnName, long value)
     {
-        return new ExpiringColumn(columnName, ByteBufferUtil.bytes(value), System.currentTimeMillis(), timeToLive);
+        cf.addColumn(new ExpiringColumn(columnName, ByteBufferUtil.bytes(value), System.currentTimeMillis(), timeToLive));
     }
 
-    private Column column(ByteBuffer columnName, String value)
+    private void addColumn(ColumnFamily cf, ByteBuffer columnName, String value)
     {
-        return new ExpiringColumn(columnName, ByteBufferUtil.bytes(value), System.currentTimeMillis(), timeToLive);
+        cf.addColumn(new ExpiringColumn(columnName, ByteBufferUtil.bytes(value), System.currentTimeMillis(), timeToLive));
     }
 
-    private Column column(ByteBuffer columnName, InetAddress address)
+    private void addColumn(ColumnFamily cf, ByteBuffer columnName, InetAddress address)
     {
-        return new ExpiringColumn(columnName, bytes(address), System.currentTimeMillis(), timeToLive);
+        cf.addColumn(new ExpiringColumn(columnName, bytes(address), System.currentTimeMillis(), timeToLive));
     }
 
-    private IColumn typeColumns(ByteBuffer columnName, Map<String, AbstractType<?>> payloadTypes)
+    private void addPayloadTypeColumns(ColumnFamily cf,
+            Map<String, AbstractType<?>> payloadTypes, ByteBuffer coord, ByteBuffer eventId)
     {
-        return new ExpiringColumn(columnName, MapType.getInstance(BytesType.instance, BytesType.instance).decompose(
-                columnName), System.currentTimeMillis(), timeToLive);
+
+        for (Map.Entry<String, AbstractType<?>> entry : payloadTypes.entrySet())
+        {
+            cf.addColumn(new ExpiringColumn(buildName(eventsCfm, coord, eventId, PAYLOAD_TYPES_BB,
+                    UTF8Type.instance.decompose(entry.getKey())), UTF8Type.instance.decompose(entry.getValue()
+                    .toString()), System.currentTimeMillis(), timeToLive));
+        }
+
     }
 
-    private IColumn payloadColumn(ByteBuffer columnName, Map<ByteBuffer, ByteBuffer> rawPayload)
+    private void addPayloadColumns(ColumnFamily cf, Map<String, ByteBuffer> rawPayload,
+            ByteBuffer coord, ByteBuffer eventId)
     {
-        return null;
+        for (Map.Entry<String, ByteBuffer> entry : rawPayload.entrySet())
+        {
+            cf.addColumn(new ExpiringColumn(buildName(eventsCfm, coord, eventId, PAYLOAD_BB,
+                    UTF8Type.instance.decompose(entry.getKey())), entry.getValue(), System.currentTimeMillis(),
+                    timeToLive));
+        }
     }
 
     private ByteBuffer bytes(InetAddress address)
