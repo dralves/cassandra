@@ -46,7 +46,7 @@ public class TraceEventBuilder
 
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
 
-    public static Set<TraceEvent> fromColumnFamily(ByteBuffer key, ColumnFamily cf)
+    public static Set<TraceEvent> fromColumnFamily(UUID key, ColumnFamily cf)
     {
         Multimap<UUID, IColumn> eventColumns = Multimaps.newListMultimap(
                 Maps.<UUID, Collection<IColumn>> newLinkedHashMap(),
@@ -72,7 +72,7 @@ public class TraceEventBuilder
         {
             TraceEventBuilder builder = new TraceEventBuilder();
             builder.eventId(entry.getKey());
-            builder.sessionId(key.array());
+            builder.sessionId(key);
             boolean setCoordinator = false;
             for (IColumn col : entry.getValue())
             {
@@ -107,13 +107,13 @@ public class TraceEventBuilder
                 }
                 if (colName.equals(TraceSessionContext.PAYLOAD))
                 {
-                    String payloadKey = (String) components.get(3).comparator.compose(components.get(3).value);
+                    String payloadKey = UTF8Type.instance.compose(components.get(3).value);
                     builder.addPayloadRaw(payloadKey, col.value());
                     continue;
                 }
                 if (colName.equals(TraceSessionContext.PAYLOAD_TYPE))
                 {
-                    String payloadKey = (String) components.get(3).comparator.compose(components.get(3).value);
+                    String payloadKey = UTF8Type.instance.compose(components.get(3).value);
                     try
                     {
                         builder.addPayloadTypeRaw(payloadKey,
@@ -134,7 +134,7 @@ public class TraceEventBuilder
                 }
                 if (colName.equals(TraceSessionContext.TYPE))
                 {
-                    builder.type(Type.valueOf(UTF8Type.instance.compose(col.name())));
+                    builder.type(Type.valueOf(UTF8Type.instance.compose(col.value())));
                     continue;
                 }
             }
@@ -159,84 +159,84 @@ public class TraceEventBuilder
     {
         // check if isTracing so that we can have noop when not tracing (avoids having to do isTracing checks everywhere
         // on traced code)
-        if (traceCtx().isTracing())
+        if (isTracing())
             this.sessionId = sessionId;
         return this;
     }
 
     public TraceEventBuilder sessionId(UUID sessionId)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
             this.sessionId = UUIDGen.decompose(sessionId);
         return this;
     }
 
     public TraceEventBuilder name(String name)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
             this.name = name;
         return this;
     }
 
     public TraceEventBuilder description(String description)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
             this.description = description;
         return this;
     }
 
     public TraceEventBuilder duration(long duration)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
             this.duration = duration;
         return this;
     }
 
     public TraceEventBuilder timestamp(long timestamp)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
             this.timestamp = timestamp;
         return this;
     }
 
     public TraceEventBuilder eventId(byte[] eventId)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
             this.eventId = eventId;
         return this;
     }
 
     public TraceEventBuilder eventId(UUID eventId)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
             this.eventId = UUIDGen.decompose(eventId);
         return this;
     }
 
     public TraceEventBuilder coordinator(InetAddress coordinator)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
             this.coordinator = coordinator;
         return this;
     }
 
     public TraceEventBuilder source(InetAddress source)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
             this.source = source;
         return this;
     }
 
     public TraceEventBuilder type(TraceEvent.Type type)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
             this.type = type;
         return this;
     }
 
     public <T> TraceEventBuilder addPayload(String name, AbstractType<?> type, T value)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
         {
             @SuppressWarnings("unchecked")
             ByteBuffer encoded = ((AbstractType<T>) type).decompose(value);
@@ -254,7 +254,7 @@ public class TraceEventBuilder
 
     public TraceEventBuilder addPayload(String name, TBase<?, ?> thriftObject)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
         {
             ThriftType type = ThriftType.getInstance(thriftObject.getClass());
             this.payloadTypes.put(name, type);
@@ -265,7 +265,7 @@ public class TraceEventBuilder
 
     public TraceEventBuilder addPayload(String name, ByteBuffer byteBuffer)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
         {
             this.payloadTypes.put(name, BytesType.instance);
             this.payload.put(name, byteBuffer);
@@ -275,7 +275,7 @@ public class TraceEventBuilder
 
     public TraceEventBuilder addPayload(String name, int value)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
         {
             this.payloadTypes.put(name, Int32Type.instance);
             this.payload.put(name, Int32Type.instance.decompose(value));
@@ -295,7 +295,7 @@ public class TraceEventBuilder
 
     public TraceEventBuilder addPayload(String name, boolean value)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
         {
             this.payloadTypes.put(name, BooleanType.instance);
             this.payload.put(name, BooleanType.instance.decompose(value));
@@ -305,7 +305,7 @@ public class TraceEventBuilder
 
     public TraceEventBuilder addPayload(String name, String value)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
         {
             this.payloadTypes.put(name, UTF8Type.instance);
             this.payload.put(name, UTF8Type.instance.decompose(value));
@@ -324,7 +324,7 @@ public class TraceEventBuilder
      */
     private TraceEventBuilder addPayloadRaw(String name, ByteBuffer byteBuffer)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
         {
             this.payload.put(name, byteBuffer);
         }
@@ -333,16 +333,14 @@ public class TraceEventBuilder
 
     private TraceEventBuilder addPayloadTypeRaw(String name, AbstractType<?> type)
     {
-        if (traceCtx().isTracing())
-        {
+        if (isTracing())
             this.payloadTypes.put(name, type);
-        }
         return this;
     }
 
     public TraceEvent build()
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
         {
             if (coordinator == null)
             {
@@ -397,5 +395,10 @@ public class TraceEventBuilder
                     payload, payloadTypes);
         }
         return null;
+    }
+
+    public boolean isTracing()
+    {
+        return traceCtx() != null && traceCtx().isTracing();
     }
 }

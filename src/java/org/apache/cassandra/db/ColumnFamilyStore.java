@@ -1198,7 +1198,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
             readStats.addNano(System.nanoTime() - start);
         }
 
-        if (TraceSessionContext.traceCtx().isTracing())
+        if (builder.isTracing())
         {
             if (result == null)
             {
