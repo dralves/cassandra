@@ -21,8 +21,10 @@ import java.nio.ByteBuffer;
 
 import com.google.common.base.Throwables;
 
+import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.MarshalException;
+import org.apache.cassandra.db.marshal.TypeParser;
 import org.apache.thrift.TBase;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
@@ -33,6 +35,26 @@ import org.apache.thrift.TSerializer;
  */
 public class ThriftType extends AbstractType<TBase<?, ?>>
 {
+
+    @SuppressWarnings({ "unchecked", "rawtypes" })
+    public static ThriftType getInstance(TypeParser parser) throws ConfigurationException
+    {
+        parser.readNextChar();
+        Character xar = null;
+        StringBuilder builder = new StringBuilder();
+        while ((xar = parser.readNextChar()) != ')')
+        {
+            builder.append(xar);
+        }
+        try
+        {
+            return new ThriftType((Class<? extends TBase>) Class.forName(builder.toString()));
+        }
+        catch (ClassNotFoundException e)
+        {
+            throw new ConfigurationException("cannot find thrift object class: " + builder.toString());
+        }
+    }
 
     @SuppressWarnings("rawtypes")
     public static ThriftType getInstance(Class<? extends TBase> thriftObjectClass)
@@ -80,6 +102,26 @@ public class ThriftType extends AbstractType<TBase<?, ?>>
         {
             throw Throwables.propagate(e);
         }
+    }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj)
+            return true;
+        if (obj == null)
+            return false;
+        if (getClass() != obj.getClass())
+            return false;
+        ThriftType other = (ThriftType) obj;
+        if (objectClass == null)
+        {
+            if (other.objectClass != null)
+                return false;
+        }
+        else if (!objectClass.equals(other.objectClass))
+            return false;
+        return true;
     }
 
     @Override
