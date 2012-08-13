@@ -2,6 +2,7 @@ package org.apache.cassandra.tracing;
 
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
@@ -132,4 +133,29 @@ public class TraceEvent
     {
         return Collections.unmodifiableMap(payloadTypes);
     }
+
+    @Override
+    public int hashCode()
+    {
+        final int prime = 31;
+        int result = 1;
+        result = prime * result + Arrays.hashCode(eventId);
+        return result;
+    }
+
+    @Override
+    public boolean equals(Object obj)
+    {
+        if (this == obj)
+            return true;
+        if (obj == null)
+            return false;
+        if (getClass() != obj.getClass())
+            return false;
+        TraceEvent other = (TraceEvent) obj;
+        if (!Arrays.equals(eventId, other.eventId))
+            return false;
+        return true;
+    }
+
 }
