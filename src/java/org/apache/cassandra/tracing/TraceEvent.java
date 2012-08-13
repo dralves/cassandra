@@ -2,12 +2,13 @@ package org.apache.cassandra.tracing;
 
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
 
 import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.utils.UUIDGen;
 
 public class TraceEvent
 {
@@ -34,15 +35,15 @@ public class TraceEvent
     private final String description;
     private final long duration;
     private final long timestamp;
-    private final byte[] sessionId;
-    private final byte[] eventId;
+    private final UUID sessionId;
+    private final UUID eventId;
     private final InetAddress coordinator;
     private final InetAddress source;
     private final Map<String, ByteBuffer> rawPayload;
     private final Map<String, AbstractType<?>> payloadTypes;
     private final Type type;
 
-    TraceEvent(String name, String description, long duration, long timestamp, byte[] sessionId, byte[] eventId,
+    TraceEvent(String name, String description, long duration, long timestamp, UUID sessionId, UUID eventId,
             InetAddress coordinator, InetAddress source, Type type, Map<String, ByteBuffer> rawPayload,
             Map<String, AbstractType<?>> payloadTypes)
     {
@@ -80,14 +81,24 @@ public class TraceEvent
         return timestamp;
     }
 
-    public byte[] sessionId()
+    public UUID sessionId()
     {
         return sessionId;
     }
 
-    public byte[] id()
+    public ByteBuffer sessionIdAsBB()
+    {
+        return ByteBuffer.wrap(UUIDGen.decompose(sessionId));
+    }
+
+    public UUID id()
     {
         return eventId;
+    }
+
+    public ByteBuffer idAsBB()
+    {
+        return ByteBuffer.wrap(UUIDGen.decompose(eventId));
     }
 
     public InetAddress coordinator()
@@ -110,6 +121,8 @@ public class TraceEvent
     {
         if (rawPayload.containsKey(name))
         {
+            System.out.println(payloadTypes.get(name));
+            System.out.println(payloadTypes);
             if (payloadTypes.containsKey(name))
             {
                 return (T) payloadTypes.get(name).compose(rawPayload.get(name));
@@ -139,7 +152,7 @@ public class TraceEvent
     {
         final int prime = 31;
         int result = 1;
-        result = prime * result + Arrays.hashCode(eventId);
+        result = prime * result + eventId.hashCode();
         return result;
     }
 
@@ -153,7 +166,7 @@ public class TraceEvent
         if (getClass() != obj.getClass())
             return false;
         TraceEvent other = (TraceEvent) obj;
-        if (!Arrays.equals(eventId, other.eventId))
+        if (!eventId.equals(other.eventId))
             return false;
         return true;
     }

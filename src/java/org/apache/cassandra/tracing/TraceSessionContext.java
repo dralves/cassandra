@@ -26,7 +26,6 @@ import java.io.ByteArrayInputStream;
 import java.io.DataInputStream;
 import java.io.IOError;
 import java.io.IOException;
-import java.lang.reflect.Field;
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
@@ -254,14 +253,12 @@ public class TraceSessionContext
     {
         assert sessionContextThreadLocalState.get() == null;
 
-        byte[] sessionIdAsBB = TimeUUIDType.instance.decompose(sessionId).array();
-
         TraceSessionContextThreadLocalState tsctls = new TraceSessionContextThreadLocalState(localAddress,
-                localAddress, sessionIdAsBB);
+                localAddress, sessionId);
 
         sessionContextThreadLocalState.set(tsctls);
 
-        newSession(sessionIdAsBB, localAddress, request, timestamp);
+        newSession(sessionId, localAddress, request, timestamp);
 
         return sessionId;
     }
@@ -294,7 +291,7 @@ public class TraceSessionContext
 
     public UUID getSessionId()
     {
-        return isTracing() ? UUIDGen.getUUID(ByteBuffer.wrap(sessionContextThreadLocalState.get().sessionId)) : null;
+        return isTracing() ? sessionContextThreadLocalState.get().sessionId : null;
     }
 
     public InetAddress getOrigin()
@@ -345,7 +342,7 @@ public class TraceSessionContext
 
     /**
      * Updates the threads query context from a message
-     *
+     * 
      * @param message
      *            The internode message
      */
@@ -371,13 +368,13 @@ public class TraceSessionContext
             throw new IOError(e);
         }
         sessionContextThreadLocalState.set(new TraceSessionContextThreadLocalState(message.from, localAddress,
-                sessionId, id));
+                UUIDGen.getUUID(ByteBuffer.wrap(sessionId)), id));
     }
 
     /**
      * Creates a byte[] to use a message header to serialize this context to another node, if any. The context is only
      * included in the message if it started locally.
-     *
+     * 
      * @return
      */
     public byte[] getSessionContextHeader()
@@ -391,8 +388,9 @@ public class TraceSessionContext
         try
         {
             final TraceSessionContextThreadLocalState tls = sessionContextThreadLocalState.get();
-            buffer.writeInt(tls.sessionId.length);
-            buffer.write(tls.sessionId);
+            byte[] sessionId = UUIDGen.decompose(tls.sessionId);
+            buffer.writeInt(sessionId.length);
+            buffer.write(sessionId);
             return buffer.getData();
         }
         catch (IOException e)
@@ -403,7 +401,7 @@ public class TraceSessionContext
 
     /**
      * Stores a "new session" event in the sessions table. This will allow to track all the subsequent "trace" events.
-     *
+     * 
      * @param sessionId
      *            the sessionId - unique in a per-host basis
      * @param coordinator
@@ -411,7 +409,7 @@ public class TraceSessionContext
      * @param request
      *            the request that initiated the session (usually the user operation)
      */
-    private void newSession(byte[] sessionId, InetAddress coordinator, String request, long startedAt)
+    private void newSession(UUID sessionId, InetAddress coordinator, String request, long startedAt)
     {
         ColumnFamily family = ColumnFamily.create(sessionsCfm);
         ByteBuffer coordinatorAsBb = ByteBuffer.wrap(coordinator.getAddress());
@@ -426,7 +424,7 @@ public class TraceSessionContext
         {
             ColumnFamily family = ColumnFamily.create(eventsCfm);
             ByteBuffer coordinatorAsBB = bytes(event.coordinator());
-            ByteBuffer eventIdAsBB = ByteBuffer.wrap(event.id());
+            ByteBuffer eventIdAsBB = event.idAsBB();
             addColumn(family, buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, SOURCE_BB), event.source());
             addColumn(family, buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, NAME_BB), event.name());
             addColumn(family, buildName(eventsCfm, coordinatorAsBB, eventIdAsBB, DURATION_BB), event.duration());
@@ -436,7 +434,7 @@ public class TraceSessionContext
             addPayloadTypeColumns(family, event.payloadTypes(), coordinatorAsBB, eventIdAsBB);
             addPayloadColumns(family, event.rawPayload(), coordinatorAsBB, eventIdAsBB);
             store(event.sessionId(), family);
-            return UUIDGen.getUUID(ByteBuffer.wrap(event.id()));
+            return event.id();
         }
         return null;
     }
@@ -444,20 +442,6 @@ public class TraceSessionContext
     private ByteBuffer buildName(CFMetaData meta, ByteBuffer... args)
     {
         ColumnNameBuilder builder = meta.getCfDef().getColumnNameBuilder();
-        CompositeType.Builder compositeBuilder = (CompositeType.Builder) builder;
-        System.out.println(compositeBuilder.remainingCount());
-        try
-        {
-            Field compositeField = builder.getClass().getDeclaredField("composite");
-            compositeField.setAccessible(true);
-            CompositeType type = (CompositeType) compositeField.get(builder);
-            System.out.println(type);
-        }
-        catch (Exception e)
-        {
-            e.printStackTrace();
-        }
-
         for (ByteBuffer arg : args)
         {
             builder.add(arg);
@@ -513,7 +497,7 @@ public class TraceSessionContext
      * Separated and made visible so that we can override the actual storage for testing purposes.
      */
     @VisibleForTesting
-    protected void store(final byte[] key, final ColumnFamily family)
+    protected void store(final UUID key, final ColumnFamily family)
     {
         try
         {
@@ -521,7 +505,7 @@ public class TraceSessionContext
             {
                 public void run()
                 {
-                    RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBuffer.wrap(key));
+                    RowMutation mutation = new RowMutation(TRACE_KEYSPACE, TimeUUIDType.instance.decompose(key));
                     mutation.add(family);
                     try
                     {
@@ -540,9 +524,9 @@ public class TraceSessionContext
         }
     }
 
-    private void log(byte[] key, final ColumnFamily family, String message, Throwable t)
+    private void log(UUID key, final ColumnFamily family, String message, Throwable t)
     {
-
+        logger.error("Error while tracing key: " + key + " Msg: " + message, t);
     }
 
     @VisibleForTesting

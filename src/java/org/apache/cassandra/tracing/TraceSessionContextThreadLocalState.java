@@ -3,12 +3,13 @@ package org.apache.cassandra.tracing;
 import static com.google.common.base.Preconditions.checkNotNull;
 
 import java.net.InetAddress;
+import java.util.UUID;
 
 import com.google.common.base.Stopwatch;
 
 public class TraceSessionContextThreadLocalState
 {
-    public final byte[] sessionId;
+    public final UUID sessionId;
     public final InetAddress origin;
     public final InetAddress source;
     public final String messageId;
@@ -20,13 +21,13 @@ public class TraceSessionContextThreadLocalState
     }
 
     public TraceSessionContextThreadLocalState(final InetAddress coordinator, final InetAddress source,
-            final byte[] sessionId)
+            final UUID sessionId)
     {
         this(coordinator, source, sessionId, null);
     }
 
     public TraceSessionContextThreadLocalState(final InetAddress coordinator, final InetAddress source,
-            final byte[] sessionId,
+            final UUID sessionId,
             final String messageId)
     {
         checkNotNull(coordinator);

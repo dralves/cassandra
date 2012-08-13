@@ -36,6 +36,7 @@ import org.apache.cassandra.db.marshal.Int32Type;
 import org.apache.cassandra.db.marshal.LongType;
 import org.apache.cassandra.db.marshal.TypeParser;
 import org.apache.cassandra.db.marshal.UTF8Type;
+import org.apache.cassandra.db.marshal.UUIDType;
 import org.apache.cassandra.tracing.TraceEvent.Type;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.thrift.TBase;
@@ -111,7 +112,7 @@ public class TraceEventBuilder
                     builder.addPayloadRaw(payloadKey, col.value());
                     continue;
                 }
-                if (colName.equals(TraceSessionContext.PAYLOAD_TYPE))
+                if (colName.equals(TraceSessionContext.PAYLOAD_TYPES))
                 {
                     String payloadKey = UTF8Type.instance.compose(components.get(3).value);
                     try
@@ -143,12 +144,12 @@ public class TraceEventBuilder
         return events;
     }
 
-    private byte[] sessionId;
+    private UUID sessionId;
+    private UUID eventId;
     private String name;
     private String description;
     private Long duration;
     private Long timestamp;
-    private byte[] eventId;
     private InetAddress coordinator;
     private InetAddress source;
     private Map<String, AbstractType<?>> payloadTypes = Maps.newHashMap();
@@ -160,14 +161,14 @@ public class TraceEventBuilder
         // check if isTracing so that we can have noop when not tracing (avoids having to do isTracing checks everywhere
         // on traced code)
         if (isTracing())
-            this.sessionId = sessionId;
+            this.sessionId = UUIDType.instance.compose(ByteBuffer.wrap(sessionId));
         return this;
     }
 
     public TraceEventBuilder sessionId(UUID sessionId)
     {
         if (isTracing())
-            this.sessionId = UUIDGen.decompose(sessionId);
+            this.sessionId = sessionId;
         return this;
     }
 
@@ -202,14 +203,14 @@ public class TraceEventBuilder
     public TraceEventBuilder eventId(byte[] eventId)
     {
         if (isTracing())
-            this.eventId = eventId;
+            this.eventId = UUIDType.instance.compose(ByteBuffer.wrap(eventId));
         return this;
     }
 
     public TraceEventBuilder eventId(UUID eventId)
     {
         if (isTracing())
-            this.eventId = UUIDGen.decompose(eventId);
+            this.eventId = eventId;
         return this;
     }
 
@@ -325,9 +326,7 @@ public class TraceEventBuilder
     private TraceEventBuilder addPayloadRaw(String name, ByteBuffer byteBuffer)
     {
         if (isTracing())
-        {
             this.payload.put(name, byteBuffer);
-        }
         return this;
     }
 
@@ -356,7 +355,7 @@ public class TraceEventBuilder
             }
             if (eventId == null)
             {
-                eventId = UUIDGen.getTimeUUIDBytes();
+                eventId(UUIDGen.getTimeUUIDBytes());
             }
 
             if (type == null)
