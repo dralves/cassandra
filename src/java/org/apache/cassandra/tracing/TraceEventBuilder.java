@@ -134,7 +134,7 @@ public class TraceEventBuilder
     {
         if (traceCtx().isTracing())
         {
-            ThriftObjectType type = ThriftObjectType.getInstance(thriftObject.getClass());
+            ThriftType type = ThriftType.getInstance(thriftObject.getClass());
             this.payloadTypes.put(name, type);
             this.payload.put(name, type.decompose(thriftObject));
         }
