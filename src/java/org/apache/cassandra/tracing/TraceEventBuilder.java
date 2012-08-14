@@ -14,7 +14,9 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
+import com.google.common.base.Function;
 import com.google.common.base.Supplier;
+import com.google.common.collect.Iterables;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
@@ -37,7 +39,9 @@ import org.apache.cassandra.db.marshal.LongType;
 import org.apache.cassandra.db.marshal.TypeParser;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.db.marshal.UUIDType;
+import org.apache.cassandra.thrift.ColumnOrSuperColumn;
 import org.apache.cassandra.tracing.TraceEvent.Type;
+import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.thrift.TBase;
 import org.apache.thrift.TEnum;
@@ -47,37 +51,61 @@ public class TraceEventBuilder
 
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
 
+    public static Set<TraceEvent> fromThrift(UUID sessionId,
+            List<ColumnOrSuperColumn> columnOrSuperColumns)
+    {
+        return processValues(sessionId, Iterables.transform(columnOrSuperColumns,
+                new Function<ColumnOrSuperColumn, Pair<ByteBuffer, ByteBuffer>>()
+                {
+                    public Pair<ByteBuffer, ByteBuffer> apply(ColumnOrSuperColumn column)
+                    {
+                        return new Pair<ByteBuffer, ByteBuffer>(column.column.name, column.column.value);
+                    }
+                }));
+    }
+
     public static Set<TraceEvent> fromColumnFamily(UUID key, ColumnFamily cf)
     {
-        Multimap<UUID, IColumn> eventColumns = Multimaps.newListMultimap(
-                Maps.<UUID, Collection<IColumn>> newLinkedHashMap(),
-                new Supplier<ArrayList<IColumn>>()
+        return processValues(key, Iterables.transform(cf, new Function<IColumn, Pair<ByteBuffer, ByteBuffer>>()
+        {
+            public Pair<ByteBuffer, ByteBuffer> apply(IColumn column)
+            {
+                return new Pair<ByteBuffer, ByteBuffer>(column.name(), column.value());
+            }
+        }));
+    }
+
+    private static Set<TraceEvent> processValues(UUID key, Iterable<Pair<ByteBuffer, ByteBuffer>> colNamesAndValues)
+    {
+        Multimap<UUID, Pair<ByteBuffer, ByteBuffer>> eventColumns = Multimaps.newListMultimap(
+                Maps.<UUID, Collection<Pair<ByteBuffer, ByteBuffer>>> newLinkedHashMap(),
+                new Supplier<ArrayList<Pair<ByteBuffer, ByteBuffer>>>()
                 {
                     @Override
-                    public ArrayList<IColumn> get()
+                    public ArrayList<Pair<ByteBuffer, ByteBuffer>> get()
                     {
                         return Lists.newArrayList();
                     }
                 });
 
         // split the columns by event
-        for (IColumn column : cf)
+        for (Pair<ByteBuffer, ByteBuffer> column : colNamesAndValues)
         {
-            List<CompositeComponent> components = EVENT_TYPE.deconstruct(column.name());
+            List<CompositeComponent> components = EVENT_TYPE.deconstruct(column.left);
             UUID decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
             eventColumns.put(decodedEventId, column);
         }
 
         Set<TraceEvent> events = Sets.newLinkedHashSet();
-        for (Map.Entry<UUID, Collection<IColumn>> entry : eventColumns.asMap().entrySet())
+        for (Map.Entry<UUID, Collection<Pair<ByteBuffer, ByteBuffer>>> entry : eventColumns.asMap().entrySet())
         {
             TraceEventBuilder builder = new TraceEventBuilder();
             builder.eventId(entry.getKey());
             builder.sessionId(key);
             boolean setCoordinator = false;
-            for (IColumn col : entry.getValue())
+            for (Pair<ByteBuffer, ByteBuffer> col : entry.getValue())
             {
-                List<CompositeComponent> components = EVENT_TYPE.deconstruct(col.name());
+                List<CompositeComponent> components = EVENT_TYPE.deconstruct(col.left);
                 if (!setCoordinator)
                 {
                     builder.coordinator((InetAddress) components.get(0).comparator
@@ -88,28 +116,28 @@ public class TraceEventBuilder
                 String colName = (String) components.get(2).comparator.compose(components.get(2).value);
                 if (colName.equals(TraceSessionContext.DESCRIPTION))
                 {
-                    builder.description(UTF8Type.instance.compose(col.value()));
+                    builder.description(UTF8Type.instance.compose(col.right));
                     continue;
                 }
                 if (colName.equals(TraceSessionContext.DURATION))
                 {
-                    builder.duration(LongType.instance.compose(col.value()));
+                    builder.duration(LongType.instance.compose(col.right));
                     continue;
                 }
                 if (colName.equals(TraceSessionContext.HAPPENED))
                 {
-                    builder.timestamp(LongType.instance.compose(col.value()));
+                    builder.timestamp(LongType.instance.compose(col.right));
                     continue;
                 }
                 if (colName.equals(TraceSessionContext.NAME))
                 {
-                    builder.name(UTF8Type.instance.compose(col.value()));
+                    builder.name(UTF8Type.instance.compose(col.right));
                     continue;
                 }
                 if (colName.equals(TraceSessionContext.PAYLOAD))
                 {
                     String payloadKey = UTF8Type.instance.compose(components.get(3).value);
-                    builder.addPayloadRaw(payloadKey, col.value());
+                    builder.addPayloadRaw(payloadKey, col.right);
                     continue;
                 }
                 if (colName.equals(TraceSessionContext.PAYLOAD_TYPES))
@@ -118,7 +146,7 @@ public class TraceEventBuilder
                     try
                     {
                         builder.addPayloadTypeRaw(payloadKey,
-                                new TypeParser(UTF8Type.instance.compose(col.value())).parse());
+                                new TypeParser(UTF8Type.instance.compose(col.right)).parse());
                     }
                     catch (ConfigurationException e)
                     {
@@ -130,12 +158,12 @@ public class TraceEventBuilder
                 }
                 if (colName.equals(TraceSessionContext.SOURCE))
                 {
-                    builder.source(InetAddressType.instance.compose(col.value()));
+                    builder.source(InetAddressType.instance.compose(col.right));
                     continue;
                 }
                 if (colName.equals(TraceSessionContext.TYPE))
                 {
-                    builder.type(Type.valueOf(UTF8Type.instance.compose(col.value())));
+                    builder.type(Type.valueOf(UTF8Type.instance.compose(col.right)));
                     continue;
                 }
             }
