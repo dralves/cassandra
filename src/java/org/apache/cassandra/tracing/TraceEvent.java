@@ -121,8 +121,6 @@ public class TraceEvent
     {
         if (rawPayload.containsKey(name))
         {
-            System.out.println(payloadTypes.get(name));
-            System.out.println(payloadTypes);
             if (payloadTypes.containsKey(name))
             {
                 return (T) payloadTypes.get(name).compose(rawPayload.get(name));

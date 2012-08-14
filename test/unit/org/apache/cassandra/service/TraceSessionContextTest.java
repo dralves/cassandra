@@ -84,7 +84,7 @@ public class TraceSessionContextTest extends SchemaLoader
     {
 
         /**
-         * Override the paren't mutation that applies mutation to the cluster to instead apply mutations locally and
+         * Override the parent mutation that applies mutation to the cluster to instead apply mutations locally and
          * immediately for testing.
          */
         @Override
@@ -131,7 +131,6 @@ public class TraceSessionContextTest extends SchemaLoader
         InetAddress address = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
         String colName = (String) components.get(1).comparator.compose(components.get(1).value);
         assertEquals("request", colName);
-        System.out.println(requestColumn);
         assertEquals(FBUtilities.getLocalAddress(), address);
         String request = ByteBufferUtil.string(requestColumn.value());
         assertEquals("test_session", request);
@@ -211,11 +210,6 @@ public class TraceSessionContextTest extends SchemaLoader
                                         EVENTS_TABLE)));
 
         Set<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
-        for (TraceEvent event : traceEvents)
-        {
-            System.out.println(event.name()
-                    );
-        }
 
         // we should have 6 events
         // "getColumnFamily" from testNewSession
