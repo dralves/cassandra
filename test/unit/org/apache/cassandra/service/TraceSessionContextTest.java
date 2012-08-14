@@ -27,7 +27,6 @@ import static junit.framework.Assert.assertNotNull;
 import static junit.framework.Assert.assertSame;
 import static junit.framework.Assert.assertTrue;
 import static org.apache.cassandra.tracing.TraceSessionContext.EVENTS_TABLE;
-import static org.apache.cassandra.tracing.TraceSessionContext.EVENT_TYPE;
 import static org.apache.cassandra.tracing.TraceSessionContext.SESSIONS_TABLE;
 import static org.apache.cassandra.tracing.TraceSessionContext.SESSION_TYPE;
 import static org.apache.cassandra.tracing.TraceSessionContext.TRACE_KEYSPACE;
@@ -71,6 +70,7 @@ import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.net.MessagingService.Verb;
 import org.apache.cassandra.tracing.TraceEvent;
+import org.apache.cassandra.tracing.TraceEvent.Type;
 import org.apache.cassandra.tracing.TraceEventBuilder;
 import org.apache.cassandra.tracing.TraceSessionContext;
 import org.apache.cassandra.utils.ByteBufferUtil;
@@ -210,76 +210,35 @@ public class TraceSessionContextTest extends SchemaLoader
                                 new QueryPath(
                                         EVENTS_TABLE)));
 
-        // should now have 16 columns
-        // 4 - from the previous method
-        // 4 - from the automated trace event inserted at stage start
-        // 4 - from the custom trace event inserted by the runnable
-        // 4 - from the automated trace event inserted at stage end
-        assertSame(16, family.getColumnCount());
+        Set<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
+        for (TraceEvent event : traceEvents)
+        {
+            System.out.println(event.name()
+                    );
+        }
 
-        // make sure that the automated stage tracing events are there (start)
-        IColumn traceStart = Iterables.get(family, 5);
-        List<CompositeComponent> components = EVENT_TYPE.deconstruct(traceStart.name());
-        InetAddress coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        UUID decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        String colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        assertEquals("event", colName);
-        assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        assertEquals("STAGE_BEGIN[TestStage]", ByteBufferUtil.string(traceStart.value()));
+        // we should have 6 events
+        // "getColumnFamily" from testNewSession
+        // custom trace from testNewLocalTraceEvent
+        // "getColumnFamily" from testNewLocalTraceEvent
+        // stage start trace event from testContextTLStateAcompaniesToAnotherThread
+        // custom event from testContextTLStateAcompaniesToAnotherThread
+        // stage finish event from testContextTLStateAcompaniesToAnotherThread
 
-        // now make sure all the details of our trace event match
-        UUID eventId = reference.get();
+        assertSame(6, traceEvents.size());
 
-        IColumn durationColumn = Iterables.get(family, 8);
-        components = EVENT_TYPE.deconstruct(durationColumn.name());
-        coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        assertEquals("duration", colName);
-        assertEquals(eventId, decodedEventId);
-        assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        assertEquals(8765L, ByteBufferUtil.toLong(durationColumn.value()));
+        TraceEvent stageStartEvent = Iterables.get(traceEvents, 3);
+        TraceEvent customEvent = Iterables.get(traceEvents, 4);
+        TraceEvent stageFinishEvent = Iterables.get(traceEvents, 5);
 
-        IColumn eventColumn = Iterables.get(family, 9);
-        components = EVENT_TYPE.deconstruct(eventColumn.name());
-        coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        assertEquals("event", colName);
-        assertEquals(eventId, decodedEventId);
-        assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        assertEquals("multi threaded trace event", ByteBufferUtil.string(eventColumn.value()));
-
-        IColumn happenedAtColumn = Iterables.get(family, 10);
-        components = EVENT_TYPE.deconstruct(happenedAtColumn.name());
-        coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        assertEquals("happened_at", colName);
-        assertEquals(eventId, decodedEventId);
-        assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        assertEquals(5678L, ByteBufferUtil.toLong(happenedAtColumn.value()));
-
-        IColumn sourceColumn = Iterables.get(family, 11);
-        components = EVENT_TYPE.deconstruct(sourceColumn.name());
-        coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        assertEquals("source", colName);
-        assertEquals(eventId, decodedEventId);
-        assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        assertEquals(FBUtilities.getLocalAddress(),
-                InetAddress.getByAddress(ByteBufferUtil.getArray(sourceColumn.value())));
-
-        // make sure that the automated stage tracing events are there (finish)
-        IColumn traceFinish = Iterables.get(family, 13);
-        components = EVENT_TYPE.deconstruct(traceFinish.name());
-        coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        assertEquals("event", colName);
-        assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        assertEquals("STAGE_FINISH[TestStage]", ByteBufferUtil.string(traceFinish.value()));
+        assertEquals("TestStage", stageStartEvent.name());
+        assertSame(Type.STAGE_START, stageStartEvent.type());
+        assertEquals(8765L, customEvent.duration());
+        assertEquals("multi threaded trace event", customEvent.name());
+        assertEquals(5678L, customEvent.timestamp());
+        assertEquals(FBUtilities.getLocalAddress(), customEvent.source());
+        assertEquals("TestStage", stageFinishEvent.name());
+        assertSame(Type.STAGE_FINISH, stageFinishEvent.type());
     }
 
     @Test
@@ -327,52 +286,15 @@ public class TraceSessionContextTest extends SchemaLoader
                                 new QueryPath(
                                         EVENTS_TABLE)));
 
-        // Because the MessageDeliveryTask does not run on a DebuggableTPE no automated tracing
+        // Because the MessageDeliveryTask does not run on a DebuggableTPE no automated stage tracing
         // events were inserted, we just have 4 more than after the previous method
-        assertSame(20, family.getColumnCount());
+        Set<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
+        assertSame(8, traceEvents.size());
 
-        UUID eventId = reference.get();
-
-        IColumn durationColumn = Iterables.get(family, 16);
-        List<CompositeComponent> components = EVENT_TYPE.deconstruct(durationColumn.name());
-        InetAddress coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        UUID decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        String colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        assertEquals("duration", colName);
-        assertEquals(eventId, decodedEventId);
-        assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        assertEquals(9123L, ByteBufferUtil.toLong(durationColumn.value()));
-
-        IColumn eventColumn = Iterables.get(family, 17);
-        components = EVENT_TYPE.deconstruct(eventColumn.name());
-        coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        assertEquals("event", colName);
-        assertEquals(eventId, decodedEventId);
-        assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        assertEquals("remote trace event", ByteBufferUtil.string(eventColumn.value()));
-
-        IColumn happenedAtColumn = Iterables.get(family, 18);
-        components = EVENT_TYPE.deconstruct(happenedAtColumn.name());
-        coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        assertEquals("happened_at", colName);
-        assertEquals(eventId, decodedEventId);
-        assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        assertEquals(3219L, ByteBufferUtil.toLong(happenedAtColumn.value()));
-
-        IColumn sourceColumn = Iterables.get(family, 19);
-        components = EVENT_TYPE.deconstruct(sourceColumn.name());
-        coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        assertEquals("source", colName);
-        assertEquals(eventId, decodedEventId);
-        assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        assertEquals(InetAddress.getByName("0.0.0.0"),
-                InetAddress.getByAddress(ByteBufferUtil.getArray(sourceColumn.value())));
-
+        TraceEvent remoteEvent = Iterables.get(traceEvents, 7);
+        assertEquals(9123L, remoteEvent.duration());
+        assertEquals("remote trace event", remoteEvent.name());
+        assertEquals(3219L, remoteEvent.timestamp());
+        assertEquals(InetAddress.getByName("0.0.0.0"), remoteEvent.source());
     }
 }
