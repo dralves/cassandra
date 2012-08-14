@@ -65,7 +65,6 @@ import org.apache.cassandra.db.filter.QueryPath;
 import org.apache.cassandra.db.marshal.AbstractCompositeType.CompositeComponent;
 import org.apache.cassandra.db.marshal.LongType;
 import org.apache.cassandra.db.marshal.TimeUUIDType;
-import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.net.IVerbHandler;
 import org.apache.cassandra.net.MessageDeliveryTask;
 import org.apache.cassandra.net.MessageIn;
@@ -89,9 +88,9 @@ public class TraceSessionContextTest extends SchemaLoader
          * immediately for testing.
          */
         @Override
-        protected void store(final byte[] key, final ColumnFamily family)
+        protected void store(final UUID key, final ColumnFamily family)
         {
-            RowMutation mutation = new RowMutation(TRACE_KEYSPACE, ByteBuffer.wrap(key));
+            RowMutation mutation = new RowMutation(TRACE_KEYSPACE, TimeUUIDType.instance.decompose(key));
             mutation.add(family);
             mutation.apply();
         }
@@ -173,100 +172,6 @@ public class TraceSessionContextTest extends SchemaLoader
         assertEquals(1234L, event.timestamp());
         assertEquals(9876L, event.getFromPayload("simplePayload"));
         assertEquals(eventId, event.id());
-
-        for (IColumn col : family)
-        {
-            List<CompositeComponent> components = EVENT_TYPE.deconstruct(col.name());
-            InetAddress coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-            UUID decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-            String colName = (String) components.get(2).comparator.compose(components.get(2).value);
-            System.out.println(colName);
-        }
-
-        IColumn column = Iterables.get(family, 12);
-        List<CompositeComponent> components = EVENT_TYPE.deconstruct(column.name());
-        InetAddress coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        UUID decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        String colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        assertEquals("description", colName);
-        assertEquals(eventId, decodedEventId);
-        assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        assertTrue(column.value().equals(ByteBufferUtil.EMPTY_BYTE_BUFFER));
-        //
-        // column = Iterables.get(family, 1);
-        // components = EVENT_TYPE.deconstruct(column.name());
-        // coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        // decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        // colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        // assertEquals("duration", colName);
-        // assertEquals(eventId, decodedEventId);
-        // assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        // assertEquals(4321L, ByteBufferUtil.toLong(column.value()));
-        //
-        // column = Iterables.get(family, 2);
-        // components = EVENT_TYPE.deconstruct(column.name());
-        // coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        // decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        // colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        // assertEquals("happened_at", colName);
-        // assertEquals(eventId, decodedEventId);
-        // assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        // assertEquals(1234L, ByteBufferUtil.toLong(column.value()));
-        //
-        // column = Iterables.get(family, 3);
-        // components = EVENT_TYPE.deconstruct(column.name());
-        // coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        // decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        // colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        // assertEquals("name", colName);
-        // assertEquals(eventId, decodedEventId);
-        // assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        // assertEquals("simple trace event", ByteBufferUtil.string(column.value()));
-        //
-        column = Iterables.get(family, 16);
-        components = EVENT_TYPE.deconstruct(column.name());
-        coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        String mapEntryKey = UTF8Type.instance.compose(components.get(3).value);
-        assertEquals("payload", colName);
-        assertEquals("simplePayload", mapEntryKey);
-        assertEquals(eventId, decodedEventId);
-        assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        assertEquals(9876L, ByteBufferUtil.toLong(column.value()));
-        //
-        column = Iterables.get(family, 17);
-        components = EVENT_TYPE.deconstruct(column.name());
-        coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        mapEntryKey = UTF8Type.instance.compose(components.get(3).value);
-        assertEquals("payload_types", colName);
-        assertEquals("simplePayload", mapEntryKey);
-        assertEquals(eventId, decodedEventId);
-        assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        assertEquals(LongType.instance.toString(), UTF8Type.instance.compose(column.value()));
-        //
-        // column = Iterables.get(family, 6);
-        // components = EVENT_TYPE.deconstruct(column.name());
-        // coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        // decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        // colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        // assertEquals("source", colName);
-        // assertEquals(eventId, decodedEventId);
-        // assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        // assertEquals(FBUtilities.getLocalAddress(),
-        // InetAddress.getByAddress(ByteBufferUtil.getArray(column.value())));
-        //
-        // column = Iterables.get(family, 7);
-        // components = EVENT_TYPE.deconstruct(column.name());
-        // coordinator = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        // decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-        // colName = (String) components.get(2).comparator.compose(components.get(2).value);
-        // assertEquals("type", colName);
-        // assertEquals(eventId, decodedEventId);
-        // assertEquals(FBUtilities.getLocalAddress(), coordinator);
-        // assertEquals("MISC", ByteBufferUtil.string(column.value()));
 
     }
 
