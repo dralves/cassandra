@@ -93,6 +93,7 @@ public class Session implements Serializable
         availableOptions.addOption("Q",  "query-names",          true,   "Comma-separated list of column names to retrieve from each row.");
         availableOptions.addOption("Z",  "compaction-strategy",  true,   "CompactionStrategy to use.");
         availableOptions.addOption("U",  "comparator",           true,   "Column Comparator to use. Currently supported types are: TimeUUIDType, AsciiType, UTF8Type.");
+        availableOptions.addOption("tr", "trace",                true,   "Trace all read/write ops involved in this stress session");
     }
 
     private int numKeys          = 1000 * 1000;
@@ -117,6 +118,7 @@ public class Session implements Serializable
     private boolean ignoreErrors  = false;
     private boolean enable_cql    = false;
     private boolean use_prepared  = false;
+    private boolean trace         = false;
 
     private final String outFileName;
 
@@ -139,6 +141,8 @@ public class Session implements Serializable
     public final InetAddress sendToDaemon;
     public final String comparator;
     public final boolean timeUUIDComparator;
+    public double traceProbability = 0.0;
+    public int maxQueriesToTrace = Integer.MAX_VALUE;
 
     public Session(String[] arguments) throws IllegalArgumentException
     {
@@ -153,6 +157,13 @@ public class Session implements Serializable
             {
                 System.err.println("Application does not allow arbitrary arguments: " + StringUtils.join(cmd.getArgList(), ", "));
                 System.exit(1);
+            }
+
+            if (cmd.hasOption("tr"))
+            {
+                trace = true;
+                traceProbability = Double.parseDouble(cmd.getOptionValues("tr")[0]);
+                maxQueriesToTrace = Integer.parseInt(cmd.getOptionValues("tr")[1]);
             }
 
             if (cmd.hasOption("h"))
@@ -621,6 +632,11 @@ public class Session implements Serializable
             if (setKeyspace)
             {
                 client.set_keyspace("Keyspace1");
+            }
+
+            if (trace)
+            {
+                client.enable_tracing(traceProbability, maxQueriesToTrace);
             }
         }
         catch (InvalidRequestException e)
