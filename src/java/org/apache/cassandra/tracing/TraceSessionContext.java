@@ -32,6 +32,8 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.RejectedExecutionException;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Predicate;
@@ -49,10 +51,10 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.config.KSMetaData;
 import org.apache.cassandra.config.Schema;
+import org.apache.cassandra.cql.CreateIndexStatement;
 import org.apache.cassandra.cql3.ColumnNameBuilder;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.statements.CreateColumnFamilyStatement;
-import org.apache.cassandra.cql3.statements.CreateIndexStatement;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.db.ExpiringColumn;
@@ -237,10 +239,9 @@ public class TraceSessionContext
     }
 
     private InetAddress localAddress;
-
     private ThreadLocal<TraceSessionContextThreadLocalState> sessionContextThreadLocalState = new ThreadLocal<TraceSessionContextThreadLocalState>();
-
     private int timeToLive = 86400;
+    private Lock traceTablesLock = new ReentrantLock();
 
     protected TraceSessionContext()
     {
@@ -254,22 +255,31 @@ public class TraceSessionContext
 
         }).isPresent())
         {
-            try
+            traceTablesLock.lock();
+            StageManager.getStage(Stage.TRACING).execute(new Runnable()
             {
-                logger.info("Trace keyspace was not found creating & annoucing");
-                KSMetaData traceKs = KSMetaData.newKeyspace(TRACE_KEYSPACE, SimpleStrategy.class.getName(),
-                        ImmutableMap.of("replication_factor", "1"));
-                MigrationManager.announceNewKeyspace(traceKs);
-                MigrationManager.announceNewColumnFamily(sessionsCfm);
-                MigrationManager.announceNewColumnFamily(eventsCfm);
-                // Thread.sleep(1000);
-                // ((CreateIndexStatement) QueryProcessor.parseStatement(indexStatement).prepare().statement)
-                // .announceMigration();
-            }
-            catch (Exception e)
-            {
-                Throwables.propagate(e);
-            }
+                @Override
+                public void run()
+                {
+                    try
+                    {
+                        logger.info("Trace keyspace was not found creating & annoucing");
+                        KSMetaData traceKs = KSMetaData.newKeyspace(TRACE_KEYSPACE, SimpleStrategy.class.getName(),
+                                ImmutableMap.of("replication_factor", "1"));
+                        MigrationManager.announceNewKeyspace(traceKs);
+                        MigrationManager.announceNewColumnFamily(sessionsCfm);
+                        MigrationManager.announceNewColumnFamily(eventsCfm);
+                        Thread.sleep(1000);
+                        CreateIndexStatement statement = (CreateIndexStatement) QueryProcessor
+                                .parseStatement(indexStatement).prepare().statement;
+
+                    }
+                    catch (Exception e)
+                    {
+                        Throwables.propagate(e);
+                    }
+                }
+            });
         }
 
         this.localAddress = FBUtilities.getLocalAddress();
@@ -393,7 +403,7 @@ public class TraceSessionContext
     {
         return sessionContextThreadLocalState.get() == null ? false : true;
     }
-    
+
     private void log(UUID key, final ColumnFamily family, String message)
     {
         log(key, family, message, null);
