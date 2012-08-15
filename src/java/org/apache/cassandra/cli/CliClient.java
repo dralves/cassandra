@@ -17,9 +17,6 @@
  */
 package org.apache.cassandra.cli;
 
-import static org.apache.cassandra.tracing.TraceSessionContext.EVENT_TYPE;
-import static org.apache.cassandra.tracing.TraceSessionContext.SESSION_TYPE;
-
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -32,24 +29,20 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.Date;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
-import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Joiner;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Collections2;
-import com.google.common.collect.Iterables;
 
 import org.apache.commons.lang.StringUtils;
-
-import org.apache.cassandra.tracing.TraceSessionContext;
 
 import org.antlr.runtime.tree.Tree;
 import org.apache.cassandra.auth.IAuthenticator;
@@ -57,7 +50,6 @@ import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.db.ColumnFamilyStoreMBean;
 import org.apache.cassandra.db.compaction.CompactionManagerMBean;
 import org.apache.cassandra.db.compaction.OperationType;
-import org.apache.cassandra.db.marshal.AbstractCompositeType.CompositeComponent;
 import org.apache.cassandra.db.marshal.AbstractType;
 import org.apache.cassandra.db.marshal.AsciiType;
 import org.apache.cassandra.db.marshal.BytesType;
@@ -102,10 +94,12 @@ import org.apache.cassandra.thrift.SuperColumn;
 import org.apache.cassandra.thrift.TimedOutException;
 import org.apache.cassandra.thrift.UnavailableException;
 import org.apache.cassandra.tools.NodeProbe;
+import org.apache.cassandra.tracing.TraceEvent;
+import org.apache.cassandra.tracing.TraceEventBuilder;
+import org.apache.cassandra.tracing.TraceSessionContext;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
-
 import org.apache.thrift.TBaseHelper;
 import org.apache.thrift.TException;
 import org.codehaus.jackson.JsonEncoding;
@@ -2099,55 +2093,14 @@ public class CliClient
             List<ColumnOrSuperColumn> eventCols = thriftClient.get_slice(sessionIdAsBB, events, predicate,
                     ConsistencyLevel.QUORUM);
 
-            Column requestColumn = Iterables.get(sessionCols, 0).getColumn();
-            List<CompositeComponent> components = SESSION_TYPE.deconstruct(requestColumn.name);
-            InetAddress address = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-            String request = ByteBufferUtil.string(requestColumn.value);
-
-            Column startColumn = Iterables.get(sessionCols, 1).getColumn();
-            components = SESSION_TYPE.deconstruct(startColumn.name);
-            address = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-            long startedAt = ByteBufferUtil.toLong(startColumn.value);
-
-            System.out.println("Trace session: " + text);
-            System.out.println("Coordinator: " + address.toString());
-            System.out.println("StartedAt: " + startedAt);
-            System.out.println("Request: " + request);
-
-            assert eventCols.size() % 4 == 0;
-
-            for (int i = 0; i < eventCols.size(); i += 4)
+            Set<TraceEvent> traceEvents = TraceEventBuilder.fromThrift(sessionId, eventCols);
+            
+            for (TraceEvent event : traceEvents)
             {
-                Column durationColumn = Iterables.get(eventCols, i).getColumn();
-                components = EVENT_TYPE.deconstruct(durationColumn.name);
-                UUID decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-                long duration = ByteBufferUtil.toLong(durationColumn.value);
-
-                Column eventColumn = Iterables.get(eventCols, i + 1).getColumn();
-                components = EVENT_TYPE.deconstruct(eventColumn.name);
-                String event = ByteBufferUtil.string(eventColumn.value);
-
-                Column happenedAtColumn = Iterables.get(eventCols, i + 2).getColumn();
-                components = EVENT_TYPE.deconstruct(happenedAtColumn.name);
-                long happenedAt = ByteBufferUtil.toLong(happenedAtColumn.value);
-
-                Column sourceColumn = Iterables.get(eventCols, i + 3).getColumn();
-                components = EVENT_TYPE.deconstruct(sourceColumn.name);
-                InetAddress source = InetAddress.getByAddress(ByteBufferUtil.getArray(sourceColumn.value));
-
-                System.out.println("------------");
-                System.out.println("Trace Event: " + decodedEventId.toString());
-                System.out.println("Source: " + source);
-                System.out.println("Event Desc: " + event);
-                System.out.println("Happened At: " + happenedAt);
-                System.out.println("Duration: " + TimeUnit.MILLISECONDS.convert(duration, TimeUnit.NANOSECONDS));
+                System.out.println(event);
             }
         }
         catch (InvalidRequestException e)
-        {
-            sessionState.out.println("Invalid request: " + e);
-        }
-        catch (UnknownHostException e)
         {
             sessionState.out.println("Invalid request: " + e);
         }

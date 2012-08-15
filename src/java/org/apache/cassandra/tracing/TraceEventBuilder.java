@@ -277,7 +277,12 @@ public class TraceEventBuilder
 
     public TraceEventBuilder addPayload(String name, TEnum thriftEnum)
     {
-        // TODO finish serializing thrift enums (important for consistency level)
+        if (isTracing())
+        {
+            ByteBuffer encoded = Int32Type.instance.decompose(thriftEnum.getValue());
+            this.payloadTypes.put(name, Int32Type.instance);
+            this.payload.put(name, encoded);
+        }
         return this;
     }
 

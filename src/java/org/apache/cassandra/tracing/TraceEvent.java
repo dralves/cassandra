@@ -146,6 +146,18 @@ public class TraceEvent
     }
 
     @Override
+    public String toString()
+    {
+        StringBuilder builder = new StringBuilder();
+        builder.append("TraceEvent [name=").append(name).append(", description=").append(description)
+                .append(", duration=").append(duration).append(", timestamp=").append(timestamp).append(", sessionId=")
+                .append(sessionId).append(", eventId=").append(eventId).append(", coordinator=").append(coordinator)
+                .append(", source=").append(source).append(", rawPayload=").append(rawPayload)
+                .append(", payloadTypes=").append(payloadTypes).append(", type=").append(type).append("]");
+        return builder.toString();
+    }
+
+    @Override
     public int hashCode()
     {
         final int prime = 31;
