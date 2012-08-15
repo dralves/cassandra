@@ -20,6 +20,8 @@ import com.google.common.collect.Multimaps;
 import com.google.common.collect.Ordering;
 import com.google.common.collect.Sets;
 
+import org.apache.commons.math.stat.descriptive.DescriptiveStatistics;
+
 import org.apache.cassandra.thrift.ConsistencyLevel;
 
 public class TracePrettyPrinter
@@ -92,10 +94,25 @@ public class TracePrettyPrinter
 
     }
 
-    public void printMultiSessionTraceForRequestType()
+    public void printMultiSessionTraceForRequestType(String reauestType, Map<UUID, List<TraceEvent>> sessions,
+            PrintStream out)
     {
-        // print latencies avg, stddev, 95% and 99%
 
+        DescriptiveStatistics latencySstats = new DescriptiveStatistics();
+        for (List<TraceEvent> events : sessions.values())
+        {
+            TraceEvent first = events.get(0);
+            TraceEvent last = events.get(events.size() - 1);
+            latencySstats.addValue(last.duration() - first.duration());
+        }
+
+        out.println("Summary for sessions of request: " + reauestType);
+        out.println("            ==============================================================");
+        out.println("            |    Avg.    |   StdDev.  |   Max.   |   Min.   |    99.99%  |");
+        out.println("==========================================================================");
+        out.println("|   Lat.    | " + latencySstats.getMean() + " | " + latencySstats.getStandardDeviation() + " | "
+                + latencySstats.getMax() + " | " + latencySstats.getMin() + " " + latencySstats.getPercentile(99.9)
+                + " | ");
         // print the top 5 latencies (to enable individual tracing)
 
     }

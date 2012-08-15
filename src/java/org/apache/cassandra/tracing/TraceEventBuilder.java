@@ -10,7 +10,6 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
@@ -21,7 +20,6 @@ import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
 import com.google.common.collect.Multimap;
 import com.google.common.collect.Multimaps;
-import com.google.common.collect.Sets;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -51,7 +49,7 @@ public class TraceEventBuilder
 
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
 
-    public static Set<TraceEvent> fromThrift(UUID sessionId,
+    public static List<TraceEvent> fromThrift(UUID sessionId,
             List<ColumnOrSuperColumn> columnOrSuperColumns)
     {
         return processValues(sessionId, Iterables.transform(columnOrSuperColumns,
@@ -64,7 +62,7 @@ public class TraceEventBuilder
                 }));
     }
 
-    public static Set<TraceEvent> fromColumnFamily(UUID key, ColumnFamily cf)
+    public static List<TraceEvent> fromColumnFamily(UUID key, ColumnFamily cf)
     {
         return processValues(key, Iterables.transform(cf, new Function<IColumn, Pair<ByteBuffer, ByteBuffer>>()
         {
@@ -75,7 +73,7 @@ public class TraceEventBuilder
         }));
     }
 
-    private static Set<TraceEvent> processValues(UUID key, Iterable<Pair<ByteBuffer, ByteBuffer>> colNamesAndValues)
+    private static List<TraceEvent> processValues(UUID key, Iterable<Pair<ByteBuffer, ByteBuffer>> colNamesAndValues)
     {
         Multimap<UUID, Pair<ByteBuffer, ByteBuffer>> eventColumns = Multimaps.newListMultimap(
                 Maps.<UUID, Collection<Pair<ByteBuffer, ByteBuffer>>> newLinkedHashMap(),
@@ -96,7 +94,7 @@ public class TraceEventBuilder
             eventColumns.put(decodedEventId, column);
         }
 
-        Set<TraceEvent> events = Sets.newLinkedHashSet();
+        List<TraceEvent> events = Lists.newArrayList();
         for (Map.Entry<UUID, Collection<Pair<ByteBuffer, ByteBuffer>>> entry : eventColumns.asMap().entrySet())
         {
             TraceEventBuilder builder = new TraceEventBuilder();
