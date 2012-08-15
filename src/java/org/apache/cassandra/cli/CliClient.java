@@ -2093,7 +2093,7 @@ public class CliClient
             List<ColumnOrSuperColumn> eventCols = thriftClient.get_slice(sessionIdAsBB, events, predicate,
                     ConsistencyLevel.QUORUM);
 
-            Set<TraceEvent> traceEvents = TraceEventBuilder.fromThrift(sessionId, eventCols);
+            List<TraceEvent> traceEvents = TraceEventBuilder.fromThrift(sessionId, eventCols);
             
             for (TraceEvent event : traceEvents)
             {

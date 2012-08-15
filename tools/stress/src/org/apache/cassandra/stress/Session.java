@@ -162,8 +162,23 @@ public class Session implements Serializable
             if (cmd.hasOption("tr"))
             {
                 trace = true;
-                traceProbability = Double.parseDouble(cmd.getOptionValues("tr")[0]);
-                maxQueriesToTrace = Integer.parseInt(cmd.getOptionValues("tr")[1]);
+                String probAndNum = cmd.getOptionValue("tr");
+                if (probAndNum == null || probAndNum.equals(""))
+                {
+                    throw new IllegalArgumentException(
+                            "tracing (-tr) requires a probality (e.g. 0.01) and, optionally, a max num to trace (e.g., 0.01,100)");
+                }
+                if (probAndNum.indexOf(",") != -1)
+                {
+                    String[] split = probAndNum.split(",");
+                    traceProbability = Double.parseDouble(split[0]);
+                    maxQueriesToTrace = Integer.parseInt(split[1]);
+                }
+                else
+                {
+                    traceProbability = Double.parseDouble(probAndNum);
+                    maxQueriesToTrace = -1;
+                }
             }
 
             if (cmd.hasOption("h"))

@@ -162,7 +162,7 @@ public class TraceSessionContextTest extends SchemaLoader
                                 new QueryPath(
                                         EVENTS_TABLE)));
 
-        Set<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
+        List<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
         // we should have two events because "get" actually produces one
         assertSame(2, traceEvents.size());
 
@@ -210,7 +210,7 @@ public class TraceSessionContextTest extends SchemaLoader
                                 new QueryPath(
                                         EVENTS_TABLE)));
 
-        Set<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
+        List<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
 
         // we should have 6 events
         // "getColumnFamily" from testNewSession
@@ -283,7 +283,7 @@ public class TraceSessionContextTest extends SchemaLoader
 
         // Because the MessageDeliveryTask does not run on a DebuggableTPE no automated stage tracing
         // events were inserted, we just have 4 more than after the previous method
-        Set<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
+        List<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
         assertSame(8, traceEvents.size());
 
         TraceEvent remoteEvent = Iterables.get(traceEvents, 7);
@@ -304,7 +304,7 @@ public class TraceSessionContextTest extends SchemaLoader
                                 new QueryPath(
                                         EVENTS_TABLE)));
 
-        Set<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
+        List<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
 
         TracePrettyPrinter.printSingleSessionTrace(sessionId, traceEvents, System.out);
 

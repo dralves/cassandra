@@ -27,7 +27,7 @@ import org.apache.cassandra.thrift.ConsistencyLevel;
 public class TracePrettyPrinter
 {
 
-    public static void printSingleSessionTrace(UUID sessionId, Set<TraceEvent> events, PrintStream out)
+    public static void printSingleSessionTrace(UUID sessionId, List<TraceEvent> events, PrintStream out)
     {
         TraceEvent first = Iterables.get(events, 0);
         Integer clValue = first.getFromPayload("consistency_level");

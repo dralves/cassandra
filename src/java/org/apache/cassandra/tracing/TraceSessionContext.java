@@ -143,13 +143,19 @@ public class TraceSessionContext
                     TimeUUIDType.instance,
                     UTF8Type.instance, collectionsType));
 
-    public static final CFMetaData sessionsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + SESSIONS_TABLE
+    public static CFMetaData sessionsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + SESSIONS_TABLE
             + " (" +
             "  " + SESSION_ID + "        timeuuid," +
             "  " + COORDINATOR + "       inet," +
             "  " + SESSION_START + "     timestamp," +
             "  " + SESSION_REQUEST + "   text," +
             "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + "));");
+
+    static
+    {
+        sessionsCfm = executeAndUpdate("CREATE INDEX idx_" + SESSION_REQUEST + " ON " + SESSIONS_TABLE + " ("
+                + SESSION_REQUEST + ")", sessionsCfm);
+    }
 
     private static final CFMetaData eventsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + EVENTS_TABLE + " (" +
             "  " + SESSION_ID + "        timeuuid," +
@@ -538,6 +544,12 @@ public class TraceSessionContext
     public void setTimeToLive(int timeToLive)
     {
         this.timeToLive = timeToLive;
+    }
+
+    private static CFMetaData executeAndUpdate(String cql, CFMetaData old)
+    {
+        QueryProcessor.parseStatement(cql).prepare();
+        return null;
     }
 
     private static CFMetaData compile(String cql)
