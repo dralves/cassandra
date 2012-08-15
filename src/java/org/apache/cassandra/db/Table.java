@@ -19,23 +19,45 @@ package org.apache.cassandra.db;
 
 import java.io.IOException;
 import java.nio.ByteBuffer;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.Iterator;
+import java.util.List;
+import java.util.Map;
+import java.util.Set;
+import java.util.SortedSet;
+import java.util.TreeSet;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
 import com.google.common.base.Function;
 import com.google.common.collect.Iterables;
+
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.config.*;
+import com.sun.java.swing.plaf.windows.resources.windows;
+
+import org.apache.cassandra.tracing.TraceSessionContext;
+
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ConfigurationException;
+import org.apache.cassandra.config.DatabaseDescriptor;
+import org.apache.cassandra.config.KSMetaData;
+import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.db.commitlog.CommitLog;
-import org.apache.cassandra.db.filter.*;
+import org.apache.cassandra.db.filter.ColumnSlice;
+import org.apache.cassandra.db.filter.QueryFilter;
+import org.apache.cassandra.db.filter.QueryPath;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.locator.AbstractReplicationStrategy;
 import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.tracing.TraceEventBuilder;
 import org.apache.cassandra.utils.ByteBufferUtil;
 
 /**
@@ -322,7 +344,10 @@ public class Table
 
     public void apply(RowMutation mutation, boolean writeCommitLog)
     {
+        long start = TraceEventBuilder.isTracing() ? TraceSessionContext.traceCtx().threadLocalState().watch
+                .elapsedTime(TimeUnit.NANOSECONDS) : 0;
         apply(mutation, writeCommitLog, true);
+        trace(mutation,writeCommitLog, start);
     }
 
     /**
@@ -574,4 +599,40 @@ public class Table
     {
         return getClass().getSimpleName() + "(name='" + name + "')";
     }
+    
+    private void trace(RowMutation mutation, boolean writeCommitLog, long start)
+    {
+        if (TraceEventBuilder.isTracing())
+        {
+            TraceEventBuilder builder = new TraceEventBuilder();
+            builder.name("apply_mutation_begin");
+            builder.duration(TraceSessionContext.traceCtx().threadLocalState().watch.elapsedTime(TimeUnit.NANOSECONDS)
+                    - start);
+            builder.addPayload("write_commit_log", writeCommitLog);
+            builder.addPayload("num_column_families", mutation.getColumnFamilies().size());
+            int totalCols = 0;
+            long totalColSize = 0L;
+            int maxColSize = 0;
+            int minColSize = Integer.MAX_VALUE;
+            for (ColumnFamily family : mutation.getColumnFamilies())
+            {
+                for (IColumn col : family)
+                {
+                    totalCols++;
+                    int size = col.value().remaining();
+                    if (size < minColSize)
+                        minColSize = size;
+                    if (size > maxColSize)
+                        maxColSize = size;
+                    totalColSize += size;
+                }
+            }
+            builder.addPayload("total_cols", totalCols);
+            builder.addPayload("max_col_size", maxColSize);
+            builder.addPayload("min_col_size", minColSize);
+            builder.addPayload("total_col_size", totalColSize);
+            TraceSessionContext.traceCtx().trace(builder.build());
+        }
+    }
+
 }

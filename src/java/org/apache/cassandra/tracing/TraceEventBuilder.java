@@ -429,7 +429,7 @@ public class TraceEventBuilder
         return null;
     }
 
-    public boolean isTracing()
+    public static boolean isTracing()
     {
         return traceCtx() != null && traceCtx().isTracing();
     }

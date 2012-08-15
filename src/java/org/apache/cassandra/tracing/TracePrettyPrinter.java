@@ -25,7 +25,7 @@ import org.apache.cassandra.thrift.ConsistencyLevel;
 public class TracePrettyPrinter
 {
 
-    public void printSingleSessionTrace(UUID sessionId, Set<TraceEvent> events, PrintStream out)
+    public static void printSingleSessionTrace(UUID sessionId, Set<TraceEvent> events, PrintStream out)
     {
         TraceEvent first = Iterables.get(events, 0);
         Integer clValue = first.getFromPayload("consistency_level");
@@ -58,11 +58,11 @@ public class TracePrettyPrinter
         long totalDuration = last.duration();
 
         out.println("Session Summary: " + sessionId);
-        out.println("Request: " + eventName);
-        out.println("Total Interacting nodes: " + eventsPerNode.keys().size() + " {" + eventsPerNode.keys() + "}");
+        out.println("Total interacting nodes: " + eventsPerNode.keys().size() + " {" + eventsPerNode.keys() + "}");
         out.println("Total duration: " + totalDuration);
         out.println("Coordinator: " + coordinator);
         out.println("Replicas: " + Sets.difference(eventsPerNode.keySet(), ImmutableSet.of(coordinator)));
+        out.println("Request: " + eventName);
         if (cl != null)
         {
             out.println("Consistency Level: " + cl.name());
@@ -81,6 +81,22 @@ public class TracePrettyPrinter
                                 entry2asList.get(entry2asList.size() - 1).duration()).result();
             }
         }.sortedCopy(eventsPerNode.asMap().entrySet());
+
+        for (Map.Entry<InetAddress, Collection<TraceEvent>> entries : orderedPerDuration)
+        {
+            for (TraceEvent event : entries.getValue())
+            {
+                System.out.println(event);
+            }
+        }
+
+    }
+
+    public void printMultiSessionTraceForRequestType()
+    {
+        // print latencies avg, stddev, 95% and 99%
+
+        // print the top 5 latencies (to enable individual tracing)
 
     }
 }

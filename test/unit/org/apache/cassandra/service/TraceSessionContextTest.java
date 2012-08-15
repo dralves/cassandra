@@ -72,6 +72,7 @@ import org.apache.cassandra.net.MessagingService.Verb;
 import org.apache.cassandra.tracing.TraceEvent;
 import org.apache.cassandra.tracing.TraceEvent.Type;
 import org.apache.cassandra.tracing.TraceEventBuilder;
+import org.apache.cassandra.tracing.TracePrettyPrinter;
 import org.apache.cassandra.tracing.TraceSessionContext;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
@@ -290,5 +291,22 @@ public class TraceSessionContextTest extends SchemaLoader
         assertEquals("remote trace event", remoteEvent.name());
         assertEquals(3219L, remoteEvent.timestamp());
         assertEquals(InetAddress.getByName("0.0.0.0"), remoteEvent.source());
+    }
+
+    @Test
+    public void testPrettyPrinter()
+    {
+        ColumnFamily family = Table
+                .open(TRACE_KEYSPACE)
+                .getColumnFamilyStore(EVENTS_TABLE)
+                .getColumnFamily(
+                        QueryFilter.getIdentityFilter(Util.dk(ByteBuffer.wrap(UUIDGen.decompose(sessionId))),
+                                new QueryPath(
+                                        EVENTS_TABLE)));
+
+        Set<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
+
+        TracePrettyPrinter.printSingleSessionTrace(sessionId, traceEvents, System.out);
+
     }
 }
