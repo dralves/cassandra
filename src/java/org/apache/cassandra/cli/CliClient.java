@@ -2138,17 +2138,12 @@ public class CliClient
 
             UUID sessionId =  UUID.fromString(text);
             ByteBuffer sessionIdAsBB = TimeUUIDType.instance.decompose(sessionId);
-
-            ColumnParent sessions = new ColumnParent(TraceSessionContext.SESSIONS_TABLE);
+            
             ColumnParent events = new ColumnParent(TraceSessionContext.EVENTS_TABLE);
 
             SliceRange range = new SliceRange(ByteBufferUtil.EMPTY_BYTE_BUFFER, ByteBufferUtil.EMPTY_BYTE_BUFFER,
                     false, Integer.MAX_VALUE);
             SlicePredicate predicate = new SlicePredicate().setColumn_names(null).setSlice_range(range);
-
-            // get the session row
-            List<ColumnOrSuperColumn> sessionCols = thriftClient.get_slice(sessionIdAsBB, sessions, predicate,
-                    ConsistencyLevel.QUORUM);
 
             // get all the events
             List<ColumnOrSuperColumn> eventCols = thriftClient.get_slice(sessionIdAsBB, events, predicate,

@@ -38,6 +38,7 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.Callable;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
@@ -149,9 +150,9 @@ public class TraceSessionContextTest extends SchemaLoader
 
         List<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
         // we should have two events because "get" actually produces one
-        assertSame(2, traceEvents.size());
+        assertSame(3, traceEvents.size());
 
-        TraceEvent event = Iterables.get(traceEvents, 1);
+        TraceEvent event = Iterables.get(traceEvents, 2);
         assertEquals("simple trace event", event.name());
         assertEquals(4321L, event.duration());
         assertEquals(1234L, event.timestamp());
@@ -168,22 +169,20 @@ public class TraceSessionContextTest extends SchemaLoader
         DebuggableThreadPoolExecutor poolExecutor = DebuggableThreadPoolExecutor
                 .createWithFixedPoolSize("TestStage", 1);
 
-        final AtomicReference<UUID> reference = new AtomicReference<UUID>();
-        poolExecutor.submit(new Runnable()
+        assertNotNull(poolExecutor.submit(new Callable<UUID>()
         {
             @Override
-            public void run()
+            public UUID call()
             {
                 assertTrue(isTracing());
                 assertEquals(sessionId, traceCtx().getSessionId());
-                reference.set(traceCtx().trace(
+                return traceCtx().trace(
                         new TraceEventBuilder().name("multi threaded trace event").duration(8765L).timestamp(5678L)
-                                .build()));
+                                .build());
             }
-        }).get();
-        assertNotNull(reference.get());
+        }).get());
 
-        // The DebuggableTPE that will executed the task will insert a trace event AFTER
+        // The DebuggableTPE that will execute the task will insert a trace event AFTER
         // it returns so we need to wait a bit.
         Thread.sleep(500);
 
@@ -205,11 +204,11 @@ public class TraceSessionContextTest extends SchemaLoader
         // custom event from testContextTLStateAcompaniesToAnotherThread
         // stage finish event from testContextTLStateAcompaniesToAnotherThread
 
-        assertSame(6, traceEvents.size());
+        assertSame(7, traceEvents.size());
 
-        TraceEvent stageStartEvent = Iterables.get(traceEvents, 3);
-        TraceEvent customEvent = Iterables.get(traceEvents, 4);
-        TraceEvent stageFinishEvent = Iterables.get(traceEvents, 5);
+        TraceEvent stageStartEvent = Iterables.get(traceEvents, 4);
+        TraceEvent customEvent = Iterables.get(traceEvents, 5);
+        TraceEvent stageFinishEvent = Iterables.get(traceEvents, 6);
 
         assertEquals("TestStage", stageStartEvent.name());
         assertSame(Type.STAGE_START, stageStartEvent.type());
@@ -269,11 +268,11 @@ public class TraceSessionContextTest extends SchemaLoader
         // Because the MessageDeliveryTask does not run on a DebuggableTPE no automated stage tracing
         // events were inserted, we just have 4 more than after the previous method
         List<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
-        assertSame(8, traceEvents.size());
+        assertSame(9, traceEvents.size());
 
         TraceEvent remoteEvent = Iterables.get(traceEvents, 7);
-        assertEquals(9123L, remoteEvent.duration());
         assertEquals("remote trace event", remoteEvent.name());
+        assertEquals(9123L, remoteEvent.duration());       
         assertEquals(3219L, remoteEvent.timestamp());
         assertEquals(InetAddress.getByName("0.0.0.0"), remoteEvent.source());
     }
