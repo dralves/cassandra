@@ -2,6 +2,7 @@ package org.apache.cassandra.tracing;
 
 import static com.google.common.base.Preconditions.checkNotNull;
 import static org.apache.cassandra.tracing.TraceSessionContext.EVENT_TYPE;
+import static org.apache.cassandra.tracing.TraceSessionContext.isTracing;
 import static org.apache.cassandra.tracing.TraceSessionContext.traceCtx;
 
 import java.net.InetAddress;
@@ -317,7 +318,7 @@ public class TraceEventBuilder
 
     public TraceEventBuilder addPayload(String name, long value)
     {
-        if (traceCtx().isTracing())
+        if (isTracing())
         {
             this.payloadTypes.put(name, LongType.instance);
             this.payload.put(name, LongType.instance.decompose(value));
@@ -427,8 +428,4 @@ public class TraceEventBuilder
         return null;
     }
 
-    public static boolean isTracing()
-    {
-        return traceCtx() != null && traceCtx().isTracing();
-    }
 }

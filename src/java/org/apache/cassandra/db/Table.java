@@ -344,7 +344,7 @@ public class Table
 
     public void apply(RowMutation mutation, boolean writeCommitLog)
     {
-        long start = TraceEventBuilder.isTracing() ? TraceSessionContext.traceCtx().threadLocalState().watch
+        long start = TraceSessionContext.isTracing() ? TraceSessionContext.traceCtx().threadLocalState().watch
                 .elapsedTime(TimeUnit.NANOSECONDS) : 0;
         apply(mutation, writeCommitLog, true);
         trace(mutation,writeCommitLog, start);
@@ -602,7 +602,7 @@ public class Table
     
     private void trace(RowMutation mutation, boolean writeCommitLog, long start)
     {
-        if (TraceEventBuilder.isTracing())
+        if (TraceSessionContext.isTracing())
         {
             TraceEventBuilder builder = new TraceEventBuilder();
             builder.name("apply_mutation_begin");

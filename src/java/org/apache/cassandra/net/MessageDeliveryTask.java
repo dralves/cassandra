@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.net;
 
+import static org.apache.cassandra.tracing.TraceSessionContext.isTracing;
 import static org.apache.cassandra.tracing.TraceSessionContext.traceCtx;
 
 import org.slf4j.Logger;
@@ -48,7 +49,8 @@ public class MessageDeliveryTask implements Runnable
         }
 
         // setup tracing (if the message requests it)
-        traceCtx().update(message, id);
+        if (isTracing())
+            traceCtx().update(message, id);
 
         IVerbHandler verbHandler = MessagingService.instance().getVerbHandler(verb);
         if (verbHandler == null)
@@ -63,7 +65,8 @@ public class MessageDeliveryTask implements Runnable
         }
         finally
         {
-            traceCtx().reset();
+            if (isTracing())
+                traceCtx().reset();
         }
     }
 }

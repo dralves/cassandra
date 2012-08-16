@@ -219,7 +219,14 @@ public class TraceSessionContext
 
     public static void initialize()
     {
-        ctx = new TraceSessionContext();
+        try
+        {
+            ctx = new TraceSessionContext();
+        }
+        catch (Exception e)
+        {
+            logger.error("Error initializing tracing system. Tracing will be disabled", e);
+        }
     }
 
     @VisibleForTesting
@@ -261,9 +268,19 @@ public class TraceSessionContext
                 MigrationManager.announceNewColumnFamily(sessionsCfm);
                 MigrationManager.announceNewColumnFamily(eventsCfm);
                 Thread.sleep(1000);
-                CreateIndexStatement statement = (CreateIndexStatement) QueryProcessor
-                        .parseStatement(indexStatement).prepare().statement;
-                statement.announceMigration();
+                try
+                {
+                    CreateIndexStatement statement = (CreateIndexStatement) QueryProcessor
+                            .parseStatement(indexStatement).prepare().statement;
+                    statement.announceMigration();
+                }
+                catch (InvalidRequestException e)
+                {
+                    if (!e.getWhy().contains("Index already exists"))
+                    {
+                        Throwables.propagate(e);
+                    }
+                }
             }
             catch (Exception e)
             {
@@ -388,9 +405,9 @@ public class TraceSessionContext
     /**
      * Indicates if the current thread's execution is being traced.
      */
-    public boolean isTracing()
+    public static boolean isTracing()
     {
-        return sessionContextThreadLocalState.get() == null ? false : true;
+        return ctx != null && ctx.sessionContextThreadLocalState.get() != null;
     }
 
     private void log(UUID key, final ColumnFamily family, String message)

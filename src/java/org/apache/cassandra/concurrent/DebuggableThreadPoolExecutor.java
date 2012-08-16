@@ -17,7 +17,7 @@
  */
 package org.apache.cassandra.concurrent;
 
-import static org.apache.cassandra.tracing.TraceSessionContext.traceCtx;
+import static org.apache.cassandra.tracing.TraceSessionContext.*;
 
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.Callable;
@@ -148,7 +148,7 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
     {
         super.afterExecute(r, t);
 
-        if (r instanceof TraceSessionWrapper)
+        if (r instanceof TraceSessionWrapper && isTracing())
         {
             if (getThreadFactory() instanceof NamedThreadFactory)
             {
@@ -230,9 +230,10 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
         return null;
     }
 
+    @SuppressWarnings("rawtypes")
     protected void beforeExecute(Thread t, Runnable r)
     {
-        if (r instanceof TraceSessionWrapper)
+        if (r instanceof TraceSessionWrapper && isTracing())
         {
             ((TraceSessionWrapper) r).setupContext();
             if (getThreadFactory() instanceof NamedThreadFactory)
@@ -278,7 +279,7 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
      */
     private <T> Runnable wrapIfCallerIsTracing(Runnable task, T result)
     {
-        if (traceCtx() != null && traceCtx().isTracing() && !(task instanceof TraceSessionWrapper))
+        if (traceCtx() != null && isTracing() && !(task instanceof TraceSessionWrapper))
         {
             return new TraceSessionWrapper<T>(task, result);
         }
@@ -290,7 +291,7 @@ public class DebuggableThreadPoolExecutor extends ThreadPoolExecutor
      */
     private <T> Callable<T> wrapIfCallerIsTracing(Callable<T> task)
     {
-        if (traceCtx() != null && traceCtx().isTracing() && !(task instanceof TraceSessionWrapper))
+        if (traceCtx() != null && isTracing() && !(task instanceof TraceSessionWrapper))
         {
             return new TraceSessionWrapper<T>(task);
         }
