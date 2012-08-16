@@ -49,7 +49,7 @@ public class MessageDeliveryTask implements Runnable
         }
 
         // setup tracing (if the message requests it)
-        if (isTracing())
+        if (traceCtx() != null)
             traceCtx().update(message, id);
 
         IVerbHandler verbHandler = MessagingService.instance().getVerbHandler(verb);
