@@ -2084,7 +2084,7 @@ public class CliClient
             IndexExpression index = new IndexExpression(TraceSessionContext.NAME_BB, IndexOperator.EQ,
                     UTF8Type.instance.decompose(request));
 
-            KeyRange keyRange = new KeyRange().setRow_filter(ImmutableList.of(index)).setCount(10000);
+            KeyRange keyRange = new KeyRange().setRow_filter(ImmutableList.of(index)).setCount(10000).setStart_token("0").setEnd_token("0");
 
             ColumnParent eventsCol = new ColumnParent(TraceSessionContext.EVENTS_TABLE);
 
@@ -2109,6 +2109,7 @@ public class CliClient
         catch (InvalidRequestException e)
         {
             sessionState.out.println("Invalid Request: " + e);
+            e.printStackTrace();
         }
         finally
         {
