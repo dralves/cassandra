@@ -19,7 +19,7 @@ public class TracePrettyPrinterTest extends SchemaLoader
         SchemaLoader.loadSchema();
         TraceSessionContext.initialize();
         ctx = TraceSessionContext.traceCtx();
-        sessionId = ctx.prepareSession();
+        sessionId = ctx.newSession();
 
     }
 

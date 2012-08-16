@@ -34,15 +34,18 @@ import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 
 import com.google.common.base.Charsets;
 import com.google.common.base.Joiner;
 import com.google.common.base.Predicate;
 import com.google.common.collect.Collections2;
+import com.google.common.collect.ImmutableList;
+import com.google.common.collect.Maps;
 
 import org.apache.commons.lang.StringUtils;
+
+import org.apache.cassandra.db.marshal.UUIDType;
 
 import org.antlr.runtime.tree.Tree;
 import org.apache.cassandra.auth.IAuthenticator;
@@ -96,6 +99,7 @@ import org.apache.cassandra.thrift.UnavailableException;
 import org.apache.cassandra.tools.NodeProbe;
 import org.apache.cassandra.tracing.TraceEvent;
 import org.apache.cassandra.tracing.TraceEventBuilder;
+import org.apache.cassandra.tracing.TracePrettyPrinter;
 import org.apache.cassandra.tracing.TraceSessionContext;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
@@ -2067,7 +2071,7 @@ public class CliClient
         sessionState.out.println("Will trace next query. Session ID: " + sessionId.toString());
     }
     
-    private void executeShowTracingSummary(String request)
+    private void executeShowTracingSummary(String request) throws UnavailableException, TException, TimedOutException
     {
         if (!CliMain.isConnected())
             return;
@@ -2077,34 +2081,34 @@ public class CliClient
             if (this.keySpace != null && !this.keySpace.equals(TraceSessionContext.TRACE_KEYSPACE))
                 thriftClient.set_keyspace(TraceSessionContext.TRACE_KEYSPACE);
 
-            UUID sessionId = UUID.fromString(text);
-            ByteBuffer sessionIdAsBB = TimeUUIDType.instance.decompose(sessionId);
+            IndexExpression index = new IndexExpression(TraceSessionContext.NAME_BB, IndexOperator.EQ,
+                    UTF8Type.instance.decompose(request));
 
-            ColumnParent sessions = new ColumnParent(TraceSessionContext.SESSIONS_TABLE);
-            ColumnParent events = new ColumnParent(TraceSessionContext.EVENTS_TABLE);
+            KeyRange keyRange = new KeyRange().setRow_filter(ImmutableList.of(index)).setCount(10000);
 
-            SliceRange range = new SliceRange(ByteBufferUtil.EMPTY_BYTE_BUFFER, ByteBufferUtil.EMPTY_BYTE_BUFFER,
-                    false, Integer.MAX_VALUE);
-            SlicePredicate predicate = new SlicePredicate().setColumn_names(null).setSlice_range(range);
+            ColumnParent eventsCol = new ColumnParent(TraceSessionContext.EVENTS_TABLE);
 
-            // get the session row
-            List<ColumnOrSuperColumn> sessionCols = thriftClient.get_slice(sessionIdAsBB, sessions, predicate,
-                    ConsistencyLevel.QUORUM);
+            SlicePredicate predicate = new SlicePredicate();
 
-            // get all the events
-            List<ColumnOrSuperColumn> eventCols = thriftClient.get_slice(sessionIdAsBB, events, predicate,
-                    ConsistencyLevel.QUORUM);
+            predicate
+                    .setSlice_range(new SliceRange(ByteBufferUtil.EMPTY_BYTE_BUFFER, ByteBufferUtil.EMPTY_BYTE_BUFFER,
+                            false, Integer.MAX_VALUE));
 
-            List<TraceEvent> traceEvents = TraceEventBuilder.fromThrift(sessionId, eventCols);
+            List<KeySlice> keySlices = thriftClient.get_range_slices(eventsCol, predicate, keyRange,
+                    consistencyLevel);
 
-            for (TraceEvent event : traceEvents)
+            Map<UUID, List<TraceEvent>> events = Maps.newLinkedHashMap();
+            for (KeySlice slice : keySlices)
             {
-                System.out.println(event);
+                UUID key = UUIDType.instance.compose(ByteBuffer.wrap(slice.getKey()));
+                events.put(key, TraceEventBuilder.fromThrift(key, slice.getColumns()));
             }
+
+            TracePrettyPrinter.printMultiSessionTraceForRequestType(request, events, System.out);
         }
         catch (InvalidRequestException e)
         {
-            sessionState.out.println("Invalid request: " + e);
+            sessionState.out.println("Invalid Request: " + e);
         }
         finally
         {

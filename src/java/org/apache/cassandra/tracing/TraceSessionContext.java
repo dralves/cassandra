@@ -132,12 +132,7 @@ public class TraceSessionContext
     public static final ByteBuffer PAYLOAD_BB = ByteBufferUtil.bytes(PAYLOAD);
     public static final String PAYLOAD_TYPES = "payload_types";
     public static final ByteBuffer PAYLOAD_TYPES_BB = ByteBufferUtil.bytes(PAYLOAD_TYPES);
-    public static final String SESSIONS_TABLE = "trace_sessions";
     public static final String SESSION_ID = "sessionId";
-    public static final String SESSION_REQUEST = "request";
-    public static final ByteBuffer SESSION_REQUEST_BB = ByteBufferUtil.bytes(SESSION_REQUEST);
-    public static final String SESSION_START = "startedAt";
-    public static final ByteBuffer SESSION_START_BB = ByteBufferUtil.bytes(SESSION_START);
     public static final String SOURCE = "source";
     public static final ByteBuffer SOURCE_BB = ByteBufferUtil.bytes(SOURCE);
     public static final String TRACE_KEYSPACE = "trace";
@@ -174,16 +169,16 @@ public class TraceSessionContext
             "  " + TYPE + "              text," +
             "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + ", " + EVENT_ID + "));");
 
-    public static CFMetaData sessionsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + SESSIONS_TABLE
-            + " (" +
-            "  " + SESSION_ID + "        timeuuid," +
-            "  " + COORDINATOR + "       inet," +
-            "  " + SESSION_START + "     timestamp," +
-            "  " + SESSION_REQUEST + "   text," +
-            "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + "));");
+//    public static CFMetaData sessionsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + SESSIONS_TABLE
+//            + " (" +
+//            "  " + SESSION_ID + "        timeuuid," +
+//            "  " + COORDINATOR + "       inet," +
+//            "  " + SESSION_START + "     timestamp," +
+//            "  " + SESSION_REQUEST + "   text," +
+//            "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + "));");
 
-    public static String indexStatement = "CREATE INDEX idx_" + SESSION_REQUEST + " ON " + TRACE_KEYSPACE + "."
-            + SESSIONS_TABLE + " (" + SESSION_REQUEST + ")";
+    public static String indexStatement = "CREATE INDEX idx_" + NAME + " ON " + TRACE_KEYSPACE + "."
+            + EVENTS_TABLE + " (" + NAME + ")";
 
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
 
@@ -265,7 +260,6 @@ public class TraceSessionContext
                 KSMetaData traceKs = KSMetaData.newKeyspace(TRACE_KEYSPACE, SimpleStrategy.class.getName(),
                         ImmutableMap.of("replication_factor", "1"));
                 MigrationManager.announceNewKeyspace(traceKs);
-                MigrationManager.announceNewColumnFamily(sessionsCfm);
                 MigrationManager.announceNewColumnFamily(eventsCfm);
                 Thread.sleep(1000);
                 try
@@ -440,30 +434,6 @@ public class TraceSessionContext
         return String.format("query %d@%s message %s - ", tls.sessionId, tls.origin, tls.messageId);
     }
 
-    /**
-     * Stores a "new session" event in the sessions table. This will allow to track all the subsequent "trace" events.
-     * 
-     * @param sessionId
-     *            the sessionId - unique in a per-host basis
-     * @param coordinator
-     *            the node that initiated the sesssion
-     * @param request
-     *            the request that initiated the session (usually the user operation)
-     */
-    private void newSession(UUID sessionId, InetAddress coordinator, String request, long startedAt)
-    {
-        ColumnFamily family = ColumnFamily.create(sessionsCfm);
-        ByteBuffer coordinatorAsBb = ByteBuffer.wrap(coordinator.getAddress());
-        addColumn(family, buildName(sessionsCfm, coordinatorAsBb, SESSION_START_BB), startedAt);
-        addColumn(family, buildName(sessionsCfm, coordinatorAsBb, SESSION_REQUEST_BB), request);
-        store(sessionId, family);
-    }
-
-    public UUID prepareSession()
-    {
-        return UUIDGen.getUUID(ByteBuffer.wrap(UUIDGen.getTimeUUIDBytes()));
-    }
-
     public void reset()
     {
         sessionContextThreadLocalState.set(null);
@@ -479,20 +449,13 @@ public class TraceSessionContext
     {
         this.timeToLive = timeToLive;
     }
-
-    public UUID startPreparedSession(UUID sessionId, String request)
+    
+    public UUID newSession()
     {
-        return startSession(sessionId, request, System.currentTimeMillis());
+        return newSession(UUIDGen.getUUID(ByteBuffer.wrap(UUIDGen.getTimeUUIDBytes())));
     }
 
-    public UUID startSession(String request)
-    {
-        UUID sessionId = prepareSession();
-        startSession(sessionId, request, System.currentTimeMillis());
-        return sessionId;
-    }
-
-    public UUID startSession(UUID sessionId, String request, long timestamp)
+    public UUID newSession(UUID sessionId)
     {
         assert sessionContextThreadLocalState.get() == null;
 
@@ -500,8 +463,6 @@ public class TraceSessionContext
                 localAddress, sessionId);
 
         sessionContextThreadLocalState.set(tsctls);
-
-        newSession(sessionId, localAddress, request, timestamp);
 
         return sessionId;
     }

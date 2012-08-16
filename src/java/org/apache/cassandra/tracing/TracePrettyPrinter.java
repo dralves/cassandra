@@ -94,7 +94,7 @@ public class TracePrettyPrinter
 
     }
 
-    public void printMultiSessionTraceForRequestType(String reauestType, Map<UUID, List<TraceEvent>> sessions,
+    public static void printMultiSessionTraceForRequestType(String requestName, Map<UUID, List<TraceEvent>> sessions,
             PrintStream out)
     {
 
@@ -106,7 +106,7 @@ public class TracePrettyPrinter
             latencySstats.addValue(last.duration() - first.duration());
         }
 
-        out.println("Summary for sessions of request: " + reauestType);
+        out.println("Summary for sessions of request: " + requestName);
         out.println("            ==============================================================");
         out.println("            |    Avg.    |   StdDev.  |   Max.   |   Min.   |    99.99%  |");
         out.println("==========================================================================");

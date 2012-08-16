@@ -347,7 +347,7 @@ public class Table
         long start = TraceSessionContext.isTracing() ? TraceSessionContext.traceCtx().threadLocalState().watch
                 .elapsedTime(TimeUnit.NANOSECONDS) : 0;
         apply(mutation, writeCommitLog, true);
-        trace(mutation,writeCommitLog, start);
+        trace(mutation, writeCommitLog, start);
     }
 
     /**
@@ -602,10 +602,13 @@ public class Table
     
     private void trace(RowMutation mutation, boolean writeCommitLog, long start)
     {
-        if (TraceSessionContext.isTracing())
+        if (TraceSessionContext.isTracing() && 
+                !mutation.getTable().equals(TraceSessionContext.TRACE_KEYSPACE) &&
+                !mutation.getTable().equals("system"))
         {
+            System.out.println(mutation.getTable());
             TraceEventBuilder builder = new TraceEventBuilder();
-            builder.name("apply_mutation_begin");
+            builder.name("apply_mutation");
             builder.duration(TraceSessionContext.traceCtx().threadLocalState().watch.elapsedTime(TimeUnit.NANOSECONDS)
                     - start);
             builder.addPayload("write_commit_log", writeCommitLog);

@@ -27,8 +27,6 @@ import static junit.framework.Assert.assertNotNull;
 import static junit.framework.Assert.assertSame;
 import static junit.framework.Assert.assertTrue;
 import static org.apache.cassandra.tracing.TraceSessionContext.EVENTS_TABLE;
-import static org.apache.cassandra.tracing.TraceSessionContext.SESSIONS_TABLE;
-import static org.apache.cassandra.tracing.TraceSessionContext.SESSION_TYPE;
 import static org.apache.cassandra.tracing.TraceSessionContext.TRACE_KEYSPACE;
 import static org.apache.cassandra.tracing.TraceSessionContext.isTracing;
 import static org.apache.cassandra.tracing.TraceSessionContext.traceCtx;
@@ -56,12 +54,10 @@ import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.concurrent.DebuggableThreadPoolExecutor;
 import org.apache.cassandra.db.ColumnFamily;
-import org.apache.cassandra.db.IColumn;
 import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.Table;
 import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.db.filter.QueryPath;
-import org.apache.cassandra.db.marshal.AbstractCompositeType.CompositeComponent;
 import org.apache.cassandra.db.marshal.LongType;
 import org.apache.cassandra.db.marshal.TimeUUIDType;
 import org.apache.cassandra.net.IVerbHandler;
@@ -74,7 +70,6 @@ import org.apache.cassandra.tracing.TraceEvent.Type;
 import org.apache.cassandra.tracing.TraceEventBuilder;
 import org.apache.cassandra.tracing.TracePrettyPrinter;
 import org.apache.cassandra.tracing.TraceSessionContext;
-import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
 
@@ -109,42 +104,32 @@ public class TraceSessionContextTest extends SchemaLoader
     @Test
     public void testNewSession() throws CharacterCodingException
     {
-        sessionId = traceCtx().prepareSession();
-        traceCtx().startSession(sessionId, "test_session", 123L);
+        sessionId = traceCtx().newSession();
         assertTrue(isTracing());
         assertTrue(traceCtx().isLocalTraceSession());
         assertNotNull(traceCtx().threadLocalState());
 
+        // simulate a thrift req such as multiget_slice
+        UUID eventId = traceCtx().trace(new TraceEventBuilder()
+                .name("multiget_slice")
+                .type(Type.SESSION_START)
+                .build());
+
         ColumnFamily family = Table
                 .open(TRACE_KEYSPACE)
-                .getColumnFamilyStore(SESSIONS_TABLE)
+                .getColumnFamilyStore(EVENTS_TABLE)
                 .getColumnFamily(
-                        QueryFilter.getIdentityFilter(Util.dk(TimeUUIDType.instance.decompose(sessionId)),
+                        QueryFilter.getIdentityFilter(Util.dk(ByteBuffer.wrap(UUIDGen.decompose(sessionId))),
                                 new QueryPath(
-                                        SESSIONS_TABLE)));
+                                        EVENTS_TABLE)));
 
-        // should have two columns
-        assertSame(2, family.getColumnCount());
+        List<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
+        // we should have two events because "get" actually produces one
+        assertSame(1, traceEvents.size());
 
-        // request col
-        IColumn requestColumn = Iterables.get(family, 0);
-        List<CompositeComponent> components = SESSION_TYPE.deconstruct(requestColumn.name());
-        InetAddress address = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        String colName = (String) components.get(1).comparator.compose(components.get(1).value);
-        assertEquals("request", colName);
-        assertEquals(FBUtilities.getLocalAddress(), address);
-        String request = ByteBufferUtil.string(requestColumn.value());
-        assertEquals("test_session", request);
-
-        // startedAt col
-        IColumn startColumn = Iterables.get(family, 1);
-        components = SESSION_TYPE.deconstruct(startColumn.name());
-        address = (InetAddress) components.get(0).comparator.compose(components.get(0).value);
-        colName = (String) components.get(1).comparator.compose(components.get(1).value);
-        assertEquals("startedAt", colName);
-        assertEquals(FBUtilities.getLocalAddress(), address);
-        // try to parse the long but as the time comes from the system clock when can't actually test it
-        assertSame(123L, ByteBufferUtil.toLong(startColumn.value()));
+        TraceEvent event = Iterables.get(traceEvents, 0);
+        assertEquals("multiget_slice", event.name());
+        assertEquals(eventId, event.id());
     }
 
     @Test

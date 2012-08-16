@@ -344,7 +344,7 @@ public class CassandraServer implements Cassandra.Iface
     public List<ColumnOrSuperColumn> get_slice(ByteBuffer key, ColumnParent column_parent, SlicePredicate predicate, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        if (startSessionIfRequested("get_slice") != null)
+        if (startSessionIfRequested())
         {
             traceCtx().trace(new TraceEventBuilder()
                     .name("get_slice")
@@ -372,10 +372,10 @@ public class CassandraServer implements Cassandra.Iface
     public Map<ByteBuffer, List<ColumnOrSuperColumn>> multiget_slice(List<ByteBuffer> keys, ColumnParent column_parent, SlicePredicate predicate, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        if (startSessionIfRequested("multiget_slice") != null)
+        if (startSessionIfRequested())
         {
             traceCtx().trace(new TraceEventBuilder()
-                    .name("get_slice")
+                    .name("multiget_slice")
                     .type(Type.SESSION_START)
                     .addPayload("keys", BytesType.instance, keys)
                     .addPayload("column_parent", column_parent)
@@ -458,7 +458,7 @@ public class CassandraServer implements Cassandra.Iface
     throws InvalidRequestException, NotFoundException, UnavailableException, TimedOutException
     {
         
-        if (startSessionIfRequested("get") != null)
+        if (startSessionIfRequested())
         {
             traceCtx().trace(new TraceEventBuilder()
                     .name("get")
@@ -483,7 +483,7 @@ public class CassandraServer implements Cassandra.Iface
     public int get_count(ByteBuffer key, ColumnParent column_parent, SlicePredicate predicate, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        if (startSessionIfRequested("get_count") != null)
+        if (startSessionIfRequested())
         {
             traceCtx().trace(new TraceEventBuilder()
                     .name("get_count")
@@ -576,7 +576,7 @@ public class CassandraServer implements Cassandra.Iface
     public Map<ByteBuffer, Integer> multiget_count(List<ByteBuffer> keys, ColumnParent column_parent, SlicePredicate predicate, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        if (startSessionIfRequested("multiget_count") != null)
+        if (startSessionIfRequested())
         {
             traceCtx().trace(new TraceEventBuilder()
                     .name("multiget_count")
@@ -644,7 +644,7 @@ public class CassandraServer implements Cassandra.Iface
     public void insert(ByteBuffer key, ColumnParent column_parent, Column column, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        if (startSessionIfRequested("insert") != null)
+        if (startSessionIfRequested())
         {
             traceCtx().trace(new TraceEventBuilder()
                     .name("insert")
@@ -738,7 +738,7 @@ public class CassandraServer implements Cassandra.Iface
     public void batch_mutate(Map<ByteBuffer,Map<String,List<Mutation>>> mutation_map, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        if (startSessionIfRequested("batch_mutate") != null)
+        if (startSessionIfRequested())
         {
             traceCtx().trace(new TraceEventBuilder()
                     .name("batch_mutate")
@@ -783,7 +783,7 @@ public class CassandraServer implements Cassandra.Iface
     public void remove(ByteBuffer key, ColumnPath column_path, long timestamp, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
-        if (startSessionIfRequested("remove") != null)
+        if (startSessionIfRequested())
         {
             traceCtx().trace(new TraceEventBuilder()
                     .name("remove")
@@ -837,7 +837,7 @@ public class CassandraServer implements Cassandra.Iface
     public List<KeySlice> get_range_slices(ColumnParent column_parent, SlicePredicate predicate, KeyRange range, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TException, TimedOutException
     {
-        if (startSessionIfRequested("get_range_slices") != null)
+        if (startSessionIfRequested())
         {
             traceCtx().trace(new TraceEventBuilder()
                     .name("get_range_slices")
@@ -915,7 +915,7 @@ public class CassandraServer implements Cassandra.Iface
     public List<KeySlice> get_paged_slice(String column_family, KeyRange range, ByteBuffer start_column, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TimedOutException, TException
     {
-        if (startSessionIfRequested("get_paged_slice") != null)
+        if (startSessionIfRequested())
         {
             traceCtx().trace(new TraceEventBuilder()
                     .name("get_paged_slice")
@@ -1009,7 +1009,7 @@ public class CassandraServer implements Cassandra.Iface
 
     public List<KeySlice> get_indexed_slices(ColumnParent column_parent, IndexClause index_clause, SlicePredicate column_predicate, ConsistencyLevel consistency_level) throws InvalidRequestException, UnavailableException, TimedOutException, TException
     {
-        if (startSessionIfRequested("get_indexed_slices") != null)
+        if (startSessionIfRequested())
         {
             traceCtx().trace(new TraceEventBuilder()
                     .name("get_indexed_slices")
@@ -1391,7 +1391,7 @@ public class CassandraServer implements Cassandra.Iface
     public void add(ByteBuffer key, ColumnParent column_parent, CounterColumn column, ConsistencyLevel consistency_level)
             throws InvalidRequestException, UnavailableException, TimedOutException, TException
     {
-        if (startSessionIfRequested("add") != null)
+        if (startSessionIfRequested())
         {
             traceCtx().trace(new TraceEventBuilder()
                     .name("add")
@@ -1444,7 +1444,7 @@ public class CassandraServer implements Cassandra.Iface
     public void remove_counter(ByteBuffer key, ColumnPath path, ConsistencyLevel consistency_level)
             throws InvalidRequestException, UnavailableException, TimedOutException, TException
     {
-        if (startSessionIfRequested("remove_counter") != null)
+        if (startSessionIfRequested())
         {
             traceCtx().trace(new TraceEventBuilder()
                     .name("remove_counter")
@@ -1527,7 +1527,7 @@ public class CassandraServer implements Cassandra.Iface
     public CqlResult execute_cql_query(ByteBuffer query, Compression compression)
     throws InvalidRequestException, UnavailableException, TimedOutException, SchemaDisagreementException, TException
     {
-        if (startSessionIfRequested("execute_cql_query") != null)
+        if (startSessionIfRequested())
         {
             traceCtx().trace(new TraceEventBuilder()
                     .name("execute_cql_query")
@@ -1573,7 +1573,7 @@ public class CassandraServer implements Cassandra.Iface
     public CqlResult execute_prepared_cql_query(int itemId, List<ByteBuffer> bindVariables)
     throws InvalidRequestException, UnavailableException, TimedOutException, SchemaDisagreementException, TException
     {
-        if (startSessionIfRequested("execute_prepared_cql_query") != null)
+        if (startSessionIfRequested())
         {
             traceCtx().trace(new TraceEventBuilder()
                     .name("execute_prepared_cql_query")
@@ -1641,22 +1641,22 @@ public class CassandraServer implements Cassandra.Iface
     @Override
     public ByteBuffer trace_next_query() throws TException
     {
-        UUID sessionId = traceCtx().prepareSession();
+        UUID sessionId = traceCtx().newSession();
         state().prepareTracingSession(sessionId);
         return TimeUUIDType.instance.decompose(sessionId);
     }
 
-    private UUID startSessionIfRequested(String sessionName, TBase<?, ?>... params)
+    private boolean startSessionIfRequested()
     {
-        UUID sessionId = null;
         if (state().traceNextQuery())
         {
             if (state().isPreparedTracingSession())
-                sessionId = traceCtx().startPreparedSession(state().getPreparedSessionIdAndReset(), sessionName);
+                traceCtx().newSession(state().getPreparedSessionIdAndReset());
             else
-                sessionId = traceCtx().startSession(sessionName);
+                traceCtx().newSession();
+            return true;
         }
-        return sessionId;
+        return false;
     }
 
     // main method moved to CassandraDaemon
