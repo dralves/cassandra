@@ -40,6 +40,7 @@ tokens {
     NODE_USE_TABLE;
     NODE_TRACE_NEXT_QUERY;
     NODE_EXPLAIN_TRACE_SESSION;
+    NODE_SHOW_TRACING_SUMMARY;
     NODE_ENABLE_TRACING;
     NODE_DISABLE_TRACING;
     NODE_EXIT;
@@ -151,6 +152,7 @@ statement
     | useKeyspace
     | traceNextQuery
     | explainTraceSession
+    | showTracingSummary
     | enableTracing
     | disableTracing
     | delStatement
@@ -185,6 +187,8 @@ helpStatement
         -> ^(NODE_HELP NODE_TRACE_NEXT_QUERY)
     | HELP EXPLAIN TRACE SESSION
         -> ^(NODE_HELP NODE_EXPLAIN_TRACE_SESSION)
+    | HELP SHOW TRACING SUMMARY
+        -> ^(NODE_HELP NODE_SHOW_TRACING_SUMMARY)    
     | HELP ENABLE TRACING
         -> ^(NODE_HELP NODE_ENABLE_TRACING)
     | HELP DISABLE TRACING
@@ -399,6 +403,11 @@ explainTraceSession
         -> ^(NODE_EXPLAIN_TRACE_SESSION traceSessionId)
     ;
 
+showTracingSummary
+    : SHOW TRACING SUMMARY sessionRequest
+        -> ^(NODE_SHOW_TRACING_SUMMARY sessionRequest)
+    ;
+
 enableTracing
     : ENABLE TRACING tracingProbability tracingNumber 
         -> ^(NODE_ENABLE_TRACING tracingProbability tracingNumber)
@@ -581,6 +590,10 @@ traceSessionId
     : Identifier
     ;
 
+sessionRequest
+    : StringLiteral
+    ;
+
 tracingProbability
     : DoubleLiteral
     ;
@@ -614,6 +627,7 @@ NEXT:        'NEXT';
 QUERY:       'QUERY';
 EXPLAIN:     'EXPLAIN';
 SESSION:     'SESSION';
+SUMMARY:     'SUMMARY';
 GET:         'GET';
 HELP:        'HELP';
 EXIT:        'EXIT';

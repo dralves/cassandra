@@ -323,6 +323,9 @@ public class CliClient
                 case CliParser.NODE_EXPLAIN_TRACE_SESSION:
                     executeExplainTraceSession(tree.getChild(0).getText());
                     break;
+                case CliParser.NODE_SHOW_TRACING_SUMMARY:
+                    executeShowTracingSummary(tree.getChild(0).getText());
+                    break;
                 case CliParser.NODE_ENABLE_TRACING:
                     executeEnableTracing(tree);
                     break;
@@ -2062,6 +2065,60 @@ public class CliClient
         UUID sessionId = TimeUUIDType.instance.compose(thriftClient.trace_next_query());
 
         sessionState.out.println("Will trace next query. Session ID: " + sessionId.toString());
+    }
+    
+    private void executeShowTracingSummary(String request)
+    {
+        if (!CliMain.isConnected())
+            return;
+
+        try
+        {
+            if (this.keySpace != null && !this.keySpace.equals(TraceSessionContext.TRACE_KEYSPACE))
+                thriftClient.set_keyspace(TraceSessionContext.TRACE_KEYSPACE);
+
+            UUID sessionId = UUID.fromString(text);
+            ByteBuffer sessionIdAsBB = TimeUUIDType.instance.decompose(sessionId);
+
+            ColumnParent sessions = new ColumnParent(TraceSessionContext.SESSIONS_TABLE);
+            ColumnParent events = new ColumnParent(TraceSessionContext.EVENTS_TABLE);
+
+            SliceRange range = new SliceRange(ByteBufferUtil.EMPTY_BYTE_BUFFER, ByteBufferUtil.EMPTY_BYTE_BUFFER,
+                    false, Integer.MAX_VALUE);
+            SlicePredicate predicate = new SlicePredicate().setColumn_names(null).setSlice_range(range);
+
+            // get the session row
+            List<ColumnOrSuperColumn> sessionCols = thriftClient.get_slice(sessionIdAsBB, sessions, predicate,
+                    ConsistencyLevel.QUORUM);
+
+            // get all the events
+            List<ColumnOrSuperColumn> eventCols = thriftClient.get_slice(sessionIdAsBB, events, predicate,
+                    ConsistencyLevel.QUORUM);
+
+            List<TraceEvent> traceEvents = TraceEventBuilder.fromThrift(sessionId, eventCols);
+
+            for (TraceEvent event : traceEvents)
+            {
+                System.out.println(event);
+            }
+        }
+        catch (InvalidRequestException e)
+        {
+            sessionState.out.println("Invalid request: " + e);
+        }
+        finally
+        {
+            try
+            {
+                if (this.keySpace != null && !this.keySpace.equals(TraceSessionContext.TRACE_KEYSPACE))
+                {
+                    thriftClient.set_keyspace(this.keySpace);
+                }
+            }
+            catch (InvalidRequestException e)
+            {
+            }
+        }
     }
 
     private void executeExplainTraceSession(String text) throws TException, UnavailableException, TimedOutException,

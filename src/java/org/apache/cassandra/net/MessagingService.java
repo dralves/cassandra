@@ -17,6 +17,8 @@
  */
 package org.apache.cassandra.net;
 
+import static org.apache.cassandra.tracing.TraceSessionContext.*;
+
 import java.io.DataInput;
 import java.io.DataOutput;
 import java.io.IOError;
@@ -560,6 +562,13 @@ public final class MessagingService implements MessagingServiceMBean
 
         if (to.equals(FBUtilities.getBroadcastAddress()))
             logger.debug("Message-to-self {} going over MessagingService", message);
+        
+        if (isTracing())
+        {
+            byte[] tracePayload = traceCtx().getSessionContextHeader();
+            if (tracePayload != null)
+                message = message.withParameter(TRACE_SESSION_CONTEXT_HEADER, tracePayload);
+        }
 
         // message sinks are a testing hook
         MessageOut processedMessage = SinkManager.processOutboundMessage(message, id, to);
