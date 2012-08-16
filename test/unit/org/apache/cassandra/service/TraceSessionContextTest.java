@@ -30,6 +30,7 @@ import static org.apache.cassandra.tracing.TraceSessionContext.EVENTS_TABLE;
 import static org.apache.cassandra.tracing.TraceSessionContext.SESSIONS_TABLE;
 import static org.apache.cassandra.tracing.TraceSessionContext.SESSION_TYPE;
 import static org.apache.cassandra.tracing.TraceSessionContext.TRACE_KEYSPACE;
+import static org.apache.cassandra.tracing.TraceSessionContext.isTracing;
 import static org.apache.cassandra.tracing.TraceSessionContext.traceCtx;
 
 import java.io.IOException;
@@ -38,7 +39,6 @@ import java.net.UnknownHostException;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.util.List;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -111,7 +111,7 @@ public class TraceSessionContextTest extends SchemaLoader
     {
         sessionId = traceCtx().prepareSession();
         traceCtx().startSession(sessionId, "test_session", 123L);
-        assertTrue(traceCtx().isTracing());
+        assertTrue(isTracing());
         assertTrue(traceCtx().isLocalTraceSession());
         assertNotNull(traceCtx().threadLocalState());
 
@@ -189,7 +189,7 @@ public class TraceSessionContextTest extends SchemaLoader
             @Override
             public void run()
             {
-                assertTrue(traceCtx().isTracing());
+                assertTrue(isTracing());
                 assertEquals(sessionId, traceCtx().getSessionId());
                 reference.set(traceCtx().trace(
                         new TraceEventBuilder().name("multi threaded trace event").duration(8765L).timestamp(5678L)
@@ -261,7 +261,7 @@ public class TraceSessionContextTest extends SchemaLoader
             @Override
             public void doVerb(MessageIn<Void> message, String id)
             {
-                assertTrue(traceCtx().isTracing());
+                assertTrue(isTracing());
                 assertFalse(traceCtx().isLocalTraceSession());
                 assertEquals(sessionId, traceCtx().getSessionId());
                 reference.set(traceCtx().trace(
