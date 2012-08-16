@@ -32,8 +32,6 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.locks.Lock;
-import java.util.concurrent.locks.ReentrantLock;
 
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Predicate;
@@ -51,10 +49,10 @@ import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.config.KSMetaData;
 import org.apache.cassandra.config.Schema;
-import org.apache.cassandra.cql.CreateIndexStatement;
 import org.apache.cassandra.cql3.ColumnNameBuilder;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.statements.CreateColumnFamilyStatement;
+import org.apache.cassandra.cql3.statements.CreateIndexStatement;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.db.ExpiringColumn;
@@ -184,8 +182,8 @@ public class TraceSessionContext
             "  " + SESSION_REQUEST + "   text," +
             "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + "));");
 
-    public static String indexStatement = "CREATE INDEX idx_" + SESSION_REQUEST + " ON " + SESSIONS_TABLE + " ("
-            + SESSION_REQUEST + ")";
+    public static String indexStatement = "CREATE INDEX idx_" + SESSION_REQUEST + " ON " + TRACE_KEYSPACE + "."
+            + SESSIONS_TABLE + " (" + SESSION_REQUEST + ")";
 
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
 
@@ -241,7 +239,6 @@ public class TraceSessionContext
     private InetAddress localAddress;
     private ThreadLocal<TraceSessionContextThreadLocalState> sessionContextThreadLocalState = new ThreadLocal<TraceSessionContextThreadLocalState>();
     private int timeToLive = 86400;
-    private Lock traceTablesLock = new ReentrantLock();
 
     protected TraceSessionContext()
     {
@@ -255,31 +252,23 @@ public class TraceSessionContext
 
         }).isPresent())
         {
-            traceTablesLock.lock();
-            StageManager.getStage(Stage.TRACING).execute(new Runnable()
+            try
             {
-                @Override
-                public void run()
-                {
-                    try
-                    {
-                        logger.info("Trace keyspace was not found creating & annoucing");
-                        KSMetaData traceKs = KSMetaData.newKeyspace(TRACE_KEYSPACE, SimpleStrategy.class.getName(),
-                                ImmutableMap.of("replication_factor", "1"));
-                        MigrationManager.announceNewKeyspace(traceKs);
-                        MigrationManager.announceNewColumnFamily(sessionsCfm);
-                        MigrationManager.announceNewColumnFamily(eventsCfm);
-                        Thread.sleep(1000);
-                        CreateIndexStatement statement = (CreateIndexStatement) QueryProcessor
-                                .parseStatement(indexStatement).prepare().statement;
-
-                    }
-                    catch (Exception e)
-                    {
-                        Throwables.propagate(e);
-                    }
-                }
-            });
+                logger.info("Trace keyspace was not found creating & annoucing");
+                KSMetaData traceKs = KSMetaData.newKeyspace(TRACE_KEYSPACE, SimpleStrategy.class.getName(),
+                        ImmutableMap.of("replication_factor", "1"));
+                MigrationManager.announceNewKeyspace(traceKs);
+                MigrationManager.announceNewColumnFamily(sessionsCfm);
+                MigrationManager.announceNewColumnFamily(eventsCfm);
+                Thread.sleep(1000);
+                CreateIndexStatement statement = (CreateIndexStatement) QueryProcessor
+                        .parseStatement(indexStatement).prepare().statement;
+                statement.announceMigration();
+            }
+            catch (Exception e)
+            {
+                Throwables.propagate(e);
+            }
         }
 
         this.localAddress = FBUtilities.getLocalAddress();
