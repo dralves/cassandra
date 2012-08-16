@@ -169,14 +169,6 @@ public class TraceSessionContext
             "  " + TYPE + "              text," +
             "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + ", " + EVENT_ID + "));");
 
-//    public static CFMetaData sessionsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + SESSIONS_TABLE
-//            + " (" +
-//            "  " + SESSION_ID + "        timeuuid," +
-//            "  " + COORDINATOR + "       inet," +
-//            "  " + SESSION_START + "     timestamp," +
-//            "  " + SESSION_REQUEST + "   text," +
-//            "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + "));");
-
     public static String indexStatement = "CREATE INDEX idx_" + NAME + " ON " + TRACE_KEYSPACE + "."
             + EVENTS_TABLE + " (" + NAME + ")";
 
@@ -449,7 +441,7 @@ public class TraceSessionContext
     {
         this.timeToLive = timeToLive;
     }
-    
+
     public UUID newSession()
     {
         return newSession(UUIDGen.getUUID(ByteBuffer.wrap(UUIDGen.getTimeUUIDBytes())));

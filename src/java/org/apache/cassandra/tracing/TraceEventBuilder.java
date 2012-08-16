@@ -230,7 +230,7 @@ public class TraceEventBuilder
     public TraceEventBuilder eventId(byte[] eventId)
     {
         if (isTracing())
-            this.eventId = UUIDType.instance.compose(ByteBuffer.wrap(eventId));
+            eventId(UUIDType.instance.compose(ByteBuffer.wrap(eventId)));
         return this;
     }
 

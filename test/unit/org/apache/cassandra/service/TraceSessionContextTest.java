@@ -237,7 +237,7 @@ public class TraceSessionContextTest extends SchemaLoader
         final AtomicReference<UUID> reference = new AtomicReference<UUID>();
 
         // change the local address to emulate another node
-        traceCtx().setLocalAddress(InetAddress.getByName("0.0.0.0"));
+        traceCtx().setLocalAddress(InetAddress.getByName("127.0.0.2"));
 
         MessagingService.instance().registerVerbHandlers(Verb.UNUSED_1, new IVerbHandler<Void>()
         {
@@ -270,11 +270,11 @@ public class TraceSessionContextTest extends SchemaLoader
         List<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
         assertSame(9, traceEvents.size());
 
-        TraceEvent remoteEvent = Iterables.get(traceEvents, 7);
+        TraceEvent remoteEvent = Iterables.get(traceEvents, 8);
         assertEquals("remote trace event", remoteEvent.name());
-        assertEquals(9123L, remoteEvent.duration());       
+        assertEquals(9123L, remoteEvent.duration());
         assertEquals(3219L, remoteEvent.timestamp());
-        assertEquals(InetAddress.getByName("0.0.0.0"), remoteEvent.source());
+        assertEquals(InetAddress.getByName("127.0.0.2"), remoteEvent.source());
     }
 
     @Test

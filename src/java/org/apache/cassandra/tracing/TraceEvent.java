@@ -8,7 +8,7 @@ import java.util.Set;
 import java.util.UUID;
 
 import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.utils.UUIDGen;
+import org.apache.cassandra.db.marshal.TimeUUIDType;
 
 public class TraceEvent
 {
@@ -88,7 +88,7 @@ public class TraceEvent
 
     public ByteBuffer sessionIdAsBB()
     {
-        return ByteBuffer.wrap(UUIDGen.decompose(sessionId));
+        return TimeUUIDType.instance.decompose(sessionId);
     }
 
     public UUID id()
@@ -98,7 +98,7 @@ public class TraceEvent
 
     public ByteBuffer idAsBB()
     {
-        return ByteBuffer.wrap(UUIDGen.decompose(eventId));
+        return TimeUUIDType.instance.decompose(eventId);
     }
 
     public InetAddress coordinator()
