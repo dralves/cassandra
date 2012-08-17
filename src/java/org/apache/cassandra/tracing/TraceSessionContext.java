@@ -192,6 +192,7 @@ public class TraceSessionContext
                     .gcGraceSeconds(0);
 
             statement.applyPropertiesTo(newCFMD);
+
             return newCFMD;
         }
         catch (InvalidRequestException e)

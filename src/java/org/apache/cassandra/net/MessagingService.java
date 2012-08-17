@@ -563,7 +563,7 @@ public final class MessagingService implements MessagingServiceMBean
         if (to.equals(FBUtilities.getBroadcastAddress()))
             logger.debug("Message-to-self {} going over MessagingService", message);
         
-        if (isTracing())
+        if (false)
         {
             byte[] tracePayload = traceCtx().getSessionContextHeader();
             if (tracePayload != null)

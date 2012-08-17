@@ -114,8 +114,8 @@ import org.codehaus.jackson.JsonToken;
 import org.yaml.snakeyaml.Loader;
 import org.yaml.snakeyaml.TypeDescription;
 import org.yaml.snakeyaml.Yaml;
-import org.yaml.snakeyaml.constructor.Constructor;
 
+import org.yaml.snakeyaml.constructor.Constructor;
 // Cli Client Side Library
 public class CliClient
 {
