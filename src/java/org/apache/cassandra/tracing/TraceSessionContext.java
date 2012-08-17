@@ -40,15 +40,12 @@ import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Iterables;
 
+import org.apache.cassandra.config.*;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
-import org.apache.cassandra.config.CFMetaData;
-import org.apache.cassandra.config.ConfigurationException;
-import org.apache.cassandra.config.KSMetaData;
-import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql3.ColumnNameBuilder;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.statements.CreateColumnFamilyStatement;
@@ -140,21 +137,6 @@ public class TraceSessionContext
     public static final String TYPE = "type";
     public static final ByteBuffer TYPE_BB = ByteBufferUtil.bytes(TYPE);
 
-    public static final CompositeType SESSION_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(InetAddressType.instance, UTF8Type.instance
-            ));
-
-    public static ColumnToCollectionType collectionsType = ColumnToCollectionType.getInstance(ImmutableMap
-            .<ByteBuffer, CollectionType> of(PAYLOAD_BB,
-                    MapType.getInstance(UTF8Type.instance, BytesType.instance), PAYLOAD_TYPES_BB,
-                    MapType.getInstance(UTF8Type.instance, UTF8Type.instance)));
-
-    public static final CompositeType EVENT_TYPE = CompositeType.getInstance(ImmutableList
-            .<AbstractType<?>> of(
-                    InetAddressType.instance,
-                    TimeUUIDType.instance,
-                    UTF8Type.instance, collectionsType));
-
     private static final CFMetaData eventsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + EVENTS_TABLE + " (" +
             "  " + SESSION_ID + "        timeuuid," +
             "  " + COORDINATOR + "       inet," +
@@ -174,8 +156,28 @@ public class TraceSessionContext
 
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
 
-    private static CFMetaData compile(String cql)
+    public static void main(String[] args)
     {
+        CFMetaData cfm = TraceSessionContext.eventsCfm;
+        for (Map.Entry<ByteBuffer, ColumnDefinition> entry : cfm.getColumn_metadata().entrySet())
+        {
+            String name = UTF8Type.instance.compose(entry.getKey());
+            ColumnDefinition def = entry.getValue();
+            System.out.println(eventsCfm.comparator);
+            AbstractType<?> type = eventsCfm.getColumnDefinitionComparator(def);
+            System.out.println(type);
+            System.out.println(cfm.getDefaultValidator());
+        }
+
+        System.out.println(cfm.getDefaultValidator());
+        for (int i = 0; i < 4; i++)
+        {
+            AbstractType<?> type =  cfm.getColumnDefinitionComparator(i);
+            System.out.println(type);
+        }
+    }
+
+    private static CFMetaData compile(String cql) {
         CreateColumnFamilyStatement statement = null;
         try
         {
@@ -210,6 +212,7 @@ public class TraceSessionContext
         try
         {
             ctx = new TraceSessionContext();
+            logger.info("Tracing system enabled and initialized.");
         }
         catch (Exception e)
         {
@@ -229,6 +232,11 @@ public class TraceSessionContext
     public static TraceSessionContext traceCtx()
     {
         return ctx;
+    }
+    
+    public static CFMetaData traceTableMetadata()
+    {
+        return eventsCfm;
     }
 
     private InetAddress localAddress;

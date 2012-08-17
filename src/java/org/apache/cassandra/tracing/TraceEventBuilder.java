@@ -1,49 +1,31 @@
 package org.apache.cassandra.tracing;
 
 import static com.google.common.base.Preconditions.checkNotNull;
-import static org.apache.cassandra.tracing.TraceSessionContext.EVENT_TYPE;
-import static org.apache.cassandra.tracing.TraceSessionContext.isTracing;
-import static org.apache.cassandra.tracing.TraceSessionContext.traceCtx;
+import static org.apache.cassandra.tracing.TraceSessionContext.*;
 
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 import java.util.concurrent.TimeUnit;
-
-import com.google.common.base.Function;
-import com.google.common.base.Supplier;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
-import com.google.common.collect.Multimaps;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.IColumn;
-import org.apache.cassandra.db.marshal.AbstractCompositeType.CompositeComponent;
-import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.db.marshal.BooleanType;
-import org.apache.cassandra.db.marshal.BytesType;
-import org.apache.cassandra.db.marshal.InetAddressType;
-import org.apache.cassandra.db.marshal.Int32Type;
-import org.apache.cassandra.db.marshal.LongType;
-import org.apache.cassandra.db.marshal.TypeParser;
-import org.apache.cassandra.db.marshal.UTF8Type;
-import org.apache.cassandra.db.marshal.UUIDType;
+import org.apache.cassandra.db.marshal.*;
 import org.apache.cassandra.thrift.ColumnOrSuperColumn;
 import org.apache.cassandra.tracing.TraceEvent.Type;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.UUIDGen;
+
+import com.google.common.base.Function;
+import com.google.common.base.Supplier;
+import com.google.common.collect.*;
+
 import org.apache.thrift.TBase;
 import org.apache.thrift.TEnum;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public class TraceEventBuilder
 {
@@ -74,6 +56,34 @@ public class TraceEventBuilder
         }));
     }
 
+    public static InetAddress decodeCoordinator(ByteBuffer name)
+    {
+        CompositeType traceColumnType = ((CompositeType) traceTableMetadata().comparator);
+        AbstractType<InetAddress> coordinatorType = (AbstractType<InetAddress>) traceColumnType.types.get(0);
+        return coordinatorType.compose(traceColumnType.deconstruct(name).get(0).value);
+    }
+
+    public static UUID decodeEventId(ByteBuffer name)
+    {
+        CompositeType traceColumnType = ((CompositeType) traceTableMetadata().comparator);
+        AbstractType<UUID> eventIdComponentType = (AbstractType<UUID>) traceColumnType.types.get(1);
+        return eventIdComponentType.compose(traceColumnType.deconstruct(name).get(1).value);
+    }
+
+    public static String decodeColumnName(ByteBuffer name)
+    {
+        CompositeType traceColumnType = ((CompositeType) traceTableMetadata().comparator);
+        AbstractType<String> columnNameType = (AbstractType<String>) traceColumnType.types.get(2);
+        return columnNameType.compose(traceColumnType.deconstruct(name).get(2).value);
+    }
+
+    public static String decodeMapEntryKey(ByteBuffer name)
+    {
+        // here we cheat a bit as we now that both map types have a UTF8Type key (avoids having a method per map)
+        CompositeType traceColumnType = ((CompositeType) traceTableMetadata().comparator);
+        return UTF8Type.instance.compose(traceColumnType.deconstruct(name).get(3).value);
+    }
+
     private static List<TraceEvent> processValues(UUID key, Iterable<Pair<ByteBuffer, ByteBuffer>> colNamesAndValues)
     {
         Multimap<UUID, Pair<ByteBuffer, ByteBuffer>> eventColumns = Multimaps.newListMultimap(
@@ -90,9 +100,7 @@ public class TraceEventBuilder
         // split the columns by event
         for (Pair<ByteBuffer, ByteBuffer> column : colNamesAndValues)
         {
-            List<CompositeComponent> components = EVENT_TYPE.deconstruct(column.left);
-            UUID decodedEventId = ((UUID) components.get(1).comparator.compose(components.get(1).value));
-            eventColumns.put(decodedEventId, column);
+            eventColumns.put(decodeEventId(column.left), column);
         }
 
         List<TraceEvent> events = Lists.newArrayList();
@@ -104,15 +112,13 @@ public class TraceEventBuilder
             boolean setCoordinator = false;
             for (Pair<ByteBuffer, ByteBuffer> col : entry.getValue())
             {
-                List<CompositeComponent> components = EVENT_TYPE.deconstruct(col.left);
                 if (!setCoordinator)
                 {
-                    builder.coordinator((InetAddress) components.get(0).comparator
-                            .compose(components.get(0).value));
+                    builder.coordinator(decodeCoordinator(col.left));
                     setCoordinator = true;
                 }
 
-                String colName = (String) components.get(2).comparator.compose(components.get(2).value);
+                String colName = decodeColumnName(col.left);
                 if (colName.equals(TraceSessionContext.DESCRIPTION))
                 {
                     builder.description(UTF8Type.instance.compose(col.right));
@@ -135,13 +141,13 @@ public class TraceEventBuilder
                 }
                 if (colName.equals(TraceSessionContext.PAYLOAD))
                 {
-                    String payloadKey = UTF8Type.instance.compose(components.get(3).value);
+                    String payloadKey = decodeMapEntryKey(col.left);
                     builder.addPayloadRaw(payloadKey, col.right);
                     continue;
                 }
                 if (colName.equals(TraceSessionContext.PAYLOAD_TYPES))
                 {
-                    String payloadKey = UTF8Type.instance.compose(components.get(3).value);
+                    String payloadKey = decodeMapEntryKey(col.left);
                     try
                     {
                         builder.addPayloadTypeRaw(payloadKey,

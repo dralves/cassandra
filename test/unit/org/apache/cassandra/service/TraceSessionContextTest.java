@@ -21,15 +21,8 @@
 
 package org.apache.cassandra.service;
 
-import static junit.framework.Assert.assertEquals;
-import static junit.framework.Assert.assertFalse;
-import static junit.framework.Assert.assertNotNull;
-import static junit.framework.Assert.assertSame;
-import static junit.framework.Assert.assertTrue;
-import static org.apache.cassandra.tracing.TraceSessionContext.EVENTS_TABLE;
-import static org.apache.cassandra.tracing.TraceSessionContext.TRACE_KEYSPACE;
-import static org.apache.cassandra.tracing.TraceSessionContext.isTracing;
-import static org.apache.cassandra.tracing.TraceSessionContext.traceCtx;
+import static junit.framework.Assert.*;
+import static org.apache.cassandra.tracing.TraceSessionContext.*;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -38,22 +31,14 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.Callable;
-import java.util.concurrent.ExecutionException;
-import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.ThreadPoolExecutor;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicReference;
-
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterables;
-
-import org.junit.BeforeClass;
-import org.junit.Test;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.concurrent.DebuggableThreadPoolExecutor;
+import org.apache.cassandra.cql3.QueryProcessor;
+import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.Table;
@@ -73,6 +58,12 @@ import org.apache.cassandra.tracing.TracePrettyPrinter;
 import org.apache.cassandra.tracing.TraceSessionContext;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
+
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
+
+import org.junit.BeforeClass;
+import org.junit.Test;
 
 public class TraceSessionContextTest extends SchemaLoader
 {
