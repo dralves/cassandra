@@ -362,8 +362,7 @@ public class TraceSessionContext
         final DataOutputBuffer buffer = new DataOutputBuffer();
         try
         {
-            final TraceSessionContextThreadLocalState tls = sessionContextThreadLocalState.get();
-            byte[] sessionId = UUIDGen.decompose(tls.sessionId);
+            byte[] sessionId = TimeUUIDType.instance.decompose(getSessionId()).array();
             buffer.writeInt(sessionId.length);
             buffer.write(sessionId);
             return buffer.getData();
@@ -444,7 +443,7 @@ public class TraceSessionContext
 
     public UUID newSession()
     {
-        return newSession(UUIDGen.getUUID(ByteBuffer.wrap(UUIDGen.getTimeUUIDBytes())));
+        return newSession(TimeUUIDType.instance.compose(ByteBuffer.wrap(UUIDGen.getTimeUUIDBytes())));
     }
 
     public UUID newSession(UUID sessionId)
@@ -553,7 +552,7 @@ public class TraceSessionContext
             throw new IOError(e);
         }
         sessionContextThreadLocalState.set(new TraceSessionContextThreadLocalState(message.from, localAddress,
-                UUIDGen.getUUID(ByteBuffer.wrap(sessionId)), id));
+                TimeUUIDType.instance.compose(ByteBuffer.wrap(sessionId)), id));
     }
 
     /**
