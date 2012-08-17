@@ -66,13 +66,6 @@ public class DatacenterReadCallback<TMessage, TResolved> extends ReadCallback<TM
         return localdc.equals(snitch.getDatacenter(message.from));
     }
 
-    protected boolean waitingFor(ReadResponse response)
-    {
-        // cheat and leverage our knowledge that a local read is the only way the ReadResponse
-        // version of this method gets called
-        return true;
-    }
-
     @Override
     public int determineBlockFor(ConsistencyLevel consistency_level, String table)
     {
