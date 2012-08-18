@@ -29,6 +29,8 @@ import org.apache.cassandra.db.RowPosition;
 import org.apache.cassandra.io.ISerializer;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 public abstract class Token<T> implements RingPosition<Token<T>>, Serializable
 {
@@ -83,6 +85,8 @@ public abstract class Token<T> implements RingPosition<Token<T>>, Serializable
 
     public static class TokenSerializer implements ISerializer<Token>
     {
+        private static final Logger logger = LoggerFactory.getLogger(TokenSerializer.class);
+
         public void serialize(Token token, DataOutput dos) throws IOException
         {
             IPartitioner p = StorageService.getPartitioner();
@@ -94,6 +98,7 @@ public abstract class Token<T> implements RingPosition<Token<T>>, Serializable
         {
             IPartitioner p = StorageService.getPartitioner();
             int size = dis.readInt();
+            logger.info("deser size: "+size);
             byte[] bytes = new byte[size];
             dis.readFully(bytes);
             return p.getTokenFactory().fromByteArray(ByteBuffer.wrap(bytes));

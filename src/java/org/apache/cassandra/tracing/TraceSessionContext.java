@@ -33,19 +33,9 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.RejectedExecutionException;
 
-import com.google.common.annotations.VisibleForTesting;
-import com.google.common.base.Predicate;
-import com.google.common.base.Throwables;
-import com.google.common.collect.ImmutableList;
-import com.google.common.collect.ImmutableMap;
-import com.google.common.collect.Iterables;
-
-import org.apache.cassandra.config.*;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
+import org.apache.cassandra.config.*;
 import org.apache.cassandra.cql3.ColumnNameBuilder;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.statements.CreateColumnFamilyStatement;
@@ -55,12 +45,6 @@ import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.db.ExpiringColumn;
 import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.db.marshal.BytesType;
-import org.apache.cassandra.db.marshal.CollectionType;
-import org.apache.cassandra.db.marshal.ColumnToCollectionType;
-import org.apache.cassandra.db.marshal.CompositeType;
-import org.apache.cassandra.db.marshal.InetAddressType;
-import org.apache.cassandra.db.marshal.MapType;
 import org.apache.cassandra.db.marshal.TimeUUIDType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.io.util.DataOutputBuffer;
@@ -73,6 +57,15 @@ import org.apache.cassandra.thrift.InvalidRequestException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
+
+import com.google.common.annotations.VisibleForTesting;
+import com.google.common.base.Predicate;
+import com.google.common.base.Throwables;
+import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Iterables;
+
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
  * A trace session context. Able to track and store trace sessions. A session is usually a user initiated query, and may
@@ -137,7 +130,7 @@ public class TraceSessionContext
     public static final String TYPE = "type";
     public static final ByteBuffer TYPE_BB = ByteBufferUtil.bytes(TYPE);
 
-    private static final CFMetaData eventsCfm = compile("CREATE TABLE " + TRACE_KEYSPACE + "." + EVENTS_TABLE + " (" +
+    public static final String TRACE_TABLE_STATEMENT = "CREATE TABLE " + TRACE_KEYSPACE + "." + EVENTS_TABLE + " (" +
             "  " + SESSION_ID + "        timeuuid," +
             "  " + COORDINATOR + "       inet," +
             "  " + EVENT_ID + "          timeuuid," +
@@ -149,12 +142,20 @@ public class TraceSessionContext
             "  " + PAYLOAD + "           map<text, blob>," +
             "  " + SOURCE + "            inet," +
             "  " + TYPE + "              text," +
-            "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + ", " + EVENT_ID + "));");
+            "  PRIMARY KEY (" + SESSION_ID + ", " + COORDINATOR + ", " + EVENT_ID + "));";
 
-    public static String indexStatement = "CREATE INDEX idx_" + NAME + " ON " + TRACE_KEYSPACE + "."
+    public static final String INDEX_STATEMENT = "CREATE INDEX idx_" + NAME + " ON " + TRACE_KEYSPACE + "."
             + EVENTS_TABLE + " (" + NAME + ")";
 
+    private static final CFMetaData eventsCfm = compile(TRACE_TABLE_STATEMENT);
+
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
+
+    static
+    {
+        logger.info(TRACE_TABLE_STATEMENT);
+        logger.info(INDEX_STATEMENT);
+    }
 
     public static void main(String[] args)
     {
@@ -172,12 +173,13 @@ public class TraceSessionContext
         System.out.println(cfm.getDefaultValidator());
         for (int i = 0; i < 4; i++)
         {
-            AbstractType<?> type =  cfm.getColumnDefinitionComparator(i);
+            AbstractType<?> type = cfm.getColumnDefinitionComparator(i);
             System.out.println(type);
         }
     }
 
-    private static CFMetaData compile(String cql) {
+    private static CFMetaData compile(String cql)
+    {
         CreateColumnFamilyStatement statement = null;
         try
         {
@@ -233,7 +235,7 @@ public class TraceSessionContext
     {
         return ctx;
     }
-    
+
     public static CFMetaData traceTableMetadata()
     {
         return eventsCfm;
@@ -257,7 +259,7 @@ public class TraceSessionContext
         {
             try
             {
-                logger.info("Trace keyspace was not found creating & annoucing");
+                logger.info("Trace keyspace was not found creating & announcing");
                 KSMetaData traceKs = KSMetaData.newKeyspace(TRACE_KEYSPACE, SimpleStrategy.class.getName(),
                         ImmutableMap.of("replication_factor", "1"));
                 MigrationManager.announceNewKeyspace(traceKs);
@@ -266,7 +268,7 @@ public class TraceSessionContext
                 try
                 {
                     CreateIndexStatement statement = (CreateIndexStatement) QueryProcessor
-                            .parseStatement(indexStatement).prepare().statement;
+                            .parseStatement(INDEX_STATEMENT).prepare().statement;
                     statement.announceMigration();
                 }
                 catch (InvalidRequestException e)

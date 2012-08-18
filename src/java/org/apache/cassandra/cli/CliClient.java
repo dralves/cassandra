@@ -2069,35 +2069,40 @@ public class CliClient
         if (!CliMain.isConnected())
             return;
 
+        boolean changedKeyspaces = false;
         try
         {
             if (this.keySpace != null && !this.keySpace.equals(TraceSessionContext.TRACE_KEYSPACE))
-                thriftClient.set_keyspace(TraceSessionContext.TRACE_KEYSPACE);
+                changedKeyspaces = true;
+            
+            thriftClient.set_keyspace(TraceSessionContext.TRACE_KEYSPACE);
 
-            IndexExpression index = new IndexExpression(TraceSessionContext.NAME_BB, IndexOperator.EQ,
-                    UTF8Type.instance.decompose(request));
+//            thriftClient.execute_cql_query("select * from "+TraceSessionContext.EVENTS_TABLE+" where");
 
-            KeyRange keyRange = new KeyRange().setRow_filter(ImmutableList.of(index)).setCount(10000).setStart_token("0").setEnd_token("0");
+//            IndexExpression index = new IndexExpression(TraceSessionContext.NAME_BB, IndexOperator.EQ,
+//                    UTF8Type.instance.decompose(request));
+//
+//            KeyRange keyRange = new KeyRange().setRow_filter(ImmutableList.of(index)).setCount(10000).setStart_token("0").setEnd_token("0");
+//
+//            ColumnParent eventsCol = new ColumnParent(TraceSessionContext.EVENTS_TABLE);
+//
+//            SlicePredicate predicate = new SlicePredicate();
+//
+//            predicate
+//                    .setSlice_range(new SliceRange(ByteBufferUtil.EMPTY_BYTE_BUFFER, ByteBufferUtil.EMPTY_BYTE_BUFFER,
+//                            false, Integer.MAX_VALUE));
+//
+//            List<KeySlice> keySlices = thriftClient.get_range_slices(eventsCol, predicate, keyRange,
+//                    consistencyLevel);
+//
+//            Map<UUID, List<TraceEvent>> events = Maps.newLinkedHashMap();
+//            for (KeySlice slice : keySlices)
+//            {
+//                UUID key = UUIDType.instance.compose(ByteBuffer.wrap(slice.getKey()));
+//                events.put(key, TraceEventBuilder.fromThrift(key, slice.getColumns()));
+//            }
 
-            ColumnParent eventsCol = new ColumnParent(TraceSessionContext.EVENTS_TABLE);
-
-            SlicePredicate predicate = new SlicePredicate();
-
-            predicate
-                    .setSlice_range(new SliceRange(ByteBufferUtil.EMPTY_BYTE_BUFFER, ByteBufferUtil.EMPTY_BYTE_BUFFER,
-                            false, Integer.MAX_VALUE));
-
-            List<KeySlice> keySlices = thriftClient.get_range_slices(eventsCol, predicate, keyRange,
-                    consistencyLevel);
-
-            Map<UUID, List<TraceEvent>> events = Maps.newLinkedHashMap();
-            for (KeySlice slice : keySlices)
-            {
-                UUID key = UUIDType.instance.compose(ByteBuffer.wrap(slice.getKey()));
-                events.put(key, TraceEventBuilder.fromThrift(key, slice.getColumns()));
-            }
-
-            TracePrettyPrinter.printMultiSessionTraceForRequestType(request, events, System.out);
+//            TracePrettyPrinter.printMultiSessionTraceForRequestType(request, events, System.out);
         }
         catch (InvalidRequestException e)
         {
@@ -2108,10 +2113,8 @@ public class CliClient
         {
             try
             {
-                if (this.keySpace != null && !this.keySpace.equals(TraceSessionContext.TRACE_KEYSPACE))
-                {
+                if (changedKeyspaces)
                     thriftClient.set_keyspace(this.keySpace);
-                }
             }
             catch (InvalidRequestException e)
             {
