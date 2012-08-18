@@ -151,33 +151,6 @@ public class TraceSessionContext
 
     private static final Logger logger = LoggerFactory.getLogger(TraceSessionContext.class);
 
-    static
-    {
-        logger.info(TRACE_TABLE_STATEMENT);
-        logger.info(INDEX_STATEMENT);
-    }
-
-    public static void main(String[] args)
-    {
-        CFMetaData cfm = TraceSessionContext.eventsCfm;
-        for (Map.Entry<ByteBuffer, ColumnDefinition> entry : cfm.getColumn_metadata().entrySet())
-        {
-            String name = UTF8Type.instance.compose(entry.getKey());
-            ColumnDefinition def = entry.getValue();
-            System.out.println(eventsCfm.comparator);
-            AbstractType<?> type = eventsCfm.getColumnDefinitionComparator(def);
-            System.out.println(type);
-            System.out.println(cfm.getDefaultValidator());
-        }
-
-        System.out.println(cfm.getDefaultValidator());
-        for (int i = 0; i < 4; i++)
-        {
-            AbstractType<?> type = cfm.getColumnDefinitionComparator(i);
-            System.out.println(type);
-        }
-    }
-
     private static CFMetaData compile(String cql)
     {
         CreateColumnFamilyStatement statement = null;

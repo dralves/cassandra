@@ -43,6 +43,7 @@ import com.google.common.collect.Collections2;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.Maps;
 
+import org.apache.cassandra.thrift.*;
 import org.apache.commons.lang.StringUtils;
 
 import org.apache.cassandra.db.marshal.UUIDType;
@@ -68,34 +69,6 @@ import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.locator.SimpleSnitch;
 import org.apache.cassandra.service.StorageProxy;
-import org.apache.cassandra.thrift.AuthenticationException;
-import org.apache.cassandra.thrift.AuthenticationRequest;
-import org.apache.cassandra.thrift.AuthorizationException;
-import org.apache.cassandra.thrift.Cassandra;
-import org.apache.cassandra.thrift.CfDef;
-import org.apache.cassandra.thrift.Column;
-import org.apache.cassandra.thrift.ColumnDef;
-import org.apache.cassandra.thrift.ColumnOrSuperColumn;
-import org.apache.cassandra.thrift.ColumnParent;
-import org.apache.cassandra.thrift.ColumnPath;
-import org.apache.cassandra.thrift.ConsistencyLevel;
-import org.apache.cassandra.thrift.CounterColumn;
-import org.apache.cassandra.thrift.CounterSuperColumn;
-import org.apache.cassandra.thrift.IndexClause;
-import org.apache.cassandra.thrift.IndexExpression;
-import org.apache.cassandra.thrift.IndexOperator;
-import org.apache.cassandra.thrift.IndexType;
-import org.apache.cassandra.thrift.InvalidRequestException;
-import org.apache.cassandra.thrift.KeyRange;
-import org.apache.cassandra.thrift.KeySlice;
-import org.apache.cassandra.thrift.KsDef;
-import org.apache.cassandra.thrift.NotFoundException;
-import org.apache.cassandra.thrift.SchemaDisagreementException;
-import org.apache.cassandra.thrift.SlicePredicate;
-import org.apache.cassandra.thrift.SliceRange;
-import org.apache.cassandra.thrift.SuperColumn;
-import org.apache.cassandra.thrift.TimedOutException;
-import org.apache.cassandra.thrift.UnavailableException;
 import org.apache.cassandra.tools.NodeProbe;
 import org.apache.cassandra.tracing.TraceEvent;
 import org.apache.cassandra.tracing.TraceEventBuilder;
@@ -2074,37 +2047,31 @@ public class CliClient
         {
             if (this.keySpace != null && !this.keySpace.equals(TraceSessionContext.TRACE_KEYSPACE))
                 changedKeyspaces = true;
-            
+
             thriftClient.set_keyspace(TraceSessionContext.TRACE_KEYSPACE);
 
-//            thriftClient.execute_cql_query("select * from "+TraceSessionContext.EVENTS_TABLE+" where");
+            CqlResult result = thriftClient.execute_cql_query(ByteBufferUtil.bytes("select * from trace_events"),
+                    Compression.NONE);
 
-//            IndexExpression index = new IndexExpression(TraceSessionContext.NAME_BB, IndexOperator.EQ,
-//                    UTF8Type.instance.decompose(request));
-//
-//            KeyRange keyRange = new KeyRange().setRow_filter(ImmutableList.of(index)).setCount(10000).setStart_token("0").setEnd_token("0");
-//
-//            ColumnParent eventsCol = new ColumnParent(TraceSessionContext.EVENTS_TABLE);
-//
-//            SlicePredicate predicate = new SlicePredicate();
-//
-//            predicate
-//                    .setSlice_range(new SliceRange(ByteBufferUtil.EMPTY_BYTE_BUFFER, ByteBufferUtil.EMPTY_BYTE_BUFFER,
-//                            false, Integer.MAX_VALUE));
-//
-//            List<KeySlice> keySlices = thriftClient.get_range_slices(eventsCol, predicate, keyRange,
-//                    consistencyLevel);
-//
-//            Map<UUID, List<TraceEvent>> events = Maps.newLinkedHashMap();
-//            for (KeySlice slice : keySlices)
-//            {
-//                UUID key = UUIDType.instance.compose(ByteBuffer.wrap(slice.getKey()));
-//                events.put(key, TraceEventBuilder.fromThrift(key, slice.getColumns()));
-//            }
+            Map<UUID, List<TraceEvent>> allEvents = Maps.newHashMap();
+            for (CqlRow row : result.getRows())
+            {
+                UUID key = TimeUUIDType.instance.compose(row.bufferForKey());
+                for (Column col : row.getColumns()){
+                    System.out.println(ByteBufferUtil.string(col.bufferForName()));
+                    System.out.println(ByteBufferUtil.string(col.bufferForValue()));
+                }
+                List<TraceEvent> sessionEvents = TraceEventBuilder.fromThriftColumns(key, row.getColumns());
+                // TODO we should query the index for only the rows that contain the requested event
+//                if (sessionEvents.get(0).name().equals(request))
+//                {
+//                    allEvents.put(key, sessionEvents);
+//                }
+            }
 
-//            TracePrettyPrinter.printMultiSessionTraceForRequestType(request, events, System.out);
+            TracePrettyPrinter.printMultiSessionTraceForRequestType(request, allEvents, System.out);
         }
-        catch (InvalidRequestException e)
+        catch (Exception e)
         {
             sessionState.out.println("Invalid Request: " + e);
             e.printStackTrace();

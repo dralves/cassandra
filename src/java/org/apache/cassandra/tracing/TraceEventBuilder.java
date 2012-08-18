@@ -5,6 +5,7 @@ import static org.apache.cassandra.tracing.TraceSessionContext.*;
 
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -12,8 +13,11 @@ import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.IColumn;
 import org.apache.cassandra.db.marshal.*;
+import org.apache.cassandra.thrift.Column;
 import org.apache.cassandra.thrift.ColumnOrSuperColumn;
 import org.apache.cassandra.tracing.TraceEvent.Type;
+import org.apache.cassandra.utils.ByteBufferUtil;
+import org.apache.cassandra.utils.OutputHandler;
 import org.apache.cassandra.utils.Pair;
 import org.apache.cassandra.utils.UUIDGen;
 
@@ -35,7 +39,7 @@ public class TraceEventBuilder
     public static List<TraceEvent> fromThrift(UUID sessionId,
             List<ColumnOrSuperColumn> columnOrSuperColumns)
     {
-        return processValues(sessionId, Iterables.transform(columnOrSuperColumns,
+        return processCqlValues(sessionId, Iterables.transform(columnOrSuperColumns,
                 new Function<ColumnOrSuperColumn, Pair<ByteBuffer, ByteBuffer>>()
                 {
                     public Pair<ByteBuffer, ByteBuffer> apply(ColumnOrSuperColumn column)
@@ -45,12 +49,23 @@ public class TraceEventBuilder
                 }));
     }
 
+    public static List<TraceEvent> fromThriftColumns(UUID sessionId,
+            List<Column> columns)
+    {
+        return processCqlValues(sessionId, Iterables.transform(columns,
+                new Function<Column, Pair<ByteBuffer, ByteBuffer>>()
+                {
+                    public Pair<ByteBuffer, ByteBuffer> apply(Column column)
+                    {
+                        return new Pair<ByteBuffer, ByteBuffer>(column.name, column.value);
+                    }
+                }));
+    }
+
     public static List<TraceEvent> fromColumnFamily(UUID key, ColumnFamily cf)
     {
-        return processValues(key, Iterables.transform(cf, new Function<IColumn, Pair<ByteBuffer, ByteBuffer>>()
-        {
-            public Pair<ByteBuffer, ByteBuffer> apply(IColumn column)
-            {
+        return processRawValues(key, Iterables.transform(cf, new Function<IColumn, Pair<ByteBuffer, ByteBuffer>>() {
+            public Pair<ByteBuffer, ByteBuffer> apply(IColumn column) {
                 return new Pair<ByteBuffer, ByteBuffer>(column.name(), column.value());
             }
         }));
@@ -83,8 +98,33 @@ public class TraceEventBuilder
         CompositeType traceColumnType = ((CompositeType) traceTableMetadata().comparator);
         return UTF8Type.instance.compose(traceColumnType.deconstruct(name).get(3).value);
     }
+    
+    private static List<TraceEvent> processCqlValues(UUID key, Iterable<Pair<ByteBuffer, ByteBuffer>> cqlNamesAndValues)
+    {
+        Multimap<UUID, Pair<ByteBuffer, ByteBuffer>> eventColumns = Multimaps.newListMultimap(
+                Maps.<UUID, Collection<Pair<ByteBuffer, ByteBuffer>>> newLinkedHashMap(),
+                new Supplier<ArrayList<Pair<ByteBuffer, ByteBuffer>>>()
+                {
+                    @Override
+                    public ArrayList<Pair<ByteBuffer, ByteBuffer>> get()
+                    {
+                        return Lists.newArrayList();
+                    }
+                });
+        
+        for (Pair<ByteBuffer, ByteBuffer> entry : cqlNamesAndValues)
+        {
+            try {
+                System.out.println(ByteBufferUtil.string(entry.left));
+            } catch (CharacterCodingException e) {
+                e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+            }
+        }
+        System.out.println("--");
+        return null;
+    }
 
-    private static List<TraceEvent> processValues(UUID key, Iterable<Pair<ByteBuffer, ByteBuffer>> colNamesAndValues)
+    private static List<TraceEvent> processRawValues(UUID key, Iterable<Pair<ByteBuffer, ByteBuffer>> colNamesAndValues)
     {
         Multimap<UUID, Pair<ByteBuffer, ByteBuffer>> eventColumns = Multimaps.newListMultimap(
                 Maps.<UUID, Collection<Pair<ByteBuffer, ByteBuffer>>> newLinkedHashMap(),
@@ -100,6 +140,11 @@ public class TraceEventBuilder
         // split the columns by event
         for (Pair<ByteBuffer, ByteBuffer> column : colNamesAndValues)
         {
+            try {
+                System.out.println(ByteBufferUtil.string(column.left));
+            } catch (CharacterCodingException e) {
+                e.printStackTrace();  //To change body of catch statement use File | Settings | File Templates.
+            }
             eventColumns.put(decodeEventId(column.left), column);
         }
 
