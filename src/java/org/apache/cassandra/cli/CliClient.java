@@ -2097,7 +2097,7 @@ public class CliClient
                     .setOp(IndexOperator.EQ).setValue(ByteBufferUtil.bytes(request));
 
             KeyRange range = new KeyRange().setStart_token("0").setEnd_token("0");
-                    //.setRow_filter(ImmutableList.of(expression));
+//                    .setRow_filter(ImmutableList.of(expression));
 
             List<KeySlice> slices = thriftClient.get_range_slices(parent, predicate, range, ConsistencyLevel.ONE);
 

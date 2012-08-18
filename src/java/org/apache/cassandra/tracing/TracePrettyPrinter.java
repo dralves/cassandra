@@ -2,27 +2,17 @@ package org.apache.cassandra.tracing;
 
 import java.io.PrintStream;
 import java.net.InetAddress;
-import java.util.ArrayList;
-import java.util.Collection;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.text.DecimalFormat;
+import java.util.*;
+import java.util.concurrent.TimeUnit;
+
+import org.apache.cassandra.thrift.ConsistencyLevel;
 
 import com.google.common.base.Supplier;
-import com.google.common.collect.ComparisonChain;
-import com.google.common.collect.ImmutableSet;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Multimap;
-import com.google.common.collect.Multimaps;
-import com.google.common.collect.Ordering;
-import com.google.common.collect.Sets;
+import com.google.common.collect.*;
 
 import org.apache.commons.math.stat.descriptive.DescriptiveStatistics;
 
-import org.apache.cassandra.thrift.ConsistencyLevel;
 
 public class TracePrettyPrinter
 {
@@ -107,13 +97,25 @@ public class TracePrettyPrinter
         }
 
         out.println("Summary for sessions of request: " + requestName);
+        out.println("Total Sessions: " + sessions.values().size());
         out.println("            ==============================================================");
-        out.println("            |    Avg.    |   StdDev.  |   Max.   |   Min.   |    99.99%  |");
+        out.println("            |    Avg.    |   StdDev.  |   Max.   |    Min.   |     99%   |");
         out.println("==========================================================================");
-        out.println("|   Lat.    | " + latencySstats.getMean() + " | " + latencySstats.getStandardDeviation() + " | "
-                + latencySstats.getMax() + " | " + latencySstats.getMin() + " " + latencySstats.getPercentile(99.9)
+        out.println("|   Lat.    | " + nanosToFormattedMillis(latencySstats.getMean()) + " | "
+                + nanosToFormattedMillis(latencySstats.getStandardDeviation()) + " | "
+                + nanosToFormattedMillis(latencySstats.getMax()) + " | "
+                + nanosToFormattedMillis(latencySstats.getMin()) + " | "
+                + nanosToFormattedMillis(latencySstats.getPercentile(99))
                 + " | ");
         // print the top 5 latencies (to enable individual tracing)
 
+    }
+
+    private static DecimalFormat format = new DecimalFormat("##.###");
+
+    private static String nanosToFormattedMillis(double value)
+    {
+        long val = Math.round(value);
+        return format.format(TimeUnit.MILLISECONDS.convert(val, TimeUnit.NANOSECONDS));
     }
 }

@@ -591,7 +591,7 @@ traceSessionId
     ;
 
 sessionRequest
-    : StringLiteral
+    : Identifier
     ;
 
 tracingProbability
