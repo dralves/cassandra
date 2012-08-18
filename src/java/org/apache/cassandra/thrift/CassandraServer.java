@@ -837,6 +837,9 @@ public class CassandraServer implements Cassandra.Iface
     public List<KeySlice> get_range_slices(ColumnParent column_parent, SlicePredicate predicate, KeyRange range, ConsistencyLevel consistency_level)
     throws InvalidRequestException, UnavailableException, TException, TimedOutException
     {
+
+        logger.info("got some range slices");
+
         if (startSessionIfRequested())
         {
             traceCtx().trace(new TraceEventBuilder()
@@ -853,17 +856,20 @@ public class CassandraServer implements Cassandra.Iface
         {
             logger.debug("get_range_slices");
 
+            String keyspace = null;
+            CFMetaData metadata = null;
+
             ClientState cState = state();
-            String keyspace = cState.getKeyspace();
+            keyspace = cState.getKeyspace();
             cState.hasColumnFamilyAccess(column_parent.column_family, Permission.READ);
 
-            CFMetaData metadata = ThriftValidation.validateColumnFamily(keyspace, column_parent.column_family);
+            metadata = ThriftValidation.validateColumnFamily(keyspace, column_parent.column_family);
             ThriftValidation.validateColumnParent(metadata, column_parent);
             ThriftValidation.validatePredicate(metadata, column_parent, predicate);
             ThriftValidation.validateKeyRange(metadata, column_parent.super_column, range);
             ThriftValidation.validateConsistencyLevel(keyspace, consistency_level, RequestType.READ);
 
-            List<Row> rows;
+            List<Row> rows = null;
             try
             {
                 IPartitioner p = StorageService.getPartitioner();
@@ -1002,6 +1008,11 @@ public class CassandraServer implements Cassandra.Iface
         {
             List<ColumnOrSuperColumn> thriftifiedColumns = thriftifyColumnFamily(row.cf, column_parent.super_column != null, reversed);
             keySlices.add(new KeySlice(row.key.key, thriftifiedColumns));
+        }
+
+        logger.info("slices size: "+keySlices.size());
+        for (KeySlice slice : keySlices){
+           logger.info(slice.toString());
         }
 
         return keySlices;
