@@ -2,7 +2,6 @@ package org.apache.cassandra.tracing;
 
 import java.io.PrintStream;
 import java.net.InetAddress;
-import java.text.DecimalFormat;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
 
@@ -98,24 +97,22 @@ public class TracePrettyPrinter
 
         out.println("Summary for sessions of request: " + requestName);
         out.println("Total Sessions: " + sessions.values().size());
-        out.println("            ==============================================================");
-        out.println("            |    Avg.    |   StdDev.  |   Max.   |    Min.   |     99%   |");
-        out.println("==========================================================================");
-        out.println("|   Lat.    | " + nanosToFormattedMillis(latencySstats.getMean()) + " | "
+        out.println("            ==================================================================");
+        out.println("            |    Avg.    |   StdDev.  |   Max.     |    Min.    |     99%    |");
+        out.println("==============================================================================");
+        out.println("| Latency   | " + nanosToFormattedMillis(latencySstats.getMean()) + " | "
                 + nanosToFormattedMillis(latencySstats.getStandardDeviation()) + " | "
                 + nanosToFormattedMillis(latencySstats.getMax()) + " | "
                 + nanosToFormattedMillis(latencySstats.getMin()) + " | "
                 + nanosToFormattedMillis(latencySstats.getPercentile(99))
                 + " | ");
-        // print the top 5 latencies (to enable individual tracing)
+        out.println("|----------------------------------------------------------------------------|");
 
     }
-
-    private static DecimalFormat format = new DecimalFormat("##.###");
 
     private static String nanosToFormattedMillis(double value)
     {
         long val = Math.round(value);
-        return format.format(TimeUnit.MILLISECONDS.convert(val, TimeUnit.NANOSECONDS));
+        return String.format("%10s", TimeUnit.MILLISECONDS.convert(val, TimeUnit.NANOSECONDS));
     }
 }

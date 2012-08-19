@@ -2097,19 +2097,27 @@ public class CliClient
                     .setOp(IndexOperator.EQ).setValue(ByteBufferUtil.bytes(request));
 
             KeyRange range = new KeyRange().setStart_token("0").setEnd_token("0");
-//                    .setRow_filter(ImmutableList.of(expression));
+            // .setRow_filter(ImmutableList.of(expression));
 
             List<KeySlice> slices = thriftClient.get_range_slices(parent, predicate, range, ConsistencyLevel.ONE);
 
             Map<UUID, List<TraceEvent>> allEvents = Maps.newHashMap();
-            
+
             for (KeySlice keySlice : slices)
             {
                 UUID key = TimeUUIDType.instance.compose(keySlice.bufferForKey());
                 List<TraceEvent> sessionEvents = TraceEventBuilder.fromThrift(key, keySlice.getColumns());
                 // TODO we should query the index for only the rows that contain the requested event
+                if (sessionEvents.isEmpty())
+                    continue;
                 if (sessionEvents.get(0).name().equals(request))
                     allEvents.put(key, sessionEvents);
+            }
+
+            if (allEvents.isEmpty())
+            {
+                System.out.println("No trace events to display for request: " + request);
+                return;
             }
 
             TracePrettyPrinter.printMultiSessionTraceForRequestType(request, allEvents, System.out);
