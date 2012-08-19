@@ -838,8 +838,6 @@ public class CassandraServer implements Cassandra.Iface
     throws InvalidRequestException, UnavailableException, TException, TimedOutException
     {
 
-        logger.info("got some range slices");
-
         if (startSessionIfRequested())
         {
             traceCtx().trace(new TraceEventBuilder()
@@ -1008,11 +1006,6 @@ public class CassandraServer implements Cassandra.Iface
         {
             List<ColumnOrSuperColumn> thriftifiedColumns = thriftifyColumnFamily(row.cf, column_parent.super_column != null, reversed);
             keySlices.add(new KeySlice(row.key.key, thriftifiedColumns));
-        }
-
-        logger.info("slices size: "+keySlices.size());
-        for (KeySlice slice : keySlices){
-           logger.info(slice.toString());
         }
 
         return keySlices;

@@ -88,15 +88,18 @@ public class TracePrettyPrinter
     {
 
         DescriptiveStatistics latencySstats = new DescriptiveStatistics();
+        int totalEvents = 0;
         for (List<TraceEvent> events : sessions.values())
         {
             TraceEvent first = events.get(0);
             TraceEvent last = events.get(events.size() - 1);
             latencySstats.addValue(last.duration() - first.duration());
+            totalEvents += events.size();
         }
 
         out.println("Summary for sessions of request: " + requestName);
         out.println("Total Sessions: " + sessions.values().size());
+        out.println("Total Events: " + totalEvents);
         out.println("            ==================================================================");
         out.println("            |    Avg.    |   StdDev.  |   Max.     |    Min.    |     99%    |");
         out.println("==============================================================================");
