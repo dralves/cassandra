@@ -34,17 +34,16 @@ public class TraceEvent
 {
 
     /**
-     * A predefined set of events with fixed names and
+     * A predefined types of events
      */
     public enum Type
     {
         SESSION_START,
+        SESSION_END,
         MESSAGE_ARRIVAL,
+        MESSAGE_DEPARTURE,
         STAGE_START,
         STAGE_FINISH,
-        MESSAGE_REPLY,
-        MESSAGE_DEPARTURE,
-        SESSION_END,
         MISC;
 
         public TraceEventBuilder builder()

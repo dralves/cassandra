@@ -298,11 +298,6 @@ public class TraceSessionContext
         return tls == null ? null : new TraceSessionContextThreadLocalState(tls);
     }
 
-    public InetAddress getOrigin()
-    {
-        return isTracing() ? sessionContextThreadLocalState.get().origin : null;
-    }
-
     /**
      * Creates a byte[] to use a message header to serialize this context to another node, if any. The context is only
      * included in the message if it started locally.
@@ -350,20 +345,6 @@ public class TraceSessionContext
     public static boolean isTracing()
     {
         return ctx != null && ctx.sessionContextThreadLocalState.get() != null;
-    }
-
-    private void log(UUID key, final ColumnFamily family, String message)
-    {
-        log(key, family, message, null);
-    }
-
-    private void log(UUID key, final ColumnFamily family, String message, Throwable t)
-    {
-        if (t != null)
-            logger.error("Error while tracing:  Msg: " + message + " Tracing CF: " + family, t);
-        else
-            logger.debug("Error while tracing:  Msg: " + message + " Tracing CF: " + family);
-
     }
 
     public void reset()
@@ -428,14 +409,14 @@ public class TraceSessionContext
                     }
                     catch (Exception e)
                     {
-                        log(key, family, "row mutation failed", e);
+                        logger.error("Failed tracing row mutation. Key: " + key + " CF: " + family);
                     }
                 }
             });
         }
         catch (RejectedExecutionException e)
         {
-            log(key, family, "trace storage rejected (queue is maxed out). Reverting to logging.");
+            logger.warn("Cannot trace event. Tracing queue is full. Key: " + key + " CF: " + family);
         }
     }
 
@@ -448,6 +429,8 @@ public class TraceSessionContext
     {
         if (isTracing())
         {
+            // log the event to debug (in case tracing queue is full)
+            logger.debug("Tracing event: " + event);
             ColumnFamily family = ColumnFamily.create(eventsCfm);
             ByteBuffer coordinatorAsBB = bytes(event.coordinator());
             ByteBuffer eventIdAsBB = event.idAsBB();
