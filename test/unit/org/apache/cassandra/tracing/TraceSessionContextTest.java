@@ -19,7 +19,7 @@
  *
  */
 
-package org.apache.cassandra.service;
+package org.apache.cassandra.tracing;
 
 import static junit.framework.Assert.*;
 import static org.apache.cassandra.tracing.TraceSessionContext.*;
@@ -37,8 +37,6 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.concurrent.DebuggableThreadPoolExecutor;
-import org.apache.cassandra.cql3.QueryProcessor;
-import org.apache.cassandra.cql3.UntypedResultSet;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.Table;
@@ -51,11 +49,7 @@ import org.apache.cassandra.net.MessageDeliveryTask;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.net.MessagingService.Verb;
-import org.apache.cassandra.tracing.TraceEvent;
 import org.apache.cassandra.tracing.TraceEvent.Type;
-import org.apache.cassandra.tracing.TraceEventBuilder;
-import org.apache.cassandra.tracing.TracePrettyPrinter;
-import org.apache.cassandra.tracing.TraceSessionContext;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
 
@@ -268,20 +262,4 @@ public class TraceSessionContextTest extends SchemaLoader
         assertEquals(InetAddress.getByName("127.0.0.2"), remoteEvent.source());
     }
 
-    @Test
-    public void testPrettyPrinter()
-    {
-        ColumnFamily family = Table
-                .open(TRACE_KEYSPACE)
-                .getColumnFamilyStore(EVENTS_TABLE)
-                .getColumnFamily(
-                        QueryFilter.getIdentityFilter(Util.dk(ByteBuffer.wrap(UUIDGen.decompose(sessionId))),
-                                new QueryPath(
-                                        EVENTS_TABLE)));
-
-        List<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
-
-        TracePrettyPrinter.printSingleSessionTrace(sessionId, traceEvents, System.out);
-
-    }
 }

@@ -46,7 +46,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * A fluent builder for trace events.
+ * A fluent builder for trace events. Is also able to build events from raw columns (or thrift columns).
  */
 public class TraceEventBuilder
 {
