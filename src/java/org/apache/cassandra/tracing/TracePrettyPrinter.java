@@ -45,7 +45,7 @@ public class TracePrettyPrinter
         ConsistencyLevel cl = null;
         if (clValue != null)
         {
-            int consistencyLevel = first.getFromPayload("consistency_level");
+            int consistencyLevel = (Integer)first.getFromPayload("consistency_level");
             cl = ConsistencyLevel.findByValue(consistencyLevel);
         }
         InetAddress coordinator = first.coordinator();
@@ -174,9 +174,9 @@ public class TracePrettyPrinter
         case STAGE_FINISH:
             return "/St:[" + event.name().replace("Stage", "") + "]";
         case MESSAGE_ARRIVAL:
-            return "Msg";
-        case MESSAGE_DEPARTURE:
             return "/Msg";
+        case MESSAGE_DEPARTURE:
+            return "Msg";
         case MISC:
             return event.name();
         default:
