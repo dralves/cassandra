@@ -17,9 +17,6 @@
  */
 package org.apache.cassandra.net;
 
-import static org.apache.cassandra.tracing.TraceSessionContext.isTracing;
-import static org.apache.cassandra.tracing.TraceSessionContext.traceCtx;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -42,12 +39,11 @@ public class MessageDeliveryTask implements Runnable
     {
         MessagingService.Verb verb = message.verb;
         if (MessagingService.DROPPABLE_VERBS.contains(verb)
-                && System.currentTimeMillis() > constructionTime + message.getTimeout())
+            && System.currentTimeMillis() > constructionTime + message.getTimeout())
         {
             MessagingService.instance().incrementDroppedMessages(verb);
             return;
         }
-
 
         IVerbHandler verbHandler = MessagingService.instance().getVerbHandler(verb);
         if (verbHandler == null)
