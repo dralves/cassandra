@@ -355,7 +355,6 @@ public class CassandraServer implements Cassandra.Iface
 
         try
         {
-            logger.debug("get_slice");
             state().hasColumnFamilyAccess(column_parent.column_family, Permission.READ);
             return multigetSliceInternal(state().getKeyspace(), Collections.singletonList(key), column_parent,
                     predicate, consistency_level).get(key);
@@ -382,7 +381,6 @@ public class CassandraServer implements Cassandra.Iface
         
         try
         {
-            logger.debug("multiget_slice");
             state().hasColumnFamilyAccess(column_parent.column_family, Permission.READ);
             return multigetSliceInternal(state().getKeyspace(), keys, column_parent, predicate, consistency_level);
         }
@@ -468,7 +466,6 @@ public class CassandraServer implements Cassandra.Iface
         
         try
         {
-            logger.debug("get");
             return internal_get(key, column_path, consistency_level);
         }
         finally
@@ -494,8 +491,6 @@ public class CassandraServer implements Cassandra.Iface
         
         try
         {
-            logger.debug("get_count");
-
             ClientState cState = state();
             cState.hasColumnFamilyAccess(column_parent.column_family, Permission.READ);
             Table table = Table.open(cState.getKeyspace());
@@ -587,8 +582,6 @@ public class CassandraServer implements Cassandra.Iface
         
         try
         {
-            logger.debug("multiget_count");
-
             ClientState cState = state();
             cState.hasColumnFamilyAccess(column_parent.column_family, Permission.READ);
             String keyspace = cState.getKeyspace();
@@ -655,7 +648,6 @@ public class CassandraServer implements Cassandra.Iface
 
         try
         {
-            logger.debug("insert");
             internal_insert(key, column_parent, column, consistency_level);
         }
         finally
@@ -740,7 +732,6 @@ public class CassandraServer implements Cassandra.Iface
 
         try
         {
-            logger.debug("batch_mutate");
             internal_batch_mutate(mutation_map, consistency_level);
         }
         finally
@@ -787,7 +778,6 @@ public class CassandraServer implements Cassandra.Iface
 
         try
         {
-            logger.debug("remove");
             internal_remove(key, column_path, timestamp, consistency_level, false);
         }
         finally
@@ -843,7 +833,6 @@ public class CassandraServer implements Cassandra.Iface
 
         try
         {
-            logger.debug("get_range_slices");
 
             String keyspace = null;
             CFMetaData metadata = null;
@@ -924,7 +913,6 @@ public class CassandraServer implements Cassandra.Iface
 
         try
         {
-            logger.debug("get_paged_slice");
 
             ClientState cState = state();
             String keyspace = cState.getKeyspace();
@@ -1018,7 +1006,6 @@ public class CassandraServer implements Cassandra.Iface
 
         try
         {
-            logger.debug("scan");
 
             ClientState cState = state();
             cState.hasColumnFamilyAccess(column_parent.column_family, Permission.READ);
@@ -1384,7 +1371,6 @@ public class CassandraServer implements Cassandra.Iface
 
         try
         {
-            logger.debug("add");
 
             ClientState cState = state();
             cState.hasColumnFamilyAccess(column_parent.column_family, Permission.WRITE);
@@ -1436,7 +1422,6 @@ public class CassandraServer implements Cassandra.Iface
 
         try
         {
-            logger.debug("remove_counter");
             internal_remove(key, path, System.currentTimeMillis(), consistency_level, true);
         }
         finally
@@ -1518,8 +1503,6 @@ public class CassandraServer implements Cassandra.Iface
 
         try
         {
-            if (logger.isDebugEnabled())
-                logger.debug("execute_cql_query");
 
             String queryString = uncompress(query, compression);
 
@@ -1564,9 +1547,6 @@ public class CassandraServer implements Cassandra.Iface
 
         try
         {
-            if (logger.isDebugEnabled())
-                logger.debug("execute_prepared_cql_query");
-
             ClientState cState = state();
             if (cState.getCQLVersion().major == 2)
             {

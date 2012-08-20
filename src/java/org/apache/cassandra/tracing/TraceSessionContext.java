@@ -53,6 +53,7 @@ import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.io.util.DataOutputBuffer;
 import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.net.MessageIn;
+import org.apache.cassandra.net.MessageOut;
 import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.StorageProxy;
 import org.apache.cassandra.thrift.ConsistencyLevel;
@@ -76,37 +77,6 @@ import org.slf4j.LoggerFactory;
  */
 public class TraceSessionContext
 {
-    /**
-     * Trace session meta events.
-     */
-    public enum TraceEventEnum
-    {
-        /**
-         * Signals a new stage runnable was started within this trace.
-         */
-        STAGE_BEGIN,
-        /**
-         * Signals a stage runnable finished within this trace.
-         */
-        STAGE_FINISH,
-        /**
-         * Signals the start of a trace session (is possibly accompanied with arguments and/or argument descriptors)
-         */
-        TRACE_SESSION_BEGIN,
-        /**
-         * Signals a locally initiated trace session's end (is possibly accompanied with results and/or result
-         * descriptors)
-         */
-        TRACE_SESSION_END;
-
-        /**
-         * overload the default name() method to allow to include a description with the trace event
-         */
-        public String name(String desc)
-        {
-            return new StringBuilder().append(name()).append("[").append(desc).append("]").toString();
-        }
-    }
 
     private static TraceSessionContext ctx;
 
@@ -392,13 +362,8 @@ public class TraceSessionContext
         if (t != null)
             logger.error("Error while tracing:  Msg: " + message + " Tracing CF: " + family, t);
         else
-            logger.error("Error while tracing:  Msg: " + message + " Tracing CF: " + family);
+            logger.debug("Error while tracing:  Msg: " + message + " Tracing CF: " + family);
 
-    }
-
-    public void processMessageEnd()
-    {
-        trace(TraceEvent.Type.PROCESS_MESSAGE_END.builder().build());
     }
 
     public void reset()
@@ -506,7 +471,7 @@ public class TraceSessionContext
      * @param message
      *            The internode message
      */
-    public void processMessageStart(final MessageIn<?> message, String id)
+    public void traceMessageArrival(final MessageIn<?> message, String id, String description)
     {
         final byte[] queryContextBytes = (byte[]) message.parameters
                 .get(TraceSessionContext.TRACE_SESSION_CONTEXT_HEADER);
@@ -530,7 +495,21 @@ public class TraceSessionContext
         sessionContextThreadLocalState.set(new TraceSessionContextThreadLocalState(message.from, localAddress,
                 TimeUUIDType.instance.compose(ByteBuffer.wrap(sessionId)), id));
 
-        trace(TraceEvent.Type.PROCESS_MESSAGE_START.builder().build());
+        trace(TraceEvent.Type.MESSAGE_ARRIVAL.builder().name("MessageArrival[" + id + "]")
+                .description(description).build());
+    }
+
+    public MessageOut traceMessageDeparture(MessageOut<?> messageOut, String id, String description)
+    {
+        byte[] tracePayload = traceCtx().getSessionContextHeader();
+        if (tracePayload != null)
+        {
+            messageOut = messageOut.withParameter(TRACE_SESSION_CONTEXT_HEADER, tracePayload);
+            trace(TraceEvent.Type.MESSAGE_DEPARTURE.builder().name("MessageDeparture[" + id + "]")
+                    .description(description).build());
+        }
+
+        return messageOut;
     }
 
     /**

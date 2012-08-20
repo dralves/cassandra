@@ -173,9 +173,9 @@ public class TracePrettyPrinter
             return "St:[" + event.name().replace("Stage", "") + "]";
         case STAGE_FINISH:
             return "/St:[" + event.name().replace("Stage", "") + "]";
-        case PROCESS_MESSAGE_START:
+        case MESSAGE_ARRIVAL:
             return "Msg";
-        case PROCESS_MESSAGE_END:
+        case MESSAGE_REPLY:
             return "/Msg";
         case MISC:
             return event.name();

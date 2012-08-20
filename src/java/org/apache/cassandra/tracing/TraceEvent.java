@@ -39,10 +39,11 @@ public class TraceEvent
     public enum Type
     {
         SESSION_START,
-        PROCESS_MESSAGE_START,
+        MESSAGE_ARRIVAL,
         STAGE_START,
         STAGE_FINISH,
-        PROCESS_MESSAGE_END,
+        MESSAGE_REPLY,
+        MESSAGE_DEPARTURE,
         SESSION_END,
         MISC;
 

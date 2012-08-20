@@ -36,10 +36,6 @@ import com.google.common.util.concurrent.Futures;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.tracing.TraceSessionContext;
-
-import org.apache.cassandra.tracing.TraceEventBuilder;
-
 import org.apache.cassandra.cache.IRowCacheEntry;
 import org.apache.cassandra.cache.RowCacheKey;
 import org.apache.cassandra.cache.RowCacheSentinel;
@@ -69,6 +65,8 @@ import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.thrift.IndexExpression;
+import org.apache.cassandra.tracing.TraceSessionContext;
+import org.apache.cassandra.tracing.TraceEventBuilder;
 import org.apache.cassandra.utils.*;
 import org.cliffc.high_scale_lib.NonBlockingHashMap;
 
@@ -1157,7 +1155,7 @@ public class ColumnFamilyStore implements ColumnFamilyStoreMBean
         assert columnFamily.equals(filter.getColumnFamilyName()) : filter.getColumnFamilyName();
 
         TraceEventBuilder builder = new TraceEventBuilder();
-        builder.name("getColumnFamily");
+        builder.name("get_column_family");
 
         ColumnFamily result = null;
 

@@ -41,8 +41,6 @@ import com.google.common.collect.Iterables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import com.sun.java.swing.plaf.windows.resources.windows;
-
 import org.apache.cassandra.tracing.TraceSessionContext;
 
 import org.apache.cassandra.config.CFMetaData;
@@ -347,7 +345,7 @@ public class Table
         long start = TraceSessionContext.isTracing() ? TraceSessionContext.traceCtx().threadLocalState().watch
                 .elapsedTime(TimeUnit.NANOSECONDS) : 0;
         apply(mutation, writeCommitLog, true);
-        trace(mutation, writeCommitLog, start);
+        traceApplyMutation(mutation, writeCommitLog, start);
     }
 
     /**
@@ -360,8 +358,6 @@ public class Table
      */
     public void apply(RowMutation mutation, boolean writeCommitLog, boolean updateIndexes)
     {
-        if (logger.isDebugEnabled())
-            logger.debug("applying mutation of row {}", ByteBufferUtil.bytesToHex(mutation.key()));
 
         // write the mutation to the commitlog and memtables
         switchLock.readLock().lock();
@@ -530,7 +526,7 @@ public class Table
     /**
      * @param key row to index
      * @param cfs ColumnFamily to index row in
-     * @param indexedColumns columns to index, in comparator order
+     * @param idxNames columns to index, in comparator order
      */
     public static void indexRow(DecoratedKey key, ColumnFamilyStore cfs, Set<String> idxNames)
     {
@@ -600,13 +596,13 @@ public class Table
         return getClass().getSimpleName() + "(name='" + name + "')";
     }
     
-    private void trace(RowMutation mutation, boolean writeCommitLog, long start)
+    private void traceApplyMutation(RowMutation mutation, boolean writeCommitLog, long start)
     {
+        // do not trace the tracing system of the system tables
         if (TraceSessionContext.isTracing() && 
                 !mutation.getTable().equals(TraceSessionContext.TRACE_KEYSPACE) &&
                 !mutation.getTable().equals("system"))
         {
-            System.out.println(mutation.getTable());
             TraceEventBuilder builder = new TraceEventBuilder();
             builder.name("apply_mutation");
             builder.duration(TraceSessionContext.traceCtx().threadLocalState().watch.elapsedTime(TimeUnit.NANOSECONDS)

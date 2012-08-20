@@ -547,14 +547,6 @@ public final class MessagingService implements MessagingServiceMBean
 
     public void sendReply(MessageOut message, String id, InetAddress to)
     {
-        if (isTracing())
-        {
-            String inMessageId = traceCtx().threadLocalState().messageId;
-            if (inMessageId != null && inMessageId.equals(id))
-            {
-                traceCtx().processMessageEnd();
-            }
-        }
         sendOneWay(message, id, to);
     }
 
@@ -566,17 +558,14 @@ public final class MessagingService implements MessagingServiceMBean
      */
     public void sendOneWay(MessageOut message, String id, InetAddress to)
     {
-        if (logger.isTraceEnabled())
-            logger.trace(FBUtilities.getBroadcastAddress() + " sending " + message.verb + " to " + id + "@" + to);
 
         if (to.equals(FBUtilities.getBroadcastAddress()))
             logger.debug("Message-to-self {} going over MessagingService", message);
 
         if (TraceSessionContext.isTracing())
         {
-            byte[] tracePayload = traceCtx().getSessionContextHeader();
-            if (tracePayload != null)
-                message = message.withParameter(TRACE_SESSION_CONTEXT_HEADER, tracePayload);
+            message = traceCtx().traceMessageDeparture(message, id,
+                    FBUtilities.getBroadcastAddress() + " sending " + message.verb + " to " + id + "@" + to);
         }
 
         // message sinks are a testing hook
@@ -695,10 +684,7 @@ public final class MessagingService implements MessagingServiceMBean
     {
         // setup tracing (if the message requests it)
         if (traceCtx() != null)
-            traceCtx().processMessageStart(message, id);
-
-        if (logger.isTraceEnabled())
-            logger.trace(FBUtilities.getBroadcastAddress() + " received " + message.verb
+            traceCtx().traceMessageArrival(message, id, FBUtilities.getBroadcastAddress() + " received " + message.verb
                     + " from " + id + "@" + message.from);
 
         message = SinkManager.processInboundMessage(message, id);
