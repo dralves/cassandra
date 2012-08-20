@@ -26,25 +26,21 @@ import java.util.concurrent.SynchronousQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 
+import org.apache.cassandra.concurrent.DebuggableThreadPoolExecutor;
+import org.apache.cassandra.concurrent.NamedThreadFactory;
+import org.apache.cassandra.service.CassandraDaemon;
+import org.apache.thrift.server.TNonblockingServer;
+import org.apache.thrift.server.TThreadPoolServer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
-import org.apache.cassandra.concurrent.DebuggableThreadPoolExecutor;
 import org.apache.cassandra.concurrent.JMXEnabledThreadPoolExecutor;
-import org.apache.cassandra.concurrent.NamedThreadFactory;
 import org.apache.cassandra.config.DatabaseDescriptor;
-import org.apache.cassandra.config.EncryptionOptions;
-import org.apache.cassandra.config.EncryptionOptions.ClientServerEncription;
-import org.apache.cassandra.service.CassandraDaemon;
 import org.apache.cassandra.service.ClientState;
 import org.apache.thrift.protocol.TProtocolFactory;
-import org.apache.thrift.server.TNonblockingServer;
 import org.apache.thrift.server.TServer;
-import org.apache.thrift.server.TThreadPoolServer;
 import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TNonblockingServerTransport;
-import org.apache.thrift.transport.TSSLTransportFactory;
-import org.apache.thrift.transport.TServerSocket;
 import org.apache.thrift.transport.TServerTransport;
 import org.apache.thrift.transport.TTransportException;
 import org.apache.thrift.transport.TTransportFactory;
@@ -60,20 +56,18 @@ public class ThriftServer implements CassandraDaemon.Server
     private final InetAddress address;
     private final int port;
     private volatile ThriftServerThread server;
-    private final EncryptionOptions encryptionOptions;
 
-    public ThriftServer(InetAddress address, int port, EncryptionOptions encryptionOptions)
+    public ThriftServer(InetAddress address, int port)
     {
         this.address = address;
         this.port = port;
-        this.encryptionOptions = encryptionOptions;
     }
 
     public void start()
     {
         if (server == null)
         {
-            server = new ThriftServerThread(address, port, encryptionOptions);
+            server = new ThriftServerThread(address, port);
             server.start();
         }
     }
@@ -108,14 +102,14 @@ public class ThriftServer implements CassandraDaemon.Server
     {
         private TServer serverEngine;
 
-        public ThriftServerThread(InetAddress listenAddr, int listenPort, EncryptionOptions encryptionOptions)
+        public ThriftServerThread(InetAddress listenAddr, int listenPort)
         {
             // now we start listening for clients
             final CassandraServer cassandraServer = new CassandraServer();
             Cassandra.Processor processor = new Cassandra.Processor(cassandraServer);
 
             // Transport
-            logger.info(String.format("Binding thrift service to %s:%s [ssl: %s]", listenAddr, listenPort, encryptionOptions.client_server_encryption.name()));
+            logger.info(String.format("Binding thrift service to %s:%s", listenAddr, listenPort));
 
             // Protocol factory
             TProtocolFactory tProtocolFactory = new TBinaryProtocol.Factory(true, true, DatabaseDescriptor.getThriftMaxMessageLength());
@@ -128,21 +122,13 @@ public class ThriftServer implements CassandraDaemon.Server
 
             if (DatabaseDescriptor.getRpcServerType().equalsIgnoreCase(SYNC))
             {
-                TServerTransport serverTransport = null;
+                TServerTransport serverTransport;
                 try
                 {
-                    if (encryptionOptions.client_server_encryption == ClientServerEncription.on)
-                    {
-                        TServerSocket trans = TSSLTransportFactory.getServerSocket(10);
-                        
-                    }
-                    else
-                    {
-                        serverTransport = new TCustomServerSocket(new InetSocketAddress(listenAddr, listenPort),
-                                DatabaseDescriptor.getRpcKeepAlive(),
-                                DatabaseDescriptor.getRpcSendBufferSize(),
-                                DatabaseDescriptor.getRpcRecvBufferSize());
-                    }
+                    serverTransport = new TCustomServerSocket(new InetSocketAddress(listenAddr, listenPort),
+                                                              DatabaseDescriptor.getRpcKeepAlive(),
+                                                              DatabaseDescriptor.getRpcSendBufferSize(),
+                                                              DatabaseDescriptor.getRpcRecvBufferSize());
                 }
                 catch (TTransportException e)
                 {
@@ -170,7 +156,6 @@ public class ThriftServer implements CassandraDaemon.Server
                                                                              DatabaseDescriptor.getRpcKeepAlive(),
                                                                              DatabaseDescriptor.getRpcSendBufferSize(),
                                                                              DatabaseDescriptor.getRpcRecvBufferSize());
-                    
                 }
                 catch (TTransportException e)
                 {
