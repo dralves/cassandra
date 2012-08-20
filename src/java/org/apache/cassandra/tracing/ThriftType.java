@@ -19,19 +19,21 @@ package org.apache.cassandra.tracing;
 
 import java.nio.ByteBuffer;
 
+import org.apache.cassandra.db.marshal.TypeParser;
+import org.apache.cassandra.db.marshal.MarshalException;
+import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.config.ConfigurationException;
+
 import com.google.common.base.Throwables;
 
-import org.apache.cassandra.config.ConfigurationException;
-import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.db.marshal.MarshalException;
-import org.apache.cassandra.db.marshal.TypeParser;
 import org.apache.thrift.TBase;
 import org.apache.thrift.TDeserializer;
 import org.apache.thrift.TException;
 import org.apache.thrift.TSerializer;
 
 /**
- * Thrift type to be able to serialize and deserialize thrift objects.
+ * A type for thrift objects that is able to seemslessly serialize and deserialize them as any other type. As other
+ * types this type can also be built from a string.
  */
 public class ThriftType extends AbstractType<TBase<?, ?>>
 {
