@@ -7,8 +7,13 @@ import java.util.UUID;
 
 import com.google.common.base.Stopwatch;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 public class TraceSessionContextThreadLocalState
 {
+    public static final Logger logger = LoggerFactory.getLogger(TraceSessionContextThreadLocalState.class);
+
     public final UUID sessionId;
     public final InetAddress origin;
     public final InetAddress source;
@@ -33,7 +38,8 @@ public class TraceSessionContextThreadLocalState
         checkNotNull(coordinator);
         checkNotNull(source);
         checkNotNull(sessionId);
-
+        logger.info("Created new tracing thread local state for session " + sessionId + " in " + source
+                + " that started in " + coordinator + ", messageId: " + messageId);
         this.origin = coordinator;
         this.source = source;
         this.sessionId = sessionId;

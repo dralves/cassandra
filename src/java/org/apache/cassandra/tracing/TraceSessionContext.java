@@ -35,7 +35,10 @@ import java.util.concurrent.RejectedExecutionException;
 
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
-import org.apache.cassandra.config.*;
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ConfigurationException;
+import org.apache.cassandra.config.KSMetaData;
+import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql3.ColumnNameBuilder;
 import org.apache.cassandra.cql3.QueryProcessor;
 import org.apache.cassandra.cql3.statements.CreateColumnFamilyStatement;
@@ -387,13 +390,10 @@ public class TraceSessionContext
     private void log(UUID key, final ColumnFamily family, String message, Throwable t)
     {
         if (t != null)
-        {
-            logger.error("Error while tracing key: " + key + " Msg: " + message, t);
-        }
+            logger.error("Error while tracing:  Msg: " + message + " Tracing CF: " + family, t);
         else
-        {
-            logger.error("Error while tracing key: " + key + " Msg: " + message);
-        }
+            logger.error("Error while tracing:  Msg: " + message + " Tracing CF: " + family);
+
     }
 
     public String logMessagePrefix()
@@ -478,7 +478,7 @@ public class TraceSessionContext
         }
         catch (RejectedExecutionException e)
         {
-            log(key, family, "trace storage rejected. reverting to logging.");
+            log(key, family, "trace storage rejected. Reverting to logging.");
         }
     }
 

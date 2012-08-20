@@ -830,6 +830,7 @@ public class CassandraServer implements Cassandra.Iface
 
         if (startSessionIfRequested())
         {
+
             traceCtx().trace(new TraceEventBuilder()
                     .name("get_range_slices")
                     .type(Type.SESSION_START)

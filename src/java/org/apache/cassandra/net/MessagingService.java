@@ -39,6 +39,7 @@ import javax.management.ObjectName;
 
 import com.google.common.base.Function;
 import com.google.common.collect.Lists;
+import org.apache.cassandra.tracing.TraceSessionContext;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -562,8 +563,8 @@ public final class MessagingService implements MessagingServiceMBean
 
         if (to.equals(FBUtilities.getBroadcastAddress()))
             logger.debug("Message-to-self {} going over MessagingService", message);
-        
-        if (false)
+
+        if (TraceSessionContext.isTracing())
         {
             byte[] tracePayload = traceCtx().getSessionContextHeader();
             if (tracePayload != null)

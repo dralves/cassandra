@@ -2140,7 +2140,7 @@ public class CliClient
         }
     }
 
-    private void executeExplainTraceSession(String text) throws TException, UnavailableException, TimedOutException,
+    private void executeExplainTraceSession(String sessionIdAsString) throws TException, UnavailableException, TimedOutException,
             CharacterCodingException
     {
 
@@ -2151,7 +2151,7 @@ public class CliClient
         {
             thriftClient.set_keyspace(TraceSessionContext.TRACE_KEYSPACE);
 
-            UUID sessionId = UUID.fromString(text);
+            UUID sessionId = UUID.fromString(sessionIdAsString);
             ByteBuffer sessionIdAsBB = TimeUUIDType.instance.decompose(sessionId);
 
             ColumnParent events = new ColumnParent(TraceSessionContext.EVENTS_TABLE);
@@ -2166,9 +2166,14 @@ public class CliClient
 
             List<TraceEvent> traceEvents = TraceEventBuilder.fromThrift(sessionId, eventCols);
 
-            for (TraceEvent event : traceEvents)
+            if (traceEvents != null && !traceEvents.isEmpty())
             {
-                System.out.println(event);
+                TracePrettyPrinter.printSingleSessionTrace(sessionId, traceEvents, System.out);
+            }
+            else
+            {
+                System.out.println("No session was found for id: " + sessionId);
+                return;
             }
         }
         catch (InvalidRequestException e)

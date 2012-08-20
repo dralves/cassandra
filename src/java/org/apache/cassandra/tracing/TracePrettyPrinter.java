@@ -24,7 +24,8 @@ public class TracePrettyPrinter
         ConsistencyLevel cl = null;
         if (clValue != null)
         {
-            cl = ConsistencyLevel.valueOf(first.getFromPayload("consistency_level") + "");
+            int consistencyLevel = first.getFromPayload("consistency_level");
+            cl = ConsistencyLevel.findByValue(consistencyLevel);
         }
         InetAddress coordinator = first.coordinator();
         String eventName = first.name();
@@ -41,6 +42,8 @@ public class TracePrettyPrinter
                     }
                 });
 
+        Map<InetAddress, Collection<TraceEvent>> eventsPerNodeAsMap = eventsPerNode.asMap();
+
         for (TraceEvent event : events)
         {
             last = event;
@@ -49,9 +52,10 @@ public class TracePrettyPrinter
 
         long totalDuration = last.duration();
 
+        out.println();
         out.println("Session Summary: " + sessionId);
-        out.println("Total interacting nodes: " + eventsPerNode.keys().size() + " {" + eventsPerNode.keys() + "}");
-        out.println("Total duration: " + totalDuration);
+        out.println("Total interacting nodes: " + eventsPerNodeAsMap.size() + " {" + eventsPerNodeAsMap.keySet() + "}");
+        out.println("Total duration: " + totalDuration + " nano sec");
         out.println("Coordinator: " + coordinator);
         out.println("Replicas: " + Sets.difference(eventsPerNode.keySet(), ImmutableSet.of(coordinator)));
         out.println("Request: " + eventName);
@@ -74,14 +78,11 @@ public class TracePrettyPrinter
             }
         }.sortedCopy(eventsPerNode.asMap().entrySet());
 
+        out.println("Request Timeline:");
         for (Map.Entry<InetAddress, Collection<TraceEvent>> entries : orderedPerDuration)
         {
-            for (TraceEvent event : entries.getValue())
-            {
-                System.out.println(event);
-            }
-        }
 
+        }
     }
 
     private static final String LINE = "|----------------------------------------------------------------------------" +
@@ -93,13 +94,29 @@ public class TracePrettyPrinter
 
         DescriptiveStatistics latencySstats = new DescriptiveStatistics();
         int totalEvents = 0;
+        UUID minSessionId = null;
+        UUID maxSessionId = null;
+        long min = Long.MAX_VALUE;
+        long max = 0;
         for (List<TraceEvent> events : sessions.values())
         {
             TraceEvent first = events.get(0);
             TraceEvent last = events.get(events.size() - 1);
-            latencySstats.addValue(TimeUnit.MILLISECONDS.convert(last.duration() - first.duration(),
-                    TimeUnit.NANOSECONDS));
+            long duration = TimeUnit.MILLISECONDS.convert(last.duration() - first.duration(),
+                    TimeUnit.NANOSECONDS);
+            if (duration < min)
+            {
+                minSessionId = first.sessionId();
+                min = duration;
+            }
+            if (duration > max)
+            {
+                maxSessionId = first.sessionId();
+                max = duration;
+            }
+            latencySstats.addValue(duration);
             totalEvents += events.size();
+
         }
 
         out.println("Summary for sessions of request: " + requestName);
@@ -111,6 +128,8 @@ public class TracePrettyPrinter
         printStatsLine(out, "Latency", latencySstats, "msec");
         printRequestSpecificInfo(requestName, sessions, out);
         out.println();
+        out.println("Quickest Request sessionId: " + minSessionId);
+        out.println("Slowest  Request sessionId: " + maxSessionId);
         out.println();
     }
 
@@ -158,13 +177,13 @@ public class TracePrettyPrinter
                 return null;
             }
         });
-        printStatsLine(out, "Batch Rows", keysStats, "num/req");
-        printStatsLine(out, "Mutations", mutationStats, "num/req");
-        printStatsLine(out, "Deletions", deletionStats, "num/req");
-        printStatsLine(out, "Columns", columnStats, "num/req");
-        printStatsLine(out, "Counters", counterStats, "num/req");
-        printStatsLine(out, "Super Col.", superColumnStats, "num/req");
-        printStatsLine(out, "Written Bytes", writtenSizeStats, "num/req");
+        printStatsLine(out, "Batch Rows", keysStats, "amount/req");
+        printStatsLine(out, "Mutations", mutationStats, "amount/req");
+        printStatsLine(out, "Deletions", deletionStats, "amount/req");
+        printStatsLine(out, "Columns", columnStats, "amount/req");
+        printStatsLine(out, "Counters", counterStats, "amount/req");
+        printStatsLine(out, "Super Col.", superColumnStats, "amount/req");
+        printStatsLine(out, "Written Bytes", writtenSizeStats, "amount/req");
     }
 
     private static String formatNumber(double number)
@@ -185,5 +204,4 @@ public class TracePrettyPrinter
             function.apply(event);
         }
     }
-
 }
