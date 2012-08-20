@@ -384,7 +384,12 @@ public class TraceEventBuilder
 
     public <T> TraceEventBuilder addPayload(String name, AbstractType<T> componentsType, List<T> componentList)
     {
-        // TODO finish serializing lists
+        if (isTracing())
+        {
+            ListType<T> listType = ListType.getInstance(componentsType);
+            this.payloadTypes.put(name, listType);
+            this.payload.put(name, listType.decompose(componentList));
+        }
         return this;
     }
 
