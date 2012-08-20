@@ -20,7 +20,6 @@ package org.apache.cassandra.config;
 public class EncryptionOptions
 {
     public InternodeEncryption internode_encryption = InternodeEncryption.none;
-    public ClientServerEncription client_server_encryption = ClientServerEncription.off;
     public String keystore = "conf/.keystore";
     public String keystore_password = "cassandra";
     public String truststore = "conf/.truststore";
@@ -37,11 +36,5 @@ public class EncryptionOptions
         none,
         dc,
         rack
-    }
-    
-    public static enum ClientServerEncription
-    {
-        on,
-        off
     }
 }
