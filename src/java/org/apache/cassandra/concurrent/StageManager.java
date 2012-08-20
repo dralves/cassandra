@@ -17,6 +17,8 @@
  */
 package org.apache.cassandra.concurrent;
 
+import com.google.common.annotations.VisibleForTesting;
+
 import java.util.EnumMap;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -106,4 +108,5 @@ public class StageManager
             StageManager.stages.get(stage).shutdownNow();
         }
     }
+
 }

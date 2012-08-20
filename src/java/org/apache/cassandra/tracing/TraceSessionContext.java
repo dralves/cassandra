@@ -456,7 +456,7 @@ public class TraceSessionContext
      */
     public void traceMessageArrival(final MessageIn<?> message, String id, String description)
     {
-        final byte[] queryContextBytes = (byte[]) message.parameters
+        final byte[] queryContextBytes = message.parameters
                 .get(TraceSessionContext.TRACE_SESSION_CONTEXT_HEADER);
 
         // if the message has no session context header don't do tracing

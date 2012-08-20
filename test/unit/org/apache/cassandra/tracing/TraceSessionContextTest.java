@@ -31,12 +31,14 @@ import java.nio.ByteBuffer;
 import java.nio.charset.CharacterCodingException;
 import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.*;
+import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicReference;
 
 import org.apache.cassandra.SchemaLoader;
 import org.apache.cassandra.Util;
 import org.apache.cassandra.concurrent.DebuggableThreadPoolExecutor;
+import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.Table;
@@ -45,7 +47,6 @@ import org.apache.cassandra.db.filter.QueryPath;
 import org.apache.cassandra.db.marshal.LongType;
 import org.apache.cassandra.db.marshal.TimeUUIDType;
 import org.apache.cassandra.net.IVerbHandler;
-import org.apache.cassandra.net.MessageDeliveryTask;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.net.MessagingService;
 import org.apache.cassandra.net.MessagingService.Verb;
@@ -169,7 +170,7 @@ public class TraceSessionContextTest extends SchemaLoader
 
         // The DebuggableTPE that will execute the task will insert a trace event AFTER
         // it returns so we need to wait a bit.
-        Thread.sleep(500);
+        Thread.sleep(200);
 
         ColumnFamily family = Table
                 .open(TRACE_KEYSPACE)
@@ -180,14 +181,6 @@ public class TraceSessionContextTest extends SchemaLoader
                                         EVENTS_TABLE)));
 
         List<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
-
-        // we should have 6 events
-        // "getColumnFamily" from testNewSession
-        // custom trace from testNewLocalTraceEvent
-        // "getColumnFamily" from testNewLocalTraceEvent
-        // stage start trace event from testContextTLStateAcompaniesToAnotherThread
-        // custom event from testContextTLStateAcompaniesToAnotherThread
-        // stage finish event from testContextTLStateAcompaniesToAnotherThread
 
         assertSame(7, traceEvents.size());
 
@@ -210,14 +203,15 @@ public class TraceSessionContextTest extends SchemaLoader
             InterruptedException, ExecutionException, CharacterCodingException
     {
 
-        // use a different TPE so that context is not automatically carried over
-        ThreadPoolExecutor poolExecutor = new ThreadPoolExecutor(1, 1, 1, TimeUnit.SECONDS,
-                new LinkedBlockingQueue<Runnable>());
+        MessagingService.verbStages.put(Verb.UNUSED_1, Stage.MUTATION);
 
         MessageIn<Void> messageIn = MessageIn.create(FBUtilities.getLocalAddress(), null,
                 ImmutableMap.<String, byte[]>
                         of(TraceSessionContext.TRACE_SESSION_CONTEXT_HEADER, traceCtx().getSessionContextHeader()),
                 Verb.UNUSED_1, 1);
+
+        // make sure we're not tracing when the message is sent (to emulate a receiving host)
+        traceCtx().reset();
 
         final AtomicReference<UUID> reference = new AtomicReference<UUID>();
 
@@ -238,7 +232,10 @@ public class TraceSessionContextTest extends SchemaLoader
                                 .build()));
             }
         });
-        poolExecutor.submit(new MessageDeliveryTask(messageIn, "id")).get();
+
+        MessagingService.instance().receive(messageIn, "test_message");
+        // message receiving is async so we need to sleep
+        Thread.sleep(200);
 
         assertNotNull(reference.get());
 
@@ -253,9 +250,9 @@ public class TraceSessionContextTest extends SchemaLoader
         // Because the MessageDeliveryTask does not run on a DebuggableTPE no automated stage tracing
         // events were inserted, we just have 4 more than after the previous method
         List<TraceEvent> traceEvents = TraceEventBuilder.fromColumnFamily(sessionId, family);
-        assertSame(9, traceEvents.size());
+        assertSame(12, traceEvents.size());
 
-        TraceEvent remoteEvent = Iterables.get(traceEvents, 8);
+        TraceEvent remoteEvent = Iterables.get(traceEvents, 10);
         assertEquals("remote trace event", remoteEvent.name());
         assertEquals(9123L, remoteEvent.duration());
         assertEquals(3219L, remoteEvent.timestamp());
