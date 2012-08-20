@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit;
 
 import org.apache.cassandra.thrift.ConsistencyLevel;
 
+import com.google.common.base.Function;
 import com.google.common.base.Supplier;
 import com.google.common.collect.*;
 
@@ -83,6 +84,9 @@ public class TracePrettyPrinter
 
     }
 
+    private static final String LINE = "|----------------------------------------------------------------------------" +
+            "-----------------------|";
+
     public static void printMultiSessionTraceForRequestType(String requestName, Map<UUID, List<TraceEvent>> sessions,
             PrintStream out)
     {
@@ -93,29 +97,93 @@ public class TracePrettyPrinter
         {
             TraceEvent first = events.get(0);
             TraceEvent last = events.get(events.size() - 1);
-            latencySstats.addValue(last.duration() - first.duration());
+            latencySstats.addValue(TimeUnit.MILLISECONDS.convert(last.duration() - first.duration(),
+                    TimeUnit.NANOSECONDS));
             totalEvents += events.size();
         }
 
         out.println("Summary for sessions of request: " + requestName);
         out.println("Total Sessions: " + sessions.values().size());
         out.println("Total Events: " + totalEvents);
-        out.println("            ==================================================================");
-        out.println("            |    Avg.    |   StdDev.  |   Max.     |    Min.    |     99%    |");
-        out.println("==============================================================================");
-        out.println("| Latency   | " + nanosToFormattedMillis(latencySstats.getMean()) + " | "
-                + nanosToFormattedMillis(latencySstats.getStandardDeviation()) + " | "
-                + nanosToFormattedMillis(latencySstats.getMax()) + " | "
-                + nanosToFormattedMillis(latencySstats.getMin()) + " | "
-                + nanosToFormattedMillis(latencySstats.getPercentile(99))
-                + " | ");
-        out.println("|----------------------------------------------------------------------------|");
-
+        out.println("                       ==============================================================================");
+        out.println("                       |    Avg.    |   StdDev.  |   Max.     |    Min.    |     99%   |     Unit   |");
+        out.println("=====================================================================================================");
+        printStatsLine(out, "Latency", latencySstats, "msec");
+        printRequestSpecificInfo(requestName, sessions, out);
+        out.println();
+        out.println();
     }
 
-    private static String nanosToFormattedMillis(double value)
+    private static void printRequestSpecificInfo(String requestName, Map<UUID, List<TraceEvent>> traceEvents,
+            PrintStream out)
     {
-        long val = Math.round(value);
-        return String.format("%10s", TimeUnit.MILLISECONDS.convert(val, TimeUnit.NANOSECONDS));
+        if (requestName.equals("batch_mutate"))
+            printBatchMutateInfo(traceEvents, out);
     }
+
+    private static void printStatsLine(PrintStream out, String name, DescriptiveStatistics stats, String unit)
+    {
+        out.println("| " + formatString(name) + " | " + formatNumber(stats.getMean()) + " | "
+                + formatNumber(stats.getStandardDeviation()) + " | " + formatNumber(stats.getMax()) + " | "
+                + formatNumber(stats.getMin()) + " | " + formatNumber(stats.getPercentile(99.0)) + "| "
+                + String.format("%10s", unit) + " |");
+        out.println(LINE);
+    }
+
+    private static void printBatchMutateInfo(Map<UUID, List<TraceEvent>> traceEvents, PrintStream out)
+    {
+        final DescriptiveStatistics keysStats = new DescriptiveStatistics();
+        final DescriptiveStatistics mutationStats = new DescriptiveStatistics();
+        final DescriptiveStatistics deletionStats = new DescriptiveStatistics();
+        final DescriptiveStatistics columnStats = new DescriptiveStatistics();
+        final DescriptiveStatistics counterStats = new DescriptiveStatistics();
+        final DescriptiveStatistics superColumnStats = new DescriptiveStatistics();
+        final DescriptiveStatistics writtenSizeStats = new DescriptiveStatistics();
+        applyToAll(traceEvents, new Function<TraceEvent, Void>()
+        {
+
+            @Override
+            public Void apply(TraceEvent event)
+            {
+                if (event.type() == TraceEvent.Type.SESSION_START)
+                {
+                    keysStats.addValue((Integer) event.getFromPayload("total_keys"));
+                    mutationStats.addValue((Integer) event.getFromPayload("total_mutations"));
+                    deletionStats.addValue((Integer) event.getFromPayload("total_deletions"));
+                    columnStats.addValue((Integer) event.getFromPayload("total_columns"));
+                    counterStats.addValue((Integer) event.getFromPayload("total_counters"));
+                    superColumnStats.addValue((Integer) event.getFromPayload("total_super_columns"));
+                    writtenSizeStats.addValue((Long) event.getFromPayload("total_written_size"));
+                }
+                return null;
+            }
+        });
+        printStatsLine(out, "Batch Rows", keysStats, "num/req");
+        printStatsLine(out, "Mutations", mutationStats, "num/req");
+        printStatsLine(out, "Deletions", deletionStats, "num/req");
+        printStatsLine(out, "Columns", columnStats, "num/req");
+        printStatsLine(out, "Counters", counterStats, "num/req");
+        printStatsLine(out, "Super Col.", superColumnStats, "num/req");
+        printStatsLine(out, "Written Bytes", writtenSizeStats, "num/req");
+    }
+
+    private static String formatNumber(double number)
+    {
+        return String.format("%10.2f", number);
+    }
+
+    private static String formatString(String name)
+    {
+        return String.format("%-20s", name);
+    }
+
+    private static void applyToAll(Map<UUID, List<TraceEvent>> traceEvents, Function<TraceEvent, ?> function)
+    {
+        Iterable<TraceEvent> all = Iterables.concat(traceEvents.values());
+        for (TraceEvent event : all)
+        {
+            function.apply(event);
+        }
+    }
+
 }

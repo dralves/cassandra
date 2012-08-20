@@ -37,9 +37,7 @@ import java.util.concurrent.TimeoutException;
 import java.util.zip.DataFormatException;
 import java.util.zip.Inflater;
 
-import com.google.common.base.Predicates;
-import com.google.common.collect.Maps;
-
+import org.apache.cassandra.tracing.TraceEvent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -89,7 +87,6 @@ import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.tracing.TraceEvent.Type;
 import org.apache.cassandra.tracing.TraceEventBuilder;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.thrift.TBase;
 import org.apache.thrift.TException;
 
 public class CassandraServer implements Cassandra.Iface
@@ -739,14 +736,7 @@ public class CassandraServer implements Cassandra.Iface
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
         if (startSessionIfRequested())
-        {
-            traceCtx().trace(new TraceEventBuilder()
-                    .name("batch_mutate")
-                    .type(Type.SESSION_START)
-                    .addPayload("num_keys", mutation_map.keySet().size())
-                    .addPayload("consistency_level", consistency_level)
-                    .build());
-        }
+            traceBatchMutate(mutation_map, consistency_level);
 
         try
         {
@@ -1645,6 +1635,77 @@ public class CassandraServer implements Cassandra.Iface
             return true;
         }
         return false;
+    }
+    
+    private void traceBatchMutate(Map<ByteBuffer, Map<String, List<Mutation>>> mutation_map,
+                                        ConsistencyLevel consistency_level)
+    {
+        int numKeys = 0;
+        int totalMutations = 0;
+        int totalDeletions = 0;
+        int totalColumns = 0;
+        int totalCounters = 0;
+        int totalSuperColumns = 0;
+        long totalWrittenSize = 0;
+        for (Map.Entry<ByteBuffer, Map<String, List<Mutation>>> entry : mutation_map.entrySet())
+        {
+            numKeys++;
+            for (List<Mutation> mutations : entry.getValue().values())
+            {
+                for (Mutation mutation : mutations)
+                {
+                    totalMutations++;
+                    if (!mutation.isSetDeletion())
+                    {
+                        ColumnOrSuperColumn column = mutation.getColumn_or_supercolumn();
+                        if (column.isSetCounter_column())
+                        {
+                            totalCounters++;
+                            // sizeof a long
+                            totalWrittenSize += 8;
+                        }
+                        else if (column.isSetCounter_super_column())
+                        {
+                            totalSuperColumns++;
+                            for (CounterColumn subColumn : column.getCounter_super_column().columns)
+                            {
+                                totalCounters++;
+                                // sizeof a long
+                                totalWrittenSize += 8;
+                            }
+                        }
+                        else if (column.isSetSuper_column())
+                        {
+                            totalSuperColumns++;
+                            for (Column subColumn : column.getSuper_column().columns)
+                            {
+                                totalColumns++;
+                                totalWrittenSize += subColumn.value.remaining();
+                            }
+                        }
+                        else
+                        {
+                            totalColumns++;
+                            totalWrittenSize += column.column.value.remaining();
+                        }
+                    }
+                    else
+                        totalDeletions++;
+                }
+            }
+        }
+        traceCtx().trace(new TraceEventBuilder()
+                .name("batch_mutate")
+                .type(Type.SESSION_START)
+                .addPayload("total_keys", numKeys)
+                .addPayload("total_mutations", totalMutations)
+                .addPayload("total_deletions", totalDeletions)
+                .addPayload("total_columns", totalColumns)
+                .addPayload("total_counters", totalCounters)
+                .addPayload("total_super_columns", totalSuperColumns)
+                .addPayload("total_written_size", totalWrittenSize)
+                .addPayload("consistency_level", consistency_level)
+                .build());
     }
 
     // main method moved to CassandraDaemon
