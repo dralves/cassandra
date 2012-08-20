@@ -48,9 +48,6 @@ public class MessageDeliveryTask implements Runnable
             return;
         }
 
-        // setup tracing (if the message requests it)
-        if (traceCtx() != null)
-            traceCtx().update(message, id);
 
         IVerbHandler verbHandler = MessagingService.instance().getVerbHandler(verb);
         if (verbHandler == null)
@@ -59,14 +56,6 @@ public class MessageDeliveryTask implements Runnable
             return;
         }
 
-        try
-        {
-            verbHandler.doVerb(message, id);
-        }
-        finally
-        {
-            if (isTracing())
-                traceCtx().reset();
-        }
+        verbHandler.doVerb(message, id);
     }
 }

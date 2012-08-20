@@ -547,6 +547,14 @@ public final class MessagingService implements MessagingServiceMBean
 
     public void sendReply(MessageOut message, String id, InetAddress to)
     {
+        if (isTracing())
+        {
+            String inMessageId = traceCtx().threadLocalState().messageId;
+            if (inMessageId != null && inMessageId.equals(id))
+            {
+                traceCtx().processMessageEnd();
+            }
+        }
         sendOneWay(message, id, to);
     }
 
@@ -685,18 +693,31 @@ public final class MessagingService implements MessagingServiceMBean
 
     public void receive(MessageIn message, String id)
     {
+        // setup tracing (if the message requests it)
+        if (traceCtx() != null)
+            traceCtx().processMessageStart(message, id);
+
         if (logger.isTraceEnabled())
             logger.trace(FBUtilities.getBroadcastAddress() + " received " + message.verb
-                          + " from " + id + "@" + message.from);
+                    + " from " + id + "@" + message.from);
 
         message = SinkManager.processInboundMessage(message, id);
         if (message == null)
             return;
 
-        Runnable runnable = new MessageDeliveryTask(message, id);
+        final Runnable runnable = new MessageDeliveryTask(message, id);
         ExecutorService stage = StageManager.getStage(message.getMessageType());
         assert stage != null : "No stage for message type " + message.verb;
-        stage.execute(runnable);
+
+        try
+        {
+            stage.execute(runnable);
+        }
+        finally
+        {
+            if (isTracing())
+                traceCtx().reset();
+        }
     }
 
     public void setCallbackForTests(String messageId, CallbackInfo callback)

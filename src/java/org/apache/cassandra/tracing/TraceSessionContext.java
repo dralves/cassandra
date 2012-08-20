@@ -396,17 +396,9 @@ public class TraceSessionContext
 
     }
 
-    public String logMessagePrefix()
+    public void processMessageEnd()
     {
-        final TraceSessionContextThreadLocalState tls = sessionContextThreadLocalState.get();
-        if (tls == null)
-            return null;
-
-        if (tls.messageId == null)
-        {
-            return String.format("query %d@%s - ", tls.sessionId, tls.origin);
-        }
-        return String.format("query %d@%s message %s - ", tls.sessionId, tls.origin, tls.messageId);
+        trace(TraceEvent.Type.PROCESS_MESSAGE_END.builder().build());
     }
 
     public void reset()
@@ -478,7 +470,7 @@ public class TraceSessionContext
         }
         catch (RejectedExecutionException e)
         {
-            log(key, family, "trace storage rejected. Reverting to logging.");
+            log(key, family, "trace storage rejected (queue is maxed out). Reverting to logging.");
         }
     }
 
@@ -514,7 +506,7 @@ public class TraceSessionContext
      * @param message
      *            The internode message
      */
-    public void update(final MessageIn<?> message, String id)
+    public void processMessageStart(final MessageIn<?> message, String id)
     {
         final byte[] queryContextBytes = (byte[]) message.parameters
                 .get(TraceSessionContext.TRACE_SESSION_CONTEXT_HEADER);
@@ -537,6 +529,8 @@ public class TraceSessionContext
         }
         sessionContextThreadLocalState.set(new TraceSessionContextThreadLocalState(message.from, localAddress,
                 TimeUUIDType.instance.compose(ByteBuffer.wrap(sessionId)), id));
+
+        trace(TraceEvent.Type.PROCESS_MESSAGE_START.builder().build());
     }
 
     /**
