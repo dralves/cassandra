@@ -24,13 +24,18 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import org.apache.cassandra.auth.IAuthenticator;
 import org.apache.cassandra.thrift.*;
 import org.apache.hadoop.conf.Configuration;
 import org.apache.hadoop.mapreduce.*;
 import org.apache.thrift.TException;
-import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
+import org.apache.thrift.transport.TTransport;
+
+import javax.security.auth.login.LoginException;
 
 /**
  * The <code>ColumnFamilyOutputFormat</code> acts as a Hadoop-specific
@@ -58,6 +63,8 @@ public class ColumnFamilyOutputFormat extends OutputFormat<ByteBuffer,List<Mutat
 {
     public static final String BATCH_THRESHOLD = "mapreduce.output.columnfamilyoutputformat.batch.threshold";
     public static final String QUEUE_SIZE = "mapreduce.output.columnfamilyoutputformat.queue.size";
+    private static final Logger logger = LoggerFactory.getLogger(ColumnFamilyOutputFormat.class);
+
 
     /**
      * Check for validity of the output-specification for the job.
@@ -141,11 +148,12 @@ public class ColumnFamilyOutputFormat extends OutputFormat<ByteBuffer,List<Mutat
      * @throws AuthorizationException
      */
     public static Cassandra.Client createAuthenticatedClient(TSocket socket, Configuration conf)
-    throws InvalidRequestException, TException, AuthenticationException, AuthorizationException
+            throws InvalidRequestException, TException, AuthenticationException, AuthorizationException, LoginException
     {
-        TBinaryProtocol binaryProtocol = new TBinaryProtocol(new TFramedTransport(socket));
+        logger.debug("Creating authenticated client for CF output format");
+        TTransport transport = ConfigHelper.getOutputTransportFactory(conf).openTransport(socket);
+        TBinaryProtocol binaryProtocol = new TBinaryProtocol(transport);
         Cassandra.Client client = new Cassandra.Client(binaryProtocol);
-        socket.open();
         client.set_keyspace(ConfigHelper.getOutputKeyspace(conf));
         if (ConfigHelper.getOutputKeyspaceUserName(conf) != null)
         {
@@ -155,6 +163,7 @@ public class ColumnFamilyOutputFormat extends OutputFormat<ByteBuffer,List<Mutat
             AuthenticationRequest authRequest = new AuthenticationRequest(creds);
             client.login(authRequest);
         }
+        logger.debug("Authenticated client for CF output format created successfully");
         return client;
     }
 
