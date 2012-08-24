@@ -29,6 +29,7 @@ import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
 
+import com.google.common.collect.ImmutableMap;
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
 import org.apache.cassandra.config.CFMetaData;
@@ -43,6 +44,7 @@ import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.db.ExpiringColumn;
 import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.marshal.TimeUUIDType;
+import org.apache.cassandra.locator.SimpleStrategy;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.StorageProxy;
@@ -163,7 +165,9 @@ public class Tracing
         {
             try
             {
-                MigrationManager.announceNewKeyspace(KSMetaData.traceKeyspace());
+                KSMetaData ks = new KSMetaData(Tracing.TRACE_KS, SimpleStrategy.class, ImmutableMap.of("replication_factor", "1"), true);
+                MigrationManager.announceNewKeyspace(ks);
+                MigrationManager.announceNewKeyspace(ks);
                 Thread.sleep(1000);
             }
             catch (Exception e)
