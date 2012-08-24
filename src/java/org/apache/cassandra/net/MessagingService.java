@@ -695,7 +695,8 @@ public final class MessagingService implements MessagingServiceMBean
 
     public void receive(MessageIn message, String id)
     {
-        Tracing.instance().initializeFromMessage(message);
+        if (Tracing.instance() != null)
+            Tracing.instance().initializeFromMessage(message);
 
         if (logger.isTraceEnabled() || Tracing.isTracing())
             logger.trace(FBUtilities.getBroadcastAddress() + " received " + message.verb + " from " + id + "@" + message.from);

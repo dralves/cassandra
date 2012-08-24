@@ -513,7 +513,7 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         HintedHandOffManager.instance.start();
 
         // Start the tracing session context
-        TraceSessionContext.initialize();
+        Tracing.initialize();
 
         // We bootstrap if we haven't successfully bootstrapped before, as long as we are not a seed.
         // If we are a seed, or if the user manually sets auto_bootstrap to false,

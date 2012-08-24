@@ -125,9 +125,22 @@ public class Tracing
 
     private static final int TTL = 24 * 3600;
 
-    private static Tracing instance = new Tracing();
+    private static Tracing instance = null;
 
     private static final Logger logger = LoggerFactory.getLogger(Tracing.class);
+
+    public static void initialize()
+    {
+        try
+        {
+            instance = new Tracing();
+            logger.info("Tracing system enabled and initialized.");
+        }
+        catch (Exception e)
+        {
+            logger.error("Error initializing tracing system. Tracing will be disabled", e);
+        }
+    }
 
     /**
      * Fetches and lazy initializes the trace context.
@@ -224,7 +237,7 @@ public class Tracing
      */
     public static boolean isTracing()
     {
-        return instance.state.get() != null;
+        return instance != null && instance.state.get() != null;
     }
 
     public void reset()
