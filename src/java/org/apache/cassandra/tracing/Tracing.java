@@ -165,9 +165,10 @@ public class Tracing
         {
             try
             {
-                KSMetaData ks = new KSMetaData(Tracing.TRACE_KS, SimpleStrategy.class, ImmutableMap.of("replication_factor", "1"), true);
+                KSMetaData ks = KSMetaData.newKeyspace(Tracing.TRACE_KS, SimpleStrategy.class.getName(), ImmutableMap.of("replication_factor", "1"));
                 MigrationManager.announceNewKeyspace(ks);
-                MigrationManager.announceNewKeyspace(ks);
+                MigrationManager.announceNewColumnFamily(TraceSessionsCf);
+                MigrationManager.announceNewColumnFamily(TraceEventsCf);
                 Thread.sleep(1000);
             }
             catch (Exception e)
