@@ -26,6 +26,7 @@ import java.util.concurrent.TimeUnit;
 
 import com.google.common.base.Stopwatch;
 
+import org.apache.cassandra.thrift.ColumnParent;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -60,4 +61,5 @@ public class TraceState
         long elapsed = watch.elapsedTime(TimeUnit.MICROSECONDS);
         return elapsed < Integer.MAX_VALUE ? (int) elapsed : Integer.MAX_VALUE;
     }
+
 }

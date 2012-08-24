@@ -198,7 +198,7 @@ public class ConfigHelper
         return s == null ? null : predicateFromString(s);
     }
 
-    private static String thriftToString(TBase object)
+    public static String thriftToString(TBase object)
     {
         assert object != null;
         // this is so awful it's kind of cool!

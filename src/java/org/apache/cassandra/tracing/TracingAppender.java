@@ -1,5 +1,7 @@
 package org.apache.cassandra.tracing;
 
+import static org.apache.cassandra.tracing.Tracing.addColumn;
+
 import java.util.Arrays;
 
 import org.apache.log4j.AppenderSkeleton;

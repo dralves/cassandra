@@ -35,7 +35,13 @@ import java.util.concurrent.TimeoutException;
 import java.util.zip.DataFormatException;
 import java.util.zip.Inflater;
 
+import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.Lists;
+import com.google.common.collect.Maps;
+import org.apache.cassandra.hadoop.ConfigHelper;
+import org.apache.cassandra.utils.Pair;
+import org.apache.thrift.TBase;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -343,9 +349,9 @@ public class CassandraServer implements Cassandra.Iface
         if (startSessionIfRequested())
         {
             Map<String, String> traceParameters = ImmutableMap.of("key", ByteBufferUtil.bytesToHex(key),
-                                                                  "column_parent", TraceParameters.toString(column_parent),
-                                                                  "predicate", TraceParameters.toString(predicate),
-                                                                  "consistency_level", consistency_level.name());
+                    "column_parent", column_parent.toString(),
+                    "predicate", predicate.toString(),
+                    "consistency_level", consistency_level.name());
             Tracing.instance().begin("get_slice", traceParameters);
         }
 
@@ -366,10 +372,15 @@ public class CassandraServer implements Cassandra.Iface
     {
         if (startSessionIfRequested())
         {
-            Map<String, String> traceParameters = ImmutableMap.of("keys", ByteBufferUtil.bytesToHex(keys),
-                                                                  "column_parent", TraceParameters.toString(column_parent),
-                                                                  "predicate", TraceParameters.toString(predicate),
-                                                                  "consistency_level", consistency_level.name());
+            List<String> keysList = Lists.newArrayList();
+            for (ByteBuffer key : keys)
+            {
+                keysList.add(ByteBufferUtil.bytesToHex(key));
+            }
+            Map<String, String> traceParameters = ImmutableMap.of("keys", keysList.toString(),
+                    "column_parent", column_parent.toString(),
+                    "predicate", predicate.toString(),
+                    "consistency_level", consistency_level.name());
             Tracing.instance().begin("multiget_slice", traceParameters);
         }
         
@@ -449,6 +460,9 @@ public class CassandraServer implements Cassandra.Iface
         
         if (startSessionIfRequested())
         {
+            Map<String, String> traceParameters = ImmutableMap.of("key", ByteBufferUtil.bytesToHex(key),
+                    "column_path", column_path.toString(),
+                    "consistency_level", consistency_level.name());
             Tracing.instance().begin("get", traceParameters);
         }
         
@@ -467,6 +481,10 @@ public class CassandraServer implements Cassandra.Iface
     {
         if (startSessionIfRequested())
         {
+            Map<String, String> traceParameters = ImmutableMap.of("key", ByteBufferUtil.bytesToHex(key),
+                    "column_parent", column_parent.toString(),
+                    "predicate", predicate.toString(),
+                    "consistency_level", consistency_level.name());
             Tracing.instance().begin("get_count", traceParameters);
         }
         
@@ -551,6 +569,15 @@ public class CassandraServer implements Cassandra.Iface
     {
         if (startSessionIfRequested())
         {
+            List<String> keysList = Lists.newArrayList();
+            for (ByteBuffer key : keys)
+            {
+                keysList.add(ByteBufferUtil.bytesToHex(key));
+            }
+            Map<String, String> traceParameters = ImmutableMap.of("keys", keysList.toString(),
+                    "column_parent", column_parent.toString(),
+                    "predicate", predicate.toString(),
+                    "consistency_level", consistency_level.name());
             Tracing.instance().begin("multiget_count", traceParameters);
         }
         
@@ -610,6 +637,10 @@ public class CassandraServer implements Cassandra.Iface
     {
         if (startSessionIfRequested())
         {
+            Map<String, String> traceParameters = ImmutableMap.of("key", ByteBufferUtil.bytesToHex(key),
+                    "column_parent", column_parent.toString(),
+                    "column", column.toString(),
+                    "consistency_level", consistency_level.name());
             Tracing.instance().begin("insert", traceParameters);
         }
 
@@ -695,7 +726,16 @@ public class CassandraServer implements Cassandra.Iface
     throws InvalidRequestException, UnavailableException, TimedOutException
     {
         if (startSessionIfRequested())
-            traceBatchMutate(mutation_map, consistency_level);
+        {
+            Map<String, String> traceParameters = Maps.newLinkedHashMap();
+            for (Map.Entry<ByteBuffer, Map<String, List<Mutation>>> mutationEntry : mutation_map.entrySet())
+            {
+                traceParameters.put(ByteBufferUtil.bytesToHex(mutationEntry.getKey()),
+                        Joiner.on(";").withKeyValueSeparator(":").join(mutationEntry.getValue()));
+            }
+            traceParameters.put("consistency_level", consistency_level.name());
+            Tracing.instance().begin("batch_mutate", traceParameters);
+        }
 
         try
         {
@@ -733,6 +773,10 @@ public class CassandraServer implements Cassandra.Iface
     {
         if (startSessionIfRequested())
         {
+            Map<String, String> traceParameters = ImmutableMap.of("key", ByteBufferUtil.bytesToHex(key),
+                    "column_path", column_path.toString(),
+                    "timestamp", timestamp+"",
+                    "consistency_level", consistency_level.name());
             Tracing.instance().begin("remove", traceParameters);
         }
 
@@ -780,6 +824,11 @@ public class CassandraServer implements Cassandra.Iface
 
         if (startSessionIfRequested())
         {
+            Map<String, String> traceParameters = ImmutableMap.of(
+                    "column_parent", column_parent.toString(),
+                    "predicate", predicate.toString(),
+                    "range", range.toString(),
+                    "consistency_level", consistency_level.name());
             Tracing.instance().begin("get_range_slices", traceParameters);
         }
 
@@ -853,6 +902,11 @@ public class CassandraServer implements Cassandra.Iface
     {
         if (startSessionIfRequested())
         {
+            Map<String, String> traceParameters = ImmutableMap.of(
+                    "column_family", column_family,
+                    "range", range.toString(),
+                    "start_column", ByteBufferUtil.bytesToHex(start_column),
+                    "consistency_level", consistency_level.name());
             Tracing.instance().begin("get_paged_slice", traceParameters);
         }
 
@@ -939,6 +993,11 @@ public class CassandraServer implements Cassandra.Iface
     {
         if (startSessionIfRequested())
         {
+            Map<String, String> traceParameters = ImmutableMap.of(
+                    "column_parent", column_parent.toString(),
+                    "index_clause", index_clause.toString(),
+                    "slice_predicate", column_predicate.toString(),
+                    "consistency_level", consistency_level.name());
             Tracing.instance().begin("get_indexed_slices", traceParameters);
         }
 
@@ -1297,6 +1356,10 @@ public class CassandraServer implements Cassandra.Iface
     {
         if (startSessionIfRequested())
         {
+            Map<String, String> traceParameters = ImmutableMap.of(
+                    "column_parent", column_parent.toString(),
+                    "column", column.toString(),
+                    "consistency_level", consistency_level.name());
             Tracing.instance().begin("add", traceParameters);
         }
 
@@ -1342,6 +1405,9 @@ public class CassandraServer implements Cassandra.Iface
     {
         if (startSessionIfRequested())
         {
+            Map<String, String> traceParameters = ImmutableMap.of("key", ByteBufferUtil.bytesToHex(key),
+                    "column_path", path.toString(),
+                    "consistency_level", consistency_level.name());
             Tracing.instance().begin("remove_counter", traceParameters);
         }
 
@@ -1525,68 +1591,6 @@ public class CassandraServer implements Cassandra.Iface
             return true;
         }
         return false;
-    }
-
-    private void traceBatchMutate(Map<ByteBuffer, Map<String, List<Mutation>>> mutation_map,
-                                        ConsistencyLevel consistency_level)
-    {
-        int numKeys = 0;
-        int totalMutations = 0;
-        int totalDeletions = 0;
-        int totalColumns = 0;
-        int totalCounters = 0;
-        int totalSuperColumns = 0;
-        long totalWrittenSize = 0;
-        for (Map.Entry<ByteBuffer, Map<String, List<Mutation>>> entry : mutation_map.entrySet())
-        {
-            numKeys++;
-            for (List<Mutation> mutations : entry.getValue().values())
-            {
-                for (Mutation mutation : mutations)
-                {
-                    totalMutations++;
-                    if (!mutation.isSetDeletion())
-                    {
-                        ColumnOrSuperColumn column = mutation.getColumn_or_supercolumn();
-                        if (column.isSetCounter_column())
-                        {
-                            totalCounters++;
-                            // sizeof a long
-                            totalWrittenSize += 8;
-                        }
-                        else if (column.isSetCounter_super_column())
-                        {
-                            totalSuperColumns++;
-                            for (CounterColumn subColumn : column.getCounter_super_column().columns)
-                            {
-                                totalCounters++;
-                                // sizeof a long
-                                totalWrittenSize += 8;
-                            }
-                        }
-                        else if (column.isSetSuper_column())
-                        {
-                            totalSuperColumns++;
-                            for (Column subColumn : column.getSuper_column().columns)
-                            {
-                                totalColumns++;
-                                totalWrittenSize += subColumn.value.remaining();
-                            }
-                        }
-                        else
-                        {
-                            totalColumns++;
-                            totalWrittenSize += column.column.value.remaining();
-                        }
-                    }
-                    else
-                        totalDeletions++;
-                }
-            }
-        }
-
-        // maybe just throw (key, ConfigHelper.thriftToString(map)) entries into traceParameters?
-        Tracing.instance().begin("batch_mutate", traceParameters);
     }
 
     // main method moved to CassandraDaemon

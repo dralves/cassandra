@@ -39,8 +39,6 @@ tokens {
     NODE_DESCRIBE_CLUSTER;
     NODE_USE_TABLE;
     NODE_TRACE_NEXT_QUERY;
-    NODE_EXPLAIN_TRACE_SESSION;
-    NODE_SHOW_TRACING_SUMMARY;
     NODE_ENABLE_TRACING;
     NODE_DISABLE_TRACING;
     NODE_EXIT;
@@ -151,8 +149,6 @@ statement
     | delKeyspace
     | useKeyspace
     | traceNextQuery
-    | explainTraceSession
-    | showTracingSummary
     | enableTracing
     | disableTracing
     | delStatement
@@ -185,10 +181,6 @@ helpStatement
         -> ^(NODE_HELP NODE_USE_TABLE)
     | HELP TRACE NEXT QUERY
         -> ^(NODE_HELP NODE_TRACE_NEXT_QUERY)
-    | HELP EXPLAIN TRACE SESSION
-        -> ^(NODE_HELP NODE_EXPLAIN_TRACE_SESSION)
-    | HELP SHOW TRACING SUMMARY
-        -> ^(NODE_HELP NODE_SHOW_TRACING_SUMMARY)    
     | HELP ENABLE TRACING
         -> ^(NODE_HELP NODE_ENABLE_TRACING)
     | HELP DISABLE TRACING
@@ -398,19 +390,9 @@ traceNextQuery
         -> ^(NODE_TRACE_NEXT_QUERY)
     ;
 
-explainTraceSession
-    : EXPLAIN TRACE SESSION traceSessionId
-        -> ^(NODE_EXPLAIN_TRACE_SESSION traceSessionId)
-    ;
-
-showTracingSummary
-    : SHOW TRACING SUMMARY sessionRequest
-        -> ^(NODE_SHOW_TRACING_SUMMARY sessionRequest)
-    ;
-
 enableTracing
-    : ENABLE TRACING tracingProbability tracingNumber 
-        -> ^(NODE_ENABLE_TRACING tracingProbability tracingNumber)
+    : ENABLE TRACING tracingProbability
+        -> ^(NODE_ENABLE_TRACING tracingProbability)
     ;
 
 disableTracing
@@ -590,17 +572,8 @@ traceSessionId
     : Identifier
     ;
 
-sessionRequest
-    : Identifier
-    ;
-
 tracingProbability
     : DoubleLiteral
-    ;
-
-tracingNumber
-    : IntegerPositiveLiteral
-    | IntegerNegativeLiteral
     ;
 
 //
@@ -625,9 +598,6 @@ TRACING:     'TRACING';
 TRACE:       'TRACE';
 NEXT:        'NEXT';
 QUERY:       'QUERY';
-EXPLAIN:     'EXPLAIN';
-SESSION:     'SESSION';
-SUMMARY:     'SUMMARY';
 GET:         'GET';
 HELP:        'HELP';
 EXIT:        'EXIT';

@@ -21,15 +21,14 @@
 package org.apache.cassandra.tracing;
 
 import static com.google.common.base.Preconditions.checkState;
+import static org.apache.cassandra.utils.ByteBufferUtil.bytes;
 
 import java.net.InetAddress;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.RejectedExecutionException;
 
-import antlr.debug.TraceEvent;
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
 import org.apache.cassandra.config.CFMetaData;
@@ -37,6 +36,8 @@ import org.apache.cassandra.cql3.ColumnNameBuilder;
 import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ExpiringColumn;
 import org.apache.cassandra.db.RowMutation;
+import org.apache.cassandra.db.marshal.InetAddressType;
+import org.apache.cassandra.db.marshal.LongType;
 import org.apache.cassandra.db.marshal.TimeUUIDType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.net.MessageIn;
@@ -48,8 +49,6 @@ import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.WrappedRunnable;
-
-import com.google.common.annotations.VisibleForTesting;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -71,12 +70,6 @@ public class Tracing
 
     private static final Logger logger = LoggerFactory.getLogger(Tracing.class);
 
-    @VisibleForTesting
-    public static void setInstance(Tracing context)
-    {
-        instance = context;
-    }
-
     /**
      * Fetches and lazy initializes the trace context.
      */
@@ -85,32 +78,43 @@ public class Tracing
         return instance;
     }
 
-    private InetAddress localAddress;
+    private InetAddress localAddress = FBUtilities.getLocalAddress();
+
     private final ThreadLocal<TraceState> state = new ThreadLocal<TraceState>();
 
-    private void addColumn(ColumnFamily cf, ByteBuffer columnName, InetAddress address)
+    public static void addColumn(ColumnFamily cf, String columnName, Object value)
     {
-        cf.addColumn(new ExpiringColumn(columnName, ByteBufferUtil.bytes(address), System.currentTimeMillis(), TTL));
+        cf.addColumn(new ExpiringColumn(bytes(columnName), ByteBufferUtil.bytes(value.toString()), System
+                .currentTimeMillis(), TTL));
     }
 
-    private void addColumn(ColumnFamily cf, ByteBuffer columnName, long value)
+    public static void addColumn(ColumnFamily cf, String columnName, ByteBuffer value)
     {
-        cf.addColumn(new ExpiringColumn(columnName, ByteBufferUtil.bytes(value), System.currentTimeMillis(), TTL));
+        cf.addColumn(new ExpiringColumn(bytes(columnName), value, System.currentTimeMillis(), TTL));
     }
 
-    private void addColumn(ColumnFamily cf, ByteBuffer columnName, String value)
+    public static void addColumn(ColumnFamily cf, String columnName, InetAddress address)
     {
-        cf.addColumn(new ExpiringColumn(columnName, ByteBufferUtil.bytes(value), System.currentTimeMillis(), TTL));
+        cf.addColumn(new ExpiringColumn(bytes(columnName), ByteBufferUtil.bytes(address), System.currentTimeMillis(),
+                TTL));
     }
 
-    private void addPayloadColumns(ColumnFamily cf, Map<String, ByteBuffer> rawPayload,
-            ByteBuffer coord, ByteBuffer eventId)
+    public static void addColumn(ColumnFamily cf, String columnName, long value)
     {
-        for (Map.Entry<String, ByteBuffer> entry : rawPayload.entrySet())
+        cf.addColumn(new ExpiringColumn(bytes(columnName), ByteBufferUtil.bytes(value), System.currentTimeMillis(), TTL));
+    }
+
+    public static void addColumn(ColumnFamily cf, String columnName, String value)
+    {
+        cf.addColumn(new ExpiringColumn(bytes(columnName), ByteBufferUtil.bytes(value), System.currentTimeMillis(), TTL));
+    }
+
+    public void addParameterColumns(ColumnFamily cf, Map<String, String> rawPayload)
+    {
+        for (Map.Entry<String, String> entry : rawPayload.entrySet())
         {
-            cf.addColumn(new ExpiringColumn(buildName(CFMetaData.TraceEventsCf, coord, eventId, PAYLOAD_BB,
-                    UTF8Type.instance.decompose(entry.getKey())), entry.getValue(), System.currentTimeMillis(),
-                                            TTL));
+            cf.addColumn(new ExpiringColumn(buildName(cf.metadata(), bytes("parameters"), bytes(entry.getKey()))
+                    , bytes(entry.getValue()), System.currentTimeMillis(), TTL));
         }
     }
 
@@ -141,12 +145,6 @@ public class Tracing
     public void reset()
     {
         state.set(null);
-    }
-
-    @VisibleForTesting
-    public void setLocalAddress(InetAddress localAddress)
-    {
-        this.localAddress = localAddress;
     }
 
     public UUID newSession()
@@ -192,10 +190,10 @@ public class Tracing
             public void runMayThrow() throws TimedOutException, UnavailableException
             {
                 ColumnFamily cf = ColumnFamily.create(CFMetaData.TraceSessionsCf);
-                addColumn(cf, "coordinator", ByteBufferUtil.bytes(FBUtilities.getBroadcastAddress()));
-                addColumn(cf, "request", ByteBufferUtil.bytes(request));
-                addColumn(cf, "happened_at", ByteBufferUtil.bytes(happened_at));
-                addParameters(cf, parameters);
+                addColumn(cf, "coordinator", InetAddressType.instance.decompose(FBUtilities.getBroadcastAddress()));
+//                addColumn(cf, "request", UTF8Type.instance.decompose(""));
+//                addColumn(cf, "happened_at", LongType.instance.decompose(happened_at));
+                addParameterColumns(cf, parameters);
                 RowMutation mutation = new RowMutation(TRACE_KS, state.get().sessionIdBytes);
                 mutation.add(cf);
                 StorageProxy.mutate(Arrays.asList(mutation), ConsistencyLevel.ANY);
@@ -223,4 +221,5 @@ public class Tracing
         checkState(sessionBytes.length == 16);
         state.set(new TraceState(message.from, UUIDGen.getUUID(ByteBuffer.wrap(sessionBytes))));
     }
+
 }
