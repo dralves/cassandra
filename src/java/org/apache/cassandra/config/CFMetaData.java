@@ -178,7 +178,7 @@ public final class CFMetaData
                                                                + "  parameters map<text, text>"
                                                                + ") WITH COMMENT='traced sessions'", Tracing.TRACE_KS);
 
-    public static final CFMetaData TraceEventsCf = compile(14, "CREATE TABLE " + Tracing.EVENTS_CF + " ("
+    public static final CFMetaData TraceEventsCf = compile(15, "CREATE TABLE " + Tracing.EVENTS_CF + " ("
                                                                + "  session_id uuid,"
                                                                + "  event_id timeuuid,"
                                                                + "  source inet,"

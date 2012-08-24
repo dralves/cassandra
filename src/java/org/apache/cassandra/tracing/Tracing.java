@@ -37,9 +37,7 @@ import org.apache.cassandra.db.ColumnFamily;
 import org.apache.cassandra.db.ExpiringColumn;
 import org.apache.cassandra.db.RowMutation;
 import org.apache.cassandra.db.marshal.InetAddressType;
-import org.apache.cassandra.db.marshal.LongType;
 import org.apache.cassandra.db.marshal.TimeUUIDType;
-import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.service.StorageProxy;
 import org.apache.cassandra.thrift.ConsistencyLevel;
@@ -191,8 +189,8 @@ public class Tracing
             {
                 ColumnFamily cf = ColumnFamily.create(CFMetaData.TraceSessionsCf);
                 addColumn(cf, "coordinator", InetAddressType.instance.decompose(FBUtilities.getBroadcastAddress()));
-//                addColumn(cf, "request", UTF8Type.instance.decompose(""));
-//                addColumn(cf, "happened_at", LongType.instance.decompose(happened_at));
+                // addColumn(cf, "request", UTF8Type.instance.decompose(""));
+                // addColumn(cf, "happened_at", LongType.instance.decompose(happened_at));
                 addParameterColumns(cf, parameters);
                 RowMutation mutation = new RowMutation(TRACE_KS, state.get().sessionIdBytes);
                 mutation.add(cf);
