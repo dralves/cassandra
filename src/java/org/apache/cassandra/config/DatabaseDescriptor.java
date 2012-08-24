@@ -456,7 +456,7 @@ public class DatabaseDescriptor
             rowCacheProvider = FBUtilities.newCacheProvider(conf.row_cache_provider);
 
             // Hardcoded system tables
-            List<KSMetaData> systemKeyspaces = Arrays.asList(KSMetaData.systemKeyspace(), KSMetaData.traceKeyspace());
+            List<KSMetaData> systemKeyspaces = Arrays.asList(KSMetaData.systemKeyspace());
             for (KSMetaData ksmd : systemKeyspaces)
             {
                 for (CFMetaData cfm : ksmd.cfMetaData().values())

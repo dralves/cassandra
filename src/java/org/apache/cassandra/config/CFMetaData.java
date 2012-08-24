@@ -170,25 +170,6 @@ public final class CFMetaData
                                                          + "cql_version text"
                                                          + ") WITH COMMENT='information about the local node'");
 
-    public static final CFMetaData TraceSessionsCf = compile(14, "CREATE TABLE " + Tracing.SESSIONS_CF + " ("
-                                                               + "  session_id uuid PRIMARY KEY,"
-                                                               + "  coordinator inet,"
-                                                               + "  request text,"
-                                                               + "  happened_at timestamp,"
-                                                               + "  parameters map<text, text>"
-                                                               + ") WITH COMMENT='traced sessions'", Tracing.TRACE_KS);
-
-    public static final CFMetaData TraceEventsCf = compile(15, "CREATE TABLE " + Tracing.EVENTS_CF + " ("
-                                                               + "  session_id uuid,"
-                                                               + "  event_id timeuuid,"
-                                                               + "  source inet,"
-                                                               + "  thread text,"
-                                                               + "  activity text,"
-                                                               + "  happened_at timestamp,"
-                                                               + "  source_elapsed int,"
-                                                               + "  PRIMARY KEY (session_id, event_id)"
-                                                               + ");", Tracing.TRACE_KS);
-
     public enum Caching
     {
         ALL, KEYS_ONLY, ROWS_ONLY, NONE;
@@ -352,7 +333,7 @@ public final class CFMetaData
     private static CFMetaData newSystemMetadata(String keyspace, String cfName, int oldCfId, String comment, AbstractType<?> comparator, AbstractType<?> subcc)
     {
         ColumnFamilyType type = subcc == null ? ColumnFamilyType.Standard : ColumnFamilyType.Super;
-        CFMetaData newCFMD = new CFMetaData(Table.SYSTEM_KS, cfName, type, comparator,  subcc);
+        CFMetaData newCFMD = new CFMetaData(keyspace, cfName, type, comparator,  subcc);
 
         // adding old -> new style ID mapping to support backward compatibility
         Schema.instance.addOldCfIdMapping(oldCfId, newCFMD.cfId);

@@ -34,7 +34,7 @@ public class TracingAppender extends AppenderSkeleton
         {
             public void runMayThrow() throws TimedOutException, UnavailableException
             {
-                ColumnFamily cf = ColumnFamily.create(CFMetaData.TraceEventsCf);
+                ColumnFamily cf = ColumnFamily.create(Tracing.TraceEventsCf);
                 addColumn(cf, "event_id", ByteBufferUtil.bytes(UUIDGen.makeType1UUIDFromHost(FBUtilities.getBroadcastAddress())));
                 addColumn(cf, "source", FBUtilities.getBroadcastAddress());
                 addColumn(cf, "thread", event.getThreadName());

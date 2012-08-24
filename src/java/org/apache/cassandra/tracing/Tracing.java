@@ -32,21 +32,32 @@ import java.util.UUID;
 import org.apache.cassandra.concurrent.Stage;
 import org.apache.cassandra.concurrent.StageManager;
 import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ConfigurationException;
+import org.apache.cassandra.config.KSMetaData;
+import org.apache.cassandra.config.Schema;
 import org.apache.cassandra.cql3.ColumnNameBuilder;
+import org.apache.cassandra.cql3.QueryProcessor;
+import org.apache.cassandra.cql3.statements.CreateColumnFamilyStatement;
 import org.apache.cassandra.db.ColumnFamily;
+import org.apache.cassandra.db.ColumnFamilyType;
 import org.apache.cassandra.db.ExpiringColumn;
 import org.apache.cassandra.db.RowMutation;
-import org.apache.cassandra.db.marshal.InetAddressType;
 import org.apache.cassandra.db.marshal.TimeUUIDType;
 import org.apache.cassandra.net.MessageIn;
+import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.StorageProxy;
 import org.apache.cassandra.thrift.ConsistencyLevel;
+import org.apache.cassandra.thrift.InvalidRequestException;
 import org.apache.cassandra.thrift.TimedOutException;
 import org.apache.cassandra.thrift.UnavailableException;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 import org.apache.cassandra.utils.UUIDGen;
 import org.apache.cassandra.utils.WrappedRunnable;
+
+import com.google.common.base.Predicate;
+import com.google.common.base.Throwables;
+import com.google.common.collect.Iterables;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -62,6 +73,56 @@ public class Tracing
     public static final String SESSIONS_CF = "sessions";
     public static final String TRACE_HEADER = "TraceSession";
 
+    public static final CFMetaData TraceSessionsCf = compile("CREATE TABLE " + Tracing.SESSIONS_CF + " ("
+            + "  session_id uuid PRIMARY KEY,"
+            + "  coordinator inet,"
+            + "  request text,"
+            + "  happened_at timestamp,"
+            + "  parameters map<text, text>"
+            + ") WITH COMMENT='traced sessions'");
+
+    public static final CFMetaData TraceEventsCf = compile("CREATE TABLE " + Tracing.EVENTS_CF + " ("
+            + "  session_id uuid,"
+            + "  event_id timeuuid,"
+            + "  source inet,"
+            + "  thread text,"
+            + "  activity text,"
+            + "  happened_at timestamp,"
+            + "  source_elapsed int,"
+            + "  PRIMARY KEY (session_id, event_id)"
+            + ");");
+
+    private static CFMetaData compile(String cql)
+    {
+        CreateColumnFamilyStatement statement = null;
+        try
+        {
+            statement = (CreateColumnFamilyStatement) QueryProcessor.parseStatement(cql)
+                    .prepare().statement;
+
+            CFMetaData newCFMD = new CFMetaData(TRACE_KS, statement.columnFamily(), ColumnFamilyType.Standard,
+                    statement.comparator,
+                    null);
+
+            newCFMD.comment("")
+                    .readRepairChance(0)
+                    .dcLocalReadRepairChance(0)
+                    .gcGraceSeconds(0);
+
+            statement.applyPropertiesTo(newCFMD);
+
+            return newCFMD;
+        }
+        catch (InvalidRequestException e)
+        {
+            throw Throwables.propagate(e);
+        }
+        catch (ConfigurationException e)
+        {
+            throw Throwables.propagate(e);
+        }
+    }
+
     private static final int TTL = 24 * 3600;
 
     private static Tracing instance = new Tracing();
@@ -74,6 +135,32 @@ public class Tracing
     public static Tracing instance()
     {
         return instance;
+    }
+
+    private Tracing()
+    {
+        if (!Iterables.tryFind(Schema.instance.getTables(), new Predicate<String>()
+        {
+            public boolean apply(String keyspace)
+            {
+                return keyspace.equals(TRACE_KS);
+            }
+
+        }).isPresent())
+        {
+            try
+            {
+                MigrationManager.announceNewKeyspace(KSMetaData.traceKeyspace());
+                MigrationManager.announceNewColumnFamily(TraceSessionsCf);
+                MigrationManager.announceNewColumnFamily(TraceEventsCf);
+                Thread.sleep(1000);
+            }
+            catch (Exception e)
+            {
+                Throwables.propagate(e);
+            }
+        }
+
     }
 
     private InetAddress localAddress = FBUtilities.getLocalAddress();
@@ -187,10 +274,10 @@ public class Tracing
         {
             public void runMayThrow() throws TimedOutException, UnavailableException
             {
-                ColumnFamily cf = ColumnFamily.create(CFMetaData.TraceSessionsCf);
-                addColumn(cf, "coordinator", InetAddressType.instance.decompose(FBUtilities.getBroadcastAddress()));
-                // addColumn(cf, "request", UTF8Type.instance.decompose(""));
-                // addColumn(cf, "happened_at", LongType.instance.decompose(happened_at));
+                ColumnFamily cf = ColumnFamily.create(TraceSessionsCf);
+                addColumn(cf, "coordinator", bytes(FBUtilities.getBroadcastAddress()));
+                addColumn(cf, "request", bytes(request));
+                addColumn(cf, "happened_at", bytes(happened_at));
                 addParameterColumns(cf, parameters);
                 RowMutation mutation = new RowMutation(TRACE_KS, state.get().sessionIdBytes);
                 mutation.add(cf);
