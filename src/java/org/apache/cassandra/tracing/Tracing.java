@@ -164,8 +164,6 @@ public class Tracing
             try
             {
                 MigrationManager.announceNewKeyspace(KSMetaData.traceKeyspace());
-                MigrationManager.announceNewColumnFamily(TraceSessionsCf);
-                MigrationManager.announceNewColumnFamily(TraceEventsCf);
                 Thread.sleep(1000);
             }
             catch (Exception e)
