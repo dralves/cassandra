@@ -62,8 +62,8 @@ public class StageManager
 
     private static ThreadPoolExecutor tracingExecutor()
     {
-        ThreadPoolExecutor executor = new ThreadPoolExecutor(1, 1, KEEPALIVE, TimeUnit.SECONDS,
-                new ArrayBlockingQueue<Runnable>(1000), new NamedThreadFactory(Stage.TRACING.getJmxName())) ;
+        ThreadPoolExecutor executor = new ExceptionHandlingThreadPoolExecutor(1, 1, KEEPALIVE, TimeUnit.SECONDS,
+                new ArrayBlockingQueue<Runnable>(1000), new NamedThreadFactory(Stage.TRACING.getJmxName()));
         executor.setRejectedExecutionHandler(new RejectedExecutionHandler()
         {
             public void rejectedExecution(Runnable r, ThreadPoolExecutor executor)

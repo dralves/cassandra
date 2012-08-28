@@ -43,7 +43,7 @@ public class DebuggableScheduledThreadPoolExecutor extends ScheduledThreadPoolEx
     public void afterExecute(Runnable r, Throwable t)
     {
         super.afterExecute(r,t);
-        DebuggableThreadPoolExecutor.logExceptionsAfterExecute(r, t);
+        ExceptionHandlingThreadPoolExecutor.logExceptionsAfterExecute(r, t);
     }
 
     // override scheduling to supress exceptions that would cancel future executions
@@ -76,7 +76,7 @@ public class DebuggableScheduledThreadPoolExecutor extends ScheduledThreadPoolEx
             }
             catch (Throwable e)
             {
-                DebuggableThreadPoolExecutor.handleOrLog(e);
+                ExceptionHandlingThreadPoolExecutor.handleOrLog(e);
             }
         }
     }
