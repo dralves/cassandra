@@ -93,7 +93,6 @@ public class Session implements Serializable
         availableOptions.addOption("Q",  "query-names",          true,   "Comma-separated list of column names to retrieve from each row.");
         availableOptions.addOption("Z",  "compaction-strategy",  true,   "CompactionStrategy to use.");
         availableOptions.addOption("U",  "comparator",           true,   "Column Comparator to use. Currently supported types are: TimeUUIDType, AsciiType, UTF8Type.");
-        availableOptions.addOption("tr", "trace",                true,   "Trace all read/write ops involved in this stress session");
     }
 
     private int numKeys          = 1000 * 1000;
@@ -156,18 +155,6 @@ public class Session implements Serializable
             {
                 System.err.println("Application does not allow arbitrary arguments: " + StringUtils.join(cmd.getArgList(), ", "));
                 System.exit(1);
-            }
-
-            if (cmd.hasOption("tr"))
-            {
-                trace = true;
-                String probAndNum = cmd.getOptionValue("tr");
-                if (probAndNum == null || probAndNum.equals(""))
-                {
-                    throw new IllegalArgumentException(
-                            "tracing (-tr) requires a probability in ]0,1]");
-                }
-                traceProbability = Double.parseDouble(probAndNum);
             }
 
             if (cmd.hasOption("h"))
@@ -636,11 +623,6 @@ public class Session implements Serializable
             if (setKeyspace)
             {
                 client.set_keyspace("Keyspace1");
-            }
-
-            if (trace)
-            {
-                client.set_trace_probability(traceProbability);
             }
         }
         catch (InvalidRequestException e)

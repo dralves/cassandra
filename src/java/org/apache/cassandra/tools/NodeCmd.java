@@ -121,6 +121,7 @@ public class NodeCmd
         SETCOMPACTIONTHRESHOLD,
         SETCOMPACTIONTHROUGHPUT,
         SETSTREAMTHROUGHPUT,
+        SETTRACEPROBABILITY,
         SNAPSHOT,
         STATUS,
         STATUSTHRIFT,
@@ -174,6 +175,7 @@ public class NodeCmd
         addCmdHelp(header, "describering [keyspace]", "Shows the token ranges info of a given keyspace.");
         addCmdHelp(header, "rangekeysample", "Shows the sampled keys held across all keyspaces.");
         addCmdHelp(header, "rebuild [src-dc-name]", "Rebuild data by streaming from other nodes (similarly to bootstrap)");
+        addCmdHelp(header, "settraceprobability [value]", "Sets the probability for tracing any given request to value. 0 disables, 1 enables for all requests, 0 is the default");
 
         // Two args
         addCmdHelp(header, "snapshot [keyspaces...] -cf [columnfamilyName] -t [snapshotName]", "Take a snapshot of the optionally specified column family of the specified keyspaces using optional name snapshotName");
@@ -1032,6 +1034,11 @@ public class NodeCmd
                 case SETSTREAMTHROUGHPUT :
                     if (arguments.length != 1) { badUse("Missing value argument."); }
                     probe.setStreamThroughput(Integer.valueOf(arguments[0]));
+                    break;
+
+                case SETTRACEPROBABILITY :
+                    if (arguments.length != 1) { badUse("Missing value argument."); }
+                    probe.setTraceProbability(Double.valueOf(arguments[0]));
                     break;
 
                 case REBUILD :
