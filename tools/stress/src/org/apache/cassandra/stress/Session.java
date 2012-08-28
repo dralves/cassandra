@@ -80,7 +80,7 @@ public class Session implements Serializable
         availableOptions.addOption("i",  "progress-interval",    true,   "Progress Report Interval (seconds), default:10");
         availableOptions.addOption("g",  "keys-per-call",        true,   "Number of keys to get_range_slices or multiget per call, default:1000");
         availableOptions.addOption("l",  "replication-factor",   true,   "Replication Factor to use when creating needed column families, default:1");
-        availableOptions.addOption("L",  "enable-cql",           false,  "Perform queries using CQL (Cassandra Query Language).");
+        availableOptions.addOption("L",  "enable-cql",           true,   "Perform queries using CQL (Cassandra Query Language), accepts 2,3 as parameter (default 3).");
         availableOptions.addOption("P",  "use-prepared-statements", false, "Perform queries using prepared statements (only applicable to CQL).");
         availableOptions.addOption("e",  "consistency-level",    true,   "Consistency Level to use (ONE, QUORUM, LOCAL_QUORUM, EACH_QUORUM, ALL, ANY), default:ONE");
         availableOptions.addOption("x",  "create-index",         true,   "Type of index to create on needed column families (KEYS)");
@@ -265,8 +265,11 @@ public class Session implements Serializable
             else if (replicationStrategy.endsWith("SimpleStrategy"))
                 replicationStrategyOptions.put("replication_factor", "1");
 
-            if (cmd.hasOption("L"))
+            if (cmd.hasOption("L")) {
                 enable_cql = true;
+
+            }
+
 
             if (cmd.hasOption("P"))
             {
