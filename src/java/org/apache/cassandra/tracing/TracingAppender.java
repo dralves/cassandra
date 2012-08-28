@@ -26,7 +26,11 @@ public class TracingAppender extends AppenderSkeleton
 {
     protected void append(final LoggingEvent event)
     {
+        if (Tracing.instance() == null) // instance might not be built at the time this is called
+            return;
+        
         final TraceState state = Tracing.instance().get();
+
         if (state == null) // inline isTracing to avoid implicit two calls to state.get()
             return;
 
