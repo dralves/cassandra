@@ -116,7 +116,6 @@ public class Session implements Serializable
     private boolean replicateOnWrite = true;
     private boolean ignoreErrors  = false;
     private boolean enable_cql    = false;
-    private String cql_version;
     private boolean use_prepared  = false;
 
     private final String outFileName;
@@ -130,6 +129,8 @@ public class Session implements Serializable
 
     // if we know exactly column names that we want to read (set by -Q option)
     public final List<ByteBuffer> columnNames;
+
+    public String cqlVersion;
 
     public final boolean averageSizeValues;
 
@@ -268,7 +269,7 @@ public class Session implements Serializable
 
             if (cmd.hasOption("L")) {
                 enable_cql = true;
-                cql_version = cmd.getOptionValue("L", "3.0.0");
+                cqlVersion = cmd.getOptionValue("L", "3.0.0");
             }
 
 
@@ -632,7 +633,7 @@ public class Session implements Serializable
 
             if (enable_cql)
             {
-                client.set_cql_version(cql_version);
+                client.set_cql_version(cqlVersion);
             }
             
 

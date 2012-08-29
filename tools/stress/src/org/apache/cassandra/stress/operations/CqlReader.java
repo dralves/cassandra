@@ -51,7 +51,7 @@ public class CqlReader extends Operation
         {
             StringBuilder query = new StringBuilder("SELECT ");
 
-            if (session.columnNames == null)
+            if (session.columnNames == null && session.cqlVersion.startsWith("2"))
                 query.append("FIRST ").append(session.getColumnsPerKey()).append(" ''..''");
             else
             {
