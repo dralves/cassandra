@@ -109,6 +109,7 @@ public class CqlReader extends Operation
             }
             catch (Exception e)
             {
+
                 exceptionMessage = getExceptionMessage(e);
                 success = false;
             }
@@ -116,11 +117,12 @@ public class CqlReader extends Operation
 
         if (!success)
         {
-            error(String.format("Operation [%d] retried %d times - error reading key %s %s%n",
+            error(String.format("Operation [%d] retried %d times - error reading key %s %s%n with query %s",
                                 index,
                                 session.getRetryTimes(),
                                 new String(key),
-                                (exceptionMessage == null) ? "" : "(" + exceptionMessage + ")"));
+                                (exceptionMessage == null) ? "" : "(" + exceptionMessage + ")",
+                                cqlQuery));
         }
 
         session.operations.getAndIncrement();

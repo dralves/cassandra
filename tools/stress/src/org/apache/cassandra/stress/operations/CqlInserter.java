@@ -31,6 +31,7 @@ import org.apache.cassandra.stress.Session;
 import org.apache.cassandra.stress.util.CassandraClient;
 import org.apache.cassandra.stress.util.Operation;
 import org.apache.cassandra.thrift.Compression;
+import org.apache.cassandra.utils.UUIDGen;
 
 public class CqlInserter extends Operation
 {
@@ -53,13 +54,29 @@ public class CqlInserter extends Operation
         // Construct a query string once.
         if (cqlQuery == null)
         {
-            StringBuilder query = new StringBuilder("UPDATE \"Standard1\" USING CONSISTENCY ")
+            StringBuilder query = new StringBuilder("UPDATE ").append(wrapInQuotesIfRequired("Standard1"))
+                    .append(" USING CONSISTENCY ")
                     .append(session.getConsistencyLevel().toString()).append(" SET ");
 
             for (int i = 0; i < session.getColumnsPerKey(); i++)
             {
-                if (i > 0) query.append(',');
-                query.append("\"C" + i + "\" = ?");
+                if (i > 0)
+                    query.append(',');
+
+                if (session.timeUUIDComparator)
+                {
+                    if (session.cqlVersion.startsWith("3"))
+                        throw new UnsupportedOperationException("Cannot use UUIDs in column names with CQL3");
+
+                    query.append(
+                            wrapInQuotesIfRequired(UUIDGen.makeType1UUIDFromHost(Session.getLocalAddress()).toString()))
+                            .append(" = ?");
+                }
+                else
+                {
+                    query.append(wrapInQuotesIfRequired("C" + i)).append(" = ?");
+                }
+                
             }
 
             query.append(" WHERE KEY=?");
@@ -69,15 +86,6 @@ public class CqlInserter extends Operation
         List<String> queryParms = new ArrayList<String>();
         for (int i = 0; i < session.getColumnsPerKey(); i++)
         {
-            // Column name
-            if (session.timeUUIDComparator)
-            {
-                throw new UnsupportedOperationException("CQL3 stress does not support UUIDs in column names");
-                // queryParms.add(UUIDGen.makeType1UUIDFromHost(Session.getLocalAddress()).toString());
-            }
-            // else
-            // queryParms.add(new String("C" + i));
-
             // Column value
             queryParms.add(new String(getUnQuotedCqlBlob(values.get(i % values.size()).array())));
         }
@@ -122,15 +130,23 @@ public class CqlInserter extends Operation
 
         if (!success)
         {
-            error(String.format("Operation [%d] retried %d times - error inserting key %s %s%n",
+            error(String.format("Operation [%d] retried %d times - error inserting key %s %s%n with query %s",
                                 index,
                                 session.getRetryTimes(),
                                 key,
-                                (exceptionMessage == null) ? "" : "(" + exceptionMessage + ")"));
+                                (exceptionMessage == null) ? "" : "(" + exceptionMessage + ")",
+                                cqlQuery));
         }
 
         session.operations.getAndIncrement();
         session.keys.getAndIncrement();
         session.latency.getAndAdd(System.currentTimeMillis() - start);
     }
+
+    private String wrapInQuotesIfRequired(String string)
+    {
+        return session.cqlVersion.startsWith("3") ? new StringBuilder().append("\"").append(string).append("\"")
+                .toString() : string;
+    }
+
 }
