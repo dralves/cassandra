@@ -80,7 +80,7 @@ public class Session implements Serializable
         availableOptions.addOption("i",  "progress-interval",    true,   "Progress Report Interval (seconds), default:10");
         availableOptions.addOption("g",  "keys-per-call",        true,   "Number of keys to get_range_slices or multiget per call, default:1000");
         availableOptions.addOption("l",  "replication-factor",   true,   "Replication Factor to use when creating needed column families, default:1");
-        availableOptions.addOption("L",  "enable-cql",           true,   "Perform queries using CQL (Cassandra Query Language), accepts 2,3 as parameter (default 3).");
+        availableOptions.addOption("L",  "enable-cql",           true,   "Perform queries using CQL (Cassandra Query Language), accepts version as parameter (default 3.0.0).");
         availableOptions.addOption("P",  "use-prepared-statements", false, "Perform queries using prepared statements (only applicable to CQL).");
         availableOptions.addOption("e",  "consistency-level",    true,   "Consistency Level to use (ONE, QUORUM, LOCAL_QUORUM, EACH_QUORUM, ALL, ANY), default:ONE");
         availableOptions.addOption("x",  "create-index",         true,   "Type of index to create on needed column families (KEYS)");
@@ -116,6 +116,7 @@ public class Session implements Serializable
     private boolean replicateOnWrite = true;
     private boolean ignoreErrors  = false;
     private boolean enable_cql    = false;
+    private String cql_version;
     private boolean use_prepared  = false;
 
     private final String outFileName;
@@ -267,7 +268,7 @@ public class Session implements Serializable
 
             if (cmd.hasOption("L")) {
                 enable_cql = true;
-
+                cql_version = cmd.getOptionValue("L", "3.0.0");
             }
 
 
@@ -629,7 +630,11 @@ public class Session implements Serializable
         {
             transport.open();
 
-            client.set_cql_version("3.0.0");
+            if (enable_cql)
+            {
+                client.set_cql_version(cql_version);
+            }
+            
 
             if (setKeyspace)
             {
