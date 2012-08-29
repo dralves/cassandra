@@ -143,10 +143,4 @@ public class CqlInserter extends Operation
         session.latency.getAndAdd(System.currentTimeMillis() - start);
     }
 
-    private String wrapInQuotesIfRequired(String string)
-    {
-        return session.cqlVersion.startsWith("3") ? new StringBuilder().append("\"").append(string).append("\"")
-                .toString() : string;
-    }
-
 }

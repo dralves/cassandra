@@ -296,4 +296,10 @@ public abstract class Operation
 
         return statementId;
     }
+
+    protected String wrapInQuotesIfRequired(String string)
+    {
+        return session.cqlVersion.startsWith("3") ? new StringBuilder().append("\"").append(string).append("\"")
+                .toString() : string;
+    }
 }

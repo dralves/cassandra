@@ -51,18 +51,25 @@ public class CqlReader extends Operation
         {
             StringBuilder query = new StringBuilder("SELECT ");
 
-            if (session.columnNames == null && session.cqlVersion.startsWith("2"))
-                query.append("FIRST ").append(session.getColumnsPerKey()).append(" ''..''");
+            if (session.columnNames == null)
+            {
+                if (session.cqlVersion.startsWith("2"))
+                    query.append("FIRST ").append(session.getColumnsPerKey()).append(" ''..''");
+                else
+                    query.append("*");
+            }
             else
             {
                 for (int i = 0; i < session.columnNames.size(); i++)
                 {
-                    if (i > 0) query.append(",");
+                    if (i > 0)
+                        query.append(",");
                     query.append('?');
                 }
             }
 
-            query.append(" FROM Standard1 USING CONSISTENCY ").append(session.getConsistencyLevel().toString());
+            query.append(" FROM ").append(wrapInQuotesIfRequired("Standard1")).append(" USING CONSISTENCY ")
+                    .append(session.getConsistencyLevel().toString());
             query.append(" WHERE KEY=?");
 
             cqlQuery = query.toString();
@@ -102,7 +109,7 @@ public class CqlReader extends Operation
                     if (formattedQuery == null)
                         formattedQuery = formatCqlQuery(cqlQuery, queryParams);
                     result = client.execute_cql_query(ByteBuffer.wrap(formattedQuery.getBytes()),
-                                                      Compression.NONE);
+                            Compression.NONE);
                 }
 
                 success = (result.rows.get(0).columns.size() != 0);
@@ -118,11 +125,11 @@ public class CqlReader extends Operation
         if (!success)
         {
             error(String.format("Operation [%d] retried %d times - error reading key %s %s%n with query %s",
-                                index,
-                                session.getRetryTimes(),
-                                new String(key),
-                                (exceptionMessage == null) ? "" : "(" + exceptionMessage + ")",
-                                cqlQuery));
+                    index,
+                    session.getRetryTimes(),
+                    new String(key),
+                    (exceptionMessage == null) ? "" : "(" + exceptionMessage + ")",
+                    cqlQuery));
         }
 
         session.operations.getAndIncrement();
