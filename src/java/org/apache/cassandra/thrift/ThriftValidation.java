@@ -28,16 +28,14 @@ import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.filter.IFilter;
 import org.apache.cassandra.db.filter.NamesQueryFilter;
 import org.apache.cassandra.db.filter.SliceQueryFilter;
+import org.apache.cassandra.db.index.SecondaryIndexManager;
 import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.db.marshal.AsciiType;
 import org.apache.cassandra.db.marshal.MarshalException;
-import org.apache.cassandra.db.marshal.TypeParser;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.RandomPartitioner;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.locator.*;
 import org.apache.cassandra.service.StorageService;
-import org.apache.cassandra.io.compress.CompressionParameters;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 
@@ -441,13 +439,13 @@ public class ThriftValidation
                                                             (isSubColumn ? metadata.subcolumnComparator : metadata.comparator).getString(column.name)));
         }
 
-        // Indexed column values cannot be larger than 64K.  See CASSANDRA-3057 for more details
-        if (columnDef != null && columnDef.getIndexType() != null && column.value.remaining() > FBUtilities.MAX_UNSIGNED_SHORT)
-            throw new InvalidRequestException(String.format("Can't index column value of size %d for index %s in CF %s of KS %s",
-                                                            column.value.remaining(),
-                                                            columnDef.getIndexName(),
-                                                            metadata.cfName,
-                                                            metadata.ksName));
+        // Indexed column values cannot be larger than 64K.  See CASSANDRA-3057/4240 for more details       
+        if (!Table.open(metadata.ksName).getColumnFamilyStore(metadata.cfName).indexManager.validate(column))
+                    throw new InvalidRequestException(String.format("Can't index column value of size %d for index %s in CF %s of KS %s",
+                                                                     column.value.remaining(),
+                                                                     columnDef.getIndexName(),
+                                                                     metadata.cfName,
+                                                                     metadata.ksName));
     }
 
     /**
@@ -539,7 +537,7 @@ public class ThriftValidation
             // no filter to apply
             return false;
 
-        Set<ByteBuffer> indexedColumns = Table.open(metadata.ksName).getColumnFamilyStore(metadata.cfName).indexManager.getIndexedColumns();
+        SecondaryIndexManager idxManager = Table.open(metadata.ksName).getColumnFamilyStore(metadata.cfName).indexManager;
         AbstractType<?> nameValidator =  ColumnFamily.getComparatorFor(metadata.ksName, metadata.cfName, null);
 
         boolean isIndexed = false;
@@ -557,6 +555,9 @@ public class ThriftValidation
                                                                 me.getMessage()));
             }
 
+            if (expression.value.remaining() > 0xFFFF)
+                throw new InvalidRequestException("Index expression values may not be larger than 64K");
+
             AbstractType<?> valueValidator = Schema.instance.getValueValidator(metadata.ksName, metadata.cfName, expression.column_name);
             try
             {
@@ -570,7 +571,7 @@ public class ThriftValidation
                                                                 me.getMessage()));
             }
 
-            isIndexed |= (expression.op == IndexOperator.EQ) && indexedColumns.contains(expression.column_name);
+            isIndexed |= (expression.op == IndexOperator.EQ) && idxManager.indexes(expression.column_name);
         }
 
         return isIndexed;

@@ -26,6 +26,7 @@ import java.nio.ByteBuffer;
 import java.util.*;
 
 import com.google.common.collect.*;
+import org.apache.thrift.transport.TTransport;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,7 +45,6 @@ import org.apache.hadoop.mapreduce.InputSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
 import org.apache.thrift.TException;
-import org.apache.thrift.transport.TFramedTransport;
 import org.apache.thrift.transport.TSocket;
 
 public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap<ByteBuffer, IColumn>>
@@ -122,7 +122,7 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
         byte[] start = predicate.getSlice_range().getStart();
         if ((start != null) && (start.length > 0))
             return false;
-            
+
         byte[] finish = predicate.getSlice_range().getFinish();
         if ((finish != null) && (finish.length > 0))
             return false;
@@ -156,9 +156,9 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
             // create connection using thrift
             String location = getLocation();
             socket = new TSocket(location, ConfigHelper.getInputRpcPort(conf));
-            TBinaryProtocol binaryProtocol = new TBinaryProtocol(new TFramedTransport(socket));
+            TTransport transport = ConfigHelper.getInputTransportFactory(conf).openTransport(socket);
+            TBinaryProtocol binaryProtocol = new TBinaryProtocol(transport);
             client = new Cassandra.Client(binaryProtocol);
-            socket.open();
 
             // log in
             client.set_keyspace(keyspace);
@@ -363,18 +363,21 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
                 if (isEmptyPredicate)
                 {
                     Iterator<KeySlice> it = rows.iterator();
-                    while (it.hasNext())
+                    KeySlice ks;
+                    do
                     {
-                        KeySlice ks = it.next();
+                        ks = it.next();
                         if (ks.getColumnsSize() == 0)
                         {
-                           it.remove();
+                            it.remove();
                         }
-                    }
+                    } while (it.hasNext());
 
                     // all ghosts, spooky
                     if (rows.isEmpty())
                     {
+                        // maybeInit assumes it can get the start-with key from the rows collection, so add back the last
+                        rows.add(ks);
                         maybeInit();
                         return;
                     }
@@ -418,7 +421,6 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
                 return;
 
             KeyRange keyRange;
-            ByteBuffer startColumn;
             if (totalRead == 0)
             {
                 String startToken = split.getStartToken();
@@ -523,7 +525,7 @@ public class ColumnFamilyRecordReader extends RecordReader<ByteBuffer, SortedMap
         {
             key.clear();
             key.put(this.getCurrentKey());
-            key.rewind();
+            key.flip();
 
             value.clear();
             value.putAll(this.getCurrentValue());

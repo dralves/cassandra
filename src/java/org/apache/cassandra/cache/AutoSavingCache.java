@@ -20,12 +20,12 @@ package org.apache.cassandra.cache;
 import java.io.*;
 import java.nio.ByteBuffer;
 import java.util.*;
-
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.Future;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
+import org.cliffc.high_scale_lib.NonBlockingHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -35,12 +35,12 @@ import org.apache.cassandra.db.compaction.CompactionInfo;
 import org.apache.cassandra.db.compaction.CompactionManager;
 import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.io.util.SequentialWriter;
 import org.apache.cassandra.service.CacheService;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.WrappedRunnable;
 import org.apache.cassandra.utils.Pair;
 
 public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K, V>
@@ -48,7 +48,7 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
     private static final Logger logger = LoggerFactory.getLogger(AutoSavingCache.class);
 
     /** True if a cache flush is currently executing: only one may execute at a time. */
-    public static final AtomicBoolean flushInProgress = new AtomicBoolean(false);
+    public static final Set<CacheService.CacheType> flushInProgress = new NonBlockingHashSet<CacheService.CacheType>();
 
     protected volatile ScheduledFuture<?> saveTask;
     protected final CacheService.CacheType cacheType;
@@ -82,9 +82,9 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
         }
         if (savePeriodInSeconds > 0)
         {
-            Runnable runnable = new WrappedRunnable()
+            Runnable runnable = new Runnable()
             {
-                public void runMayThrow()
+                public void run()
                 {
                     submitWrite(keysToSave);
                 }
@@ -100,6 +100,8 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
     {
         int count = 0;
         long start = System.currentTimeMillis();
+
+        // old cache format that only saves keys
         File path = getCachePath(cfs.table.name, cfs.columnFamily, null);
         if (path.exists())
         {
@@ -127,6 +129,7 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
             }
         }
 
+        // modern format, allows both key and value (so key cache load can be purely sequential)
         path = getCachePath(cfs.table.name, cfs.columnFamily, CURRENT_VERSION);
         if (path.exists())
         {
@@ -135,11 +138,20 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
             {
                 logger.info(String.format("reading saved cache %s", path));
                 in = new DataInputStream(new BufferedInputStream(new FileInputStream(path)));
+                List<Future<Pair<K, V>>> futures = new ArrayList<Future<Pair<K, V>>>();
                 while (in.available() > 0)
                 {
-                    Pair<K, V> entry = cacheLoader.deserialize(in, cfs);
-                    put(entry.left, entry.right);
+                    futures.add(cacheLoader.deserialize(in, cfs));
                     count++;
+                }
+
+                for (Future<Pair<K, V>> future : futures)
+                {
+                    Pair<K, V> entry = future.get();
+                    // Key cache entry can return null, if the SSTable doesn't exist.
+                    if (entry == null)
+                        continue;
+                    put(entry.left, entry.right);
                 }
             }
             catch (Exception e)
@@ -203,13 +215,18 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
                                       "keys");
         }
 
+        public CacheService.CacheType cacheType()
+        {
+            return cacheType;
+        }
+
         public CompactionInfo getCompactionInfo()
         {
             // keyset can change in size, thus total can too
             return info.forProgress(keysWritten, Math.max(keysWritten, keys.size()));
         }
 
-        public void saveCache() throws IOException
+        public void saveCache()
         {
             logger.debug("Deleting old {} files.", cacheType);
             deleteOldCacheFiles();
@@ -236,7 +253,16 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
                         writer = tempCacheFile(path);
                         writers.put(path, writer);
                     }
-                    cacheLoader.serialize(key, writer.stream);
+
+                    try
+                    {
+                        cacheLoader.serialize(key, writer.stream);
+                    }
+                    catch (IOException e)
+                    {
+                        throw new FSWriteError(e, writer.getPath());
+                    }
+
                     keysWritten++;
                 }
             }
@@ -262,11 +288,10 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
             logger.info(String.format("Saved %s (%d items) in %d ms", cacheType, keys.size(), System.currentTimeMillis() - start));
         }
 
-        private SequentialWriter tempCacheFile(Pair<String, String> pathInfo) throws IOException
+        private SequentialWriter tempCacheFile(Pair<String, String> pathInfo)
         {
             File path = getCachePath(pathInfo.left, pathInfo.right, CURRENT_VERSION);
-            File tmpFile = File.createTempFile(path.getName(), null, path.getParentFile());
-
+            File tmpFile = FileUtils.createTempFile(path.getName(), null, path.getParentFile());
             return SequentialWriter.open(tmpFile, true);
         }
 
@@ -298,7 +323,7 @@ public class AutoSavingCache<K extends CacheKey, V> extends InstrumentingCache<K
     {
         void serialize(K key, DataOutput out) throws IOException;
 
-        Pair<K, V> deserialize(DataInputStream in, ColumnFamilyStore cfs) throws IOException;
+        Future<Pair<K, V>> deserialize(DataInputStream in, ColumnFamilyStore cfs) throws IOException;
 
         @Deprecated
         void load(Set<ByteBuffer> buffer, ColumnFamilyStore cfs);

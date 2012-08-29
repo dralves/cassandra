@@ -26,7 +26,6 @@ import java.util.concurrent.*;
 import java.util.concurrent.locks.Condition;
 
 import com.google.common.collect.AbstractIterator;
-import com.google.common.collect.Iterables;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -36,7 +35,6 @@ import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.*;
 import org.apache.cassandra.db.columniterator.ICountableColumnIterator;
 import org.apache.cassandra.io.sstable.SSTableIdentityIterator;
-import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.utils.*;
 
 /**
@@ -57,7 +55,7 @@ public class ParallelCompactionIterable extends AbstractCompactionIterable
 
     private final int maxInMemorySize;
 
-    public ParallelCompactionIterable(OperationType type, List<ICompactionScanner> scanners, CompactionController controller) throws IOException
+    public ParallelCompactionIterable(OperationType type, List<ICompactionScanner> scanners, CompactionController controller)
     {
         this(type, scanners, controller, DatabaseDescriptor.getInMemoryCompactionLimit() / scanners.size());
     }
@@ -176,7 +174,13 @@ public class ParallelCompactionIterable extends AbstractCompactionIterable
             }
 
             if (inMemory)
-                return new CompactedRowContainer(rows.get(0).getKey(), executor.submit(new MergeTask(new ArrayList<RowContainer>(rows))));
+            {
+                // caller will re-use rows List, so make ourselves a copy
+                List<Row> rawRows = new ArrayList<Row>(rows.size());
+                for (RowContainer rowContainer : rows)
+                    rawRows.add(rowContainer.row);
+                return new CompactedRowContainer(rows.get(0).getKey(), executor.submit(new MergeTask(rawRows)));
+            }
 
             List<ICountableColumnIterator> iterators = new ArrayList<ICountableColumnIterator>(rows.size());
             for (RowContainer container : rows)
@@ -191,9 +195,9 @@ public class ParallelCompactionIterable extends AbstractCompactionIterable
 
         private class MergeTask implements Callable<ColumnFamily>
         {
-            private final List<RowContainer> rows;
+            private final List<Row> rows;
 
-            public MergeTask(List<RowContainer> rows)
+            public MergeTask(List<Row> rows)
             {
                 this.rows = rows;
             }
@@ -201,9 +205,9 @@ public class ParallelCompactionIterable extends AbstractCompactionIterable
             public ColumnFamily call() throws Exception
             {
                 ColumnFamily cf = null;
-                for (RowContainer container : rows)
+                for (Row row : rows)
                 {
-                    ColumnFamily thisCF = container.row.cf;
+                    ColumnFamily thisCF = row.cf;
                     if (cf == null)
                     {
                         cf = thisCF;
@@ -215,7 +219,7 @@ public class ParallelCompactionIterable extends AbstractCompactionIterable
                     }
                 }
 
-                return PrecompactedRow.removeDeletedAndOldShards(rows.get(0).getKey(), controller, cf);
+                return PrecompactedRow.removeDeletedAndOldShards(rows.get(0).key, controller, cf);
             }
         }
 

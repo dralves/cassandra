@@ -188,13 +188,13 @@ public class NodeCmd
         addCmdHelp(header, "cfhistograms <keyspace> <cfname>", "Print statistic histograms for a given column family");
         addCmdHelp(header, "refresh <keyspace> <cf-name>", "Load newly placed SSTables to the system without restart.");
         addCmdHelp(header, "rebuild_index <keyspace> <cf-name> <idx1,idx1>", "a full rebuilds of native secondry index for a given column family. IndexNameExample: Standard3.IdxName,Standard3.IdxName1");
+        addCmdHelp(header, "setcachecapacity <key-cache-capacity> <row-cache-capacity>", "Set global key and row cache capacities (in MB units).");
 
         // Three args
         addCmdHelp(header, "getendpoints <keyspace> <cf> <key>", "Print the end points that owns the key");
         addCmdHelp(header, "getsstables <keyspace> <cf> <key>", "Print the sstable filenames that own the key");
 
         // Four args
-        addCmdHelp(header, "setcachecapacity <keyspace> <cfname> <keycachecapacity> <rowcachecapacity>", "Set the key and row cache capacities of a given column family");
         addCmdHelp(header, "setcompactionthreshold <keyspace> <cfname> <minthreshold> <maxthreshold>", "Set the min and max compaction thresholds for a given column family");
         addCmdHelp(header, "stop <compaction_type>", "Supported types are COMPACTION, VALIDATION, CLEANUP, SCRUB, INDEX_BUILD");
 
@@ -214,7 +214,7 @@ public class NodeCmd
 
     /**
      * Write a textual representation of the Cassandra ring.
-     * 
+     *
      * @param outs
      *            the stream to write to
      */
@@ -261,7 +261,7 @@ public class NodeCmd
             throw new RuntimeException(e);
         }
     }
-    
+
     private void printDc(PrintStream outs, String format, String dc, LinkedHashMultimap<String, String> endpointsToTokens,
             boolean keyspaceSelected, Map<InetAddress, Float> filteredOwnerships)
     {
@@ -286,7 +286,7 @@ public class NodeCmd
             lastToken = tokens.get(tokens.size() - 1);
             totalReplicas += entry.getValue();
         }
-        
+
 
         if (keyspaceSelected)
             outs.print("Replicas: " + (int) totalReplicas + "\n\n");
@@ -312,22 +312,22 @@ public class NodeCmd
                 {
                     rack = "Unknown";
                 }
-    
+
                 String status = liveNodes.contains(endpoint)
                         ? "Up"
                         : deadNodes.contains(endpoint)
                                 ? "Down"
                                 : "?";
-    
+
                 String state = "Normal";
-    
+
                 if (joiningNodes.contains(endpoint))
                     state = "Joining";
                 else if (leavingNodes.contains(endpoint))
                     state = "Leaving";
                 else if (movingNodes.contains(endpoint))
                     state = "Moving";
-    
+
                 String load = loadMap.containsKey(endpoint)
                         ? loadMap.get(endpoint)
                         : "?";
@@ -689,11 +689,11 @@ public class NodeCmd
                 remainingBytes += (new Long(c.get("total")) - new Long(c.get("completed")));
         }
         long remainingTimeInSecs = compactionThroughput == 0 || remainingBytes == 0
-                        ? -1 
+                        ? -1
                         : (remainingBytes) / (long) (1024L * 1024L * compactionThroughput);
-        String remainingTime = remainingTimeInSecs < 0 
+        String remainingTime = remainingTimeInSecs < 0
                         ? "n/a"
-                        : String.format("%dh%02dm%02ds", remainingTimeInSecs / 3600, (remainingTimeInSecs % 3600) / 60, (remainingTimeInSecs % 60)); 
+                        : String.format("%dh%02dm%02ds", remainingTimeInSecs / 3600, (remainingTimeInSecs % 3600) / 60, (remainingTimeInSecs % 60));
 
         outs.printf("%25s%10s%n", "Active compaction remaining time : ", remainingTime);
     }
@@ -825,7 +825,7 @@ public class NodeCmd
                                          (i < ecch.length ? ecch[i] : "")));
         }
     }
-    
+
     private void printProxyHistograms(PrintStream output)
     {
         StorageProxyMBean sp = this.probe.getSpProxy();
@@ -1075,8 +1075,8 @@ public class NodeCmd
                     break;
 
                 case SETCACHECAPACITY :
-                    if (arguments.length != 4) { badUse("setcachecapacity requires ks, cf, keycachecap, and rowcachecap args."); }
-                    probe.setCacheCapacities(arguments[0], arguments[1], Integer.parseInt(arguments[2]), Integer.parseInt(arguments[3]));
+                    if (arguments.length != 2) { badUse("setcachecapacity requires key-cache-capacity, and row-cache-capacity args."); }
+                    probe.setCacheCapacities(Integer.parseInt(arguments[0]), Integer.parseInt(arguments[1]));
                     break;
 
                 case SETCOMPACTIONTHRESHOLD :
@@ -1181,7 +1181,7 @@ public class NodeCmd
     private void printRangeKeySample(PrintStream outs)
     {
         outs.println("RangeKeySample: ");
-        List<String> tokenStrings = this.probe.getRangeKeySample();
+        List<String> tokenStrings = this.probe.sampleKeyRange();
         for (String tokenString : tokenStrings)
         {
             outs.println("\t" + tokenString);

@@ -78,8 +78,6 @@ public class StorageProxy implements StorageProxyMBean
 
     public static final StorageProxy instance = new StorageProxy();
 
-    private static volatile boolean hintedHandoffEnabled = DatabaseDescriptor.hintedHandoffEnabled();
-    private static volatile int maxHintWindow = DatabaseDescriptor.getMaxHintWindow();
     private static volatile int maxHintsInProgress = 1024 * Runtime.getRuntime().availableProcessors();
     private static final AtomicInteger totalHintsInProgress = new AtomicInteger();
     private static final Map<InetAddress, AtomicInteger> hintsInProgress = new MapMaker().concurrencyLevel(1).makeComputingMap(new Function<InetAddress, AtomicInteger>()
@@ -831,6 +829,30 @@ public class StorageProxy implements StorageProxyMBean
         }
     }
 
+    static class LocalRangeSliceRunnable extends DroppableRunnable
+    {
+        private final RangeSliceCommand command;
+        private final ReadCallback<RangeSliceReply, Iterable<Row>> handler;
+        private final long start = System.currentTimeMillis();
+
+        LocalRangeSliceRunnable(RangeSliceCommand command, ReadCallback<RangeSliceReply, Iterable<Row>> handler)
+        {
+            super(MessagingService.Verb.READ);
+            this.command = command;
+            this.handler = handler;
+        }
+
+        protected void runMayThrow() throws ExecutionException, InterruptedException
+        {
+            if (logger.isDebugEnabled())
+                logger.debug("LocalReadRunnable reading " + command);
+
+            RangeSliceReply result = new RangeSliceReply(RangeSliceVerbHandler.executeLocally(command));
+            MessagingService.instance().addLatency(FBUtilities.getBroadcastAddress(), System.currentTimeMillis() - start);
+            handler.response(result);
+        }
+    }
+
     static <TMessage, TResolved> ReadCallback<TMessage, TResolved> getReadCallback(IResponseResolver<TMessage, TResolved> resolver, IReadCommand command, ConsistencyLevel consistencyLevel, List<InetAddress> endpoints)
     {
         if (consistencyLevel == ConsistencyLevel.LOCAL_QUORUM || consistencyLevel == ConsistencyLevel.EACH_QUORUM)
@@ -853,22 +875,6 @@ public class StorageProxy implements StorageProxyMBean
             int columnsCount = 0;
             rows = new ArrayList<Row>();
             List<AbstractBounds<RowPosition>> ranges = getRestrictedRanges(command.range);
-            
-            // get the cardinality of this index based on row count
-            // use this info to decide how many scans to do in parallel
-            long estimatedKeys = Table.open(command.keyspace).getColumnFamilyStore(command.column_family)
-                    .estimateKeys();
-            int concurrencyFactor = (int) command.maxResults / ((int) estimatedKeys + 1);
-
-            if (concurrencyFactor <= 0)
-                concurrencyFactor = 1;
-
-            if (concurrencyFactor > ranges.size())
-                concurrencyFactor = ranges.size();
-            
-            // parallel scan handlers
-            List<ReadCallback<RangeSliceReply, Iterable<Row>>> scanHandlers = new ArrayList<ReadCallback<RangeSliceReply, Iterable<Row>>>(concurrencyFactor);
-            
             for (AbstractBounds<RowPosition> range : ranges)
             {
                 RangeSliceCommand nodeCmd = new RangeSliceCommand(command.keyspace,
@@ -884,33 +890,18 @@ public class StorageProxy implements StorageProxyMBean
                 List<InetAddress> liveEndpoints = StorageService.instance.getLiveNaturalEndpoints(nodeCmd.keyspace, range.right);
                 DatabaseDescriptor.getEndpointSnitch().sortByProximity(FBUtilities.getBroadcastAddress(), liveEndpoints);
 
-                if (consistency_level == ConsistencyLevel.ONE && !liveEndpoints.isEmpty() && liveEndpoints.get(0).equals(FBUtilities.getBroadcastAddress()))
+                // collect replies and resolve according to consistency level
+                RangeSliceResponseResolver resolver = new RangeSliceResponseResolver(nodeCmd.keyspace);
+                ReadCallback<RangeSliceReply, Iterable<Row>> handler = getReadCallback(resolver, nodeCmd, consistency_level, liveEndpoints);
+                handler.assureSufficientLiveNodes();
+                resolver.setSources(handler.endpoints);
+                if (handler.endpoints.size() == 1 && handler.endpoints.get(0).equals(FBUtilities.getBroadcastAddress()))
                 {
-                    if (logger.isDebugEnabled())
-                        logger.debug("local range slice");
-
-                    try
-                    {
-                        rows.addAll(RangeSliceVerbHandler.executeLocally(nodeCmd));
-                        for (Row row : rows)
-                            columnsCount += row.getLiveColumnCount();
-                    }
-                    catch (ExecutionException e)
-                    {
-                        throw new RuntimeException(e.getCause());
-                    }
-                    catch (InterruptedException e)
-                    {
-                        throw new AssertionError(e);
-                    }
+                    logger.debug("reading data locally");
+                    StageManager.getStage(Stage.READ).execute(new LocalRangeSliceRunnable(nodeCmd, handler));
                 }
                 else
                 {
-                    // collect replies and resolve according to consistency level
-                    RangeSliceResponseResolver resolver = new RangeSliceResponseResolver(nodeCmd.keyspace);
-                    ReadCallback<RangeSliceReply, Iterable<Row>> handler = getReadCallback(resolver, nodeCmd, consistency_level, liveEndpoints);
-                    handler.assureSufficientLiveNodes();
-                    resolver.setSources(handler.endpoints);
                     MessageOut<RangeSliceCommand> message = nodeCmd.createMessage();
                     for (InetAddress endpoint : handler.endpoints)
                     {
@@ -918,41 +909,33 @@ public class StorageProxy implements StorageProxyMBean
                         if (logger.isDebugEnabled())
                             logger.debug("reading " + nodeCmd + " from " + endpoint);
                     }
-
-                    scanHandlers.add(handler);
-                    if (scanHandlers.size() >= concurrencyFactor)
-                    {
-                        for (ReadCallback<RangeSliceReply, Iterable<Row>> scanHandler : scanHandlers)
-                        {
-                            try
-                            {
-                                for (Row row : scanHandler.get())
-                                {
-                                    rows.add(row);
-                                    columnsCount += row.getLiveColumnCount();
-                                    logger.debug("range slices read {}", row.key);
-                                }
-                                FBUtilities.waitOnFutures(resolver.repairResults, DatabaseDescriptor.getRangeRpcTimeout());
-                            }
-                            catch (TimeoutException ex)
-                            {
-                                if (logger.isDebugEnabled())
-                                    logger.debug("Range slice timeout: {}", ex.toString());
-                                throw ex;
-                            }
-                            catch (DigestMismatchException e)
-                            {
-                                throw new AssertionError(e); // no digests in range slices yet
-                            }
-
-                            // if we're done, great, otherwise, move to the next range
-                            int count = nodeCmd.maxIsColumns ? columnsCount : rows.size();
-                            if (count >= nodeCmd.maxResults)
-                                break;
-                        }
-                        scanHandlers.clear(); //go back for more
-                    }
                 }
+
+                try
+                {
+                    for (Row row : handler.get())
+                    {
+                        rows.add(row);
+                        columnsCount += row.getLiveColumnCount();
+                        logger.debug("range slices read {}", row.key);
+                    }
+                    FBUtilities.waitOnFutures(resolver.repairResults, DatabaseDescriptor.getWriteRpcTimeout());
+                }
+                catch (TimeoutException ex)
+                {
+                    if (logger.isDebugEnabled())
+                        logger.debug("Range slice timeout: {}", ex.toString());
+                    throw ex;
+                }
+                catch (DigestMismatchException e)
+                {
+                    throw new AssertionError(e); // no digests in range slices yet
+                }
+
+                // if we're done, great, otherwise, move to the next range
+                int count = nodeCmd.maxIsColumns ? columnsCount : rows.size();
+                if (count >= nodeCmd.maxResults)
+                    break;
             }
         }
         finally
@@ -1176,30 +1159,30 @@ public class StorageProxy implements StorageProxyMBean
 
     public boolean getHintedHandoffEnabled()
     {
-        return hintedHandoffEnabled;
+        return DatabaseDescriptor.hintedHandoffEnabled();
     }
 
     public void setHintedHandoffEnabled(boolean b)
     {
-        hintedHandoffEnabled = b;
+        DatabaseDescriptor.setHintedHandoffEnabled(b);
     }
 
     public int getMaxHintWindow()
     {
-        return maxHintWindow;
+        return DatabaseDescriptor.getMaxHintWindow();
     }
 
     public void setMaxHintWindow(int ms)
     {
-        maxHintWindow = ms;
+        DatabaseDescriptor.setMaxHintWindow(ms);
     }
 
     public static boolean shouldHint(InetAddress ep)
     {
-        if (!hintedHandoffEnabled)
+        if (!DatabaseDescriptor.hintedHandoffEnabled())
             return false;
 
-        boolean hintWindowExpired = Gossiper.instance.getEndpointDowntime(ep) > maxHintWindow;
+        boolean hintWindowExpired = Gossiper.instance.getEndpointDowntime(ep) > DatabaseDescriptor.getMaxHintWindow();
         if (hintWindowExpired)
             logger.debug("not hinting {} which has been down {}ms", ep, Gossiper.instance.getEndpointDowntime(ep));
         return !hintWindowExpired;

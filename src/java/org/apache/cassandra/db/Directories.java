@@ -19,22 +19,24 @@ package org.apache.cassandra.db;
 
 import java.io.File;
 import java.io.FileFilter;
-import java.io.IOError;
 import java.io.IOException;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 
-import org.apache.commons.lang.StringUtils;
 import com.google.common.collect.ImmutableMap;
+import com.google.common.collect.ImmutableSortedSet;
+import com.google.common.primitives.Longs;
+import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.*;
 import org.apache.cassandra.db.compaction.LeveledManifest;
+import org.apache.cassandra.io.FSWriteError;
 import org.apache.cassandra.io.util.FileUtils;
-import org.apache.cassandra.io.util.MmappedSegmentedFile;
 import org.apache.cassandra.io.sstable.*;
 import org.apache.cassandra.service.StorageService;
-import org.apache.cassandra.utils.CLibrary;
 import org.apache.cassandra.utils.Pair;
 
 /**
@@ -65,13 +67,13 @@ public class Directories
     public static final String SNAPSHOT_SUBDIR = "snapshots";
     public static final String SECONDARY_INDEX_NAME_SEPARATOR = ".";
 
-    public static final File[] dataFileLocations;
+    public static final DataDirectory[] dataFileLocations;
     static
     {
         String[] locations = DatabaseDescriptor.getAllDataFileLocations();
-        dataFileLocations = new File[locations.length];
+        dataFileLocations = new DataDirectory[locations.length];
         for (int i = 0; i < locations.length; ++i)
-            dataFileLocations[i] = new File(locations[i]);
+            dataFileLocations[i] = new DataDirectory(new File(locations[i]));
     }
 
     private final String tablename;
@@ -94,20 +96,29 @@ public class Directories
         this.cfname = cfname;
         this.sstableDirectories = new File[dataFileLocations.length];
         for (int i = 0; i < dataFileLocations.length; ++i)
-            sstableDirectories[i] = new File(dataFileLocations[i], join(tablename, directoryName));
+            sstableDirectories[i] = new File(dataFileLocations[i].location, join(tablename, directoryName));
 
         if (!StorageService.instance.isClientMode())
         {
-            try
-            {
-                for (File dir : sstableDirectories)
-                    FileUtils.createDirectory(dir);
-            }
-            catch (IOException e)
-            {
-                throw new IOError(e);
-            }
+            for (File dir : sstableDirectories)
+                FileUtils.createDirectory(dir);
         }
+    }
+
+    /**
+     * Returns SSTable location which is inside given data directory.
+     *
+     * @param dataDirectory
+     * @return SSTable location
+     */
+    public File getLocationForDisk(File dataDirectory)
+    {
+        for (File dir : sstableDirectories)
+        {
+            if (FileUtils.getCanonicalPath(dir).startsWith(FileUtils.getCanonicalPath(dataDirectory)))
+                return dir;
+        }
+        return null;
     }
 
     public File getDirectoryForNewSSTables(long estimatedSize)
@@ -117,7 +128,7 @@ public class Directories
         // Requesting GC has a chance to free space only if we're using mmap and a non SUN jvm
         if (path == null
             && (DatabaseDescriptor.getDiskAccessMode() == Config.DiskAccessMode.mmap || DatabaseDescriptor.getIndexAccessMode() == Config.DiskAccessMode.mmap)
-            && !MmappedSegmentedFile.isCleanerAvailable())
+            && !FileUtils.isCleanerAvailable())
         {
             logger.info("Forcing GC to free up disk space.  Upgrade to the Oracle JVM to avoid this");
             StorageService.instance.requestGC();
@@ -151,9 +162,13 @@ public class Directories
 
         for (File dir : sstableDirectories)
         {
-            if (maxFreeDisk < dir.getUsableSpace())
+            if (BlacklistedDirectories.isUnwritable(dir))
+                continue;
+
+            long usableSpace = dir.getUsableSpace();
+            if (maxFreeDisk < usableSpace)
             {
-                maxFreeDisk = dir.getUsableSpace();
+                maxFreeDisk = usableSpace;
                 maxLocation = dir;
             }
         }
@@ -162,10 +177,38 @@ public class Directories
         logger.debug(String.format("expected data files size is %d; largest free partition (%s) has %d bytes free",
                                    estimatedSize, maxLocation, maxFreeDisk));
 
+        return estimatedSize < maxFreeDisk ? maxLocation : null;
+    }
 
-        if (estimatedSize < maxFreeDisk)
-            return maxLocation;
-        return null;
+    /**
+     * Find location which is capable of holding given {@code estimatedSize}.
+     * First it looks through for directory with no current task running and
+     * the most free space available.
+     * If no such directory is available, it just chose the one with the most
+     * free space available.
+     * If no directory can hold given {@code estimatedSize}, then returns null.
+     *
+     * @param estimatedSize estimated size you need to find location to fit
+     * @return directory capable of given estimated size, or null if none found
+     */
+    public static DataDirectory getLocationCapableOfSize(long estimatedSize)
+    {
+        // sort by available disk space
+        SortedSet<DataDirectory> directories = ImmutableSortedSet.copyOf(dataFileLocations);
+
+        // if there is disk with sufficient space and no activity running on it, then use it
+        for (DataDirectory directory : directories)
+        {
+            long spaceAvailable = directory.getEstimatedAvailableSpace();
+            if (estimatedSize < spaceAvailable && directory.currentTasks.get() == 0)
+                return directory;
+        }
+
+        // if not, use the one that has largest free space
+        if (estimatedSize < directories.first().getEstimatedAvailableSpace())
+            return directories.first();
+        else
+            return null;
     }
 
     public static File getSnapshotDirectory(Descriptor desc, String snapshotName)
@@ -183,9 +226,36 @@ public class Directories
         return new SSTableLister();
     }
 
+    public static class DataDirectory implements Comparable<DataDirectory>
+    {
+        public final File location;
+        public final AtomicInteger currentTasks = new AtomicInteger();
+        public final AtomicLong estimatedWorkingSize = new AtomicLong();
+
+        public DataDirectory(File location)
+        {
+            this.location = location;
+        }
+
+        /**
+         * @return estimated available disk space for bounded directory,
+         * excluding the expected size written by tasks in the queue.
+         */
+        public long getEstimatedAvailableSpace()
+        {
+            // Load factor of 0.9 we do not want to use the entire disk that is too risky.
+            return (long)(0.9 * location.getUsableSpace()) - estimatedWorkingSize.get();
+        }
+
+        public int compareTo(DataDirectory o)
+        {
+            // we want to sort by free space in descending order
+            return -1 * Longs.compare(getEstimatedAvailableSpace(), o.getEstimatedAvailableSpace());
+        }
+    }
+
     public class SSTableLister
     {
-        private boolean skipCompacted;
         private boolean skipTemporary;
         private boolean includeBackups;
         private boolean onlyBackups;
@@ -193,14 +263,6 @@ public class Directories
         private final Map<Descriptor, Set<Component>> components = new HashMap<Descriptor, Set<Component>>();
         private boolean filtered;
         private String snapshotName;
-
-        public SSTableLister skipCompacted(boolean b)
-        {
-            if (filtered)
-                throw new IllegalStateException("list() has already been called");
-            skipCompacted = b;
-            return this;
-        }
 
         public SSTableLister skipTemporary(boolean b)
         {
@@ -262,6 +324,9 @@ public class Directories
 
             for (File location : sstableDirectories)
             {
+                if (BlacklistedDirectories.isUnreadable(location))
+                    continue;
+
                 if (snapshotName != null)
                 {
                     new File(location, join(SNAPSHOT_SUBDIR, snapshotName)).listFiles(getFilter());
@@ -294,8 +359,6 @@ public class Directories
                     if (pair == null)
                         return false;
 
-                    if (skipCompacted && new File(pair.left.filenameFor(Component.COMPACTED_MARKER)).exists())
-                        return false;
                     if (skipTemporary && pair.left.temporary)
                         return false;
 
@@ -336,13 +399,14 @@ public class Directories
         return manifestFile;
     }
 
-    public void snapshotLeveledManifest(String snapshotName) throws IOException
+    public void snapshotLeveledManifest(String snapshotName)
     {
         File manifest = tryGetLeveledManifest();
         if (manifest != null)
         {
             File snapshotDirectory = getOrCreate(manifest.getParentFile(), SNAPSHOT_SUBDIR, snapshotName);
-            CLibrary.createHardLink(manifest, new File(snapshotDirectory, manifest.getName()));
+            File target = new File(snapshotDirectory, manifest.getName());
+            FileUtils.createHardLink(manifest, target);
         }
     }
 
@@ -357,7 +421,7 @@ public class Directories
         return false;
     }
 
-    public void clearSnapshot(String snapshotName) throws IOException
+    public void clearSnapshot(String snapshotName)
     {
         // If snapshotName is empty or null, we will delete the entire snapshot directory
         String tag = snapshotName == null ? "" : snapshotName;
@@ -379,11 +443,11 @@ public class Directories
         if (dir.exists())
         {
             if (!dir.isDirectory())
-                throw new IOError(new IOException(String.format("Invalid directory path %s: path exists but is not a directory", dir)));
+                throw new AssertionError(String.format("Invalid directory path %s: path exists but is not a directory", dir));
         }
         else if (!dir.mkdirs())
         {
-            throw new IOError(new IOException("Unable to create directory " + dir));
+            throw new FSWriteError(new IOException("Unable to create directory " + dir), dir);
         }
         return dir;
     }
@@ -407,9 +471,9 @@ public class Directories
             return false;
 
         boolean hasSystemKeyspace = false;
-        for (File location : dataFileLocations)
+        for (DataDirectory dir : dataFileLocations)
         {
-            File systemDir = new File(location, Table.SYSTEM_TABLE);
+            File systemDir = new File(dir.location, Table.SYSTEM_TABLE);
             hasSystemKeyspace |= (systemDir.exists() && systemDir.isDirectory());
             File statusCFDir = new File(systemDir, SystemTable.SCHEMA_KEYSPACES_CF);
             if (statusCFDir.exists())
@@ -421,15 +485,8 @@ public class Directories
 
         // Check whether the migration might create too long a filename
         int longestLocation = -1;
-        try
-        {
-            for (File loc : dataFileLocations)
-                longestLocation = Math.max(longestLocation, loc.getCanonicalPath().length());
-        }
-        catch (IOException e)
-        {
-            throw new IOError(e);
-        }
+        for (DataDirectory loc : dataFileLocations)
+            longestLocation = Math.max(longestLocation, FileUtils.getCanonicalPath(loc.location).length());
 
         // Check that migration won't error out halfway through from too-long paths.  For Windows, we need to check
         // total path length <= 255 (see http://msdn.microsoft.com/en-us/library/aa365247.aspx and discussion on CASSANDRA-2749);
@@ -475,12 +532,12 @@ public class Directories
     {
         logger.info("Upgrade from pre-1.1 version detected: migrating sstables to new directory layout");
 
-        for (File location : dataFileLocations)
+        for (DataDirectory dir : dataFileLocations)
         {
-            if (!location.exists() || !location.isDirectory())
+            if (!dir.location.exists() || !dir.location.isDirectory())
                 continue;
 
-            for (File ksDir : location.listFiles())
+            for (File ksDir : dir.location.listFiles())
             {
                 if (!ksDir.isDirectory())
                     continue;
@@ -530,36 +587,29 @@ public class Directories
 
     private static void migrateFile(File file, File ksDir, String additionalPath)
     {
-        try
-        {
-            if (file.isDirectory())
-                return;
+        if (file.isDirectory())
+            return;
 
-            String name = file.getName();
-            boolean isManifest = name.endsWith(LeveledManifest.EXTENSION);
-            String cfname = isManifest
-                          ? name.substring(0, name.length() - LeveledManifest.EXTENSION.length())
-                          : name.substring(0, name.indexOf(Component.separator));
+        String name = file.getName();
+        boolean isManifest = name.endsWith(LeveledManifest.EXTENSION);
+        String cfname = isManifest
+                      ? name.substring(0, name.length() - LeveledManifest.EXTENSION.length())
+                      : name.substring(0, name.indexOf(Component.separator));
 
-            int idx = cfname.indexOf(SECONDARY_INDEX_NAME_SEPARATOR); // idx > 0 => secondary index
-            String dirname = idx > 0 ? cfname.substring(0, idx) : cfname;
-            File destDir = getOrCreate(ksDir, dirname, additionalPath);
+        int idx = cfname.indexOf(SECONDARY_INDEX_NAME_SEPARATOR); // idx > 0 => secondary index
+        String dirname = idx > 0 ? cfname.substring(0, idx) : cfname;
+        File destDir = getOrCreate(ksDir, dirname, additionalPath);
 
-            File destFile = new File(destDir, isManifest ? name : ksDir.getName() + Component.separator + name);
-            logger.debug(String.format("[upgrade to 1.1] Moving %s to %s", file, destFile));
-            FileUtils.renameWithConfirm(file, destFile);
-        }
-        catch (IOException e)
-        {
-            throw new IOError(e);
-        }
+        File destFile = new File(destDir, isManifest ? name : ksDir.getName() + Component.separator + name);
+        logger.debug(String.format("[upgrade to 1.1] Moving %s to %s", file, destFile));
+        FileUtils.renameWithConfirm(file, destFile);
     }
 
     // Hack for tests, don't use otherwise
     static void overrideDataDirectoriesForTest(String loc)
     {
         for (int i = 0; i < dataFileLocations.length; ++i)
-            dataFileLocations[i] = new File(loc);
+            dataFileLocations[i] = new DataDirectory(new File(loc));
     }
 
     // Hack for tests, don't use otherwise
@@ -567,6 +617,6 @@ public class Directories
     {
         String[] locations = DatabaseDescriptor.getAllDataFileLocations();
         for (int i = 0; i < locations.length; ++i)
-            dataFileLocations[i] = new File(locations[i]);
+            dataFileLocations[i] = new DataDirectory(new File(locations[i]));
     }
 }

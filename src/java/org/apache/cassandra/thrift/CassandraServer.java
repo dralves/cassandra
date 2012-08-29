@@ -433,7 +433,6 @@ public class CassandraServer implements Cassandra.Iface
             if (columns.isEmpty())
                 break;
 
-            ColumnOrSuperColumn firstColumn = columns.get(columns.size() - 1);
             ByteBuffer firstName = getName(columns.get(0));
             int newColumns = pages == 0 || !firstName.equals(predicate.slice_range.start) ? columns.size() : columns.size() - 1;
             totalCount += newColumns;
@@ -853,7 +852,7 @@ public class CassandraServer implements Cassandra.Iface
     {
         return StorageService.instance.describeRing(keyspace);
     }
-    
+
     public Map<String, String> describe_token_map() throws InvalidRequestException
     {
         return StorageService.instance.getTokenToEndpointMap();
@@ -919,8 +918,6 @@ public class CassandraServer implements Cassandra.Iface
         logger.debug("add_column_family");
         state().hasColumnFamilySchemaAccess(Permission.WRITE);
 
-        validateSchemaAgreement();
-
         try
         {
             cf_def.unsetId(); // explicitly ignore any id set by client (Hector likes to set zero)
@@ -946,7 +943,6 @@ public class CassandraServer implements Cassandra.Iface
 
         ClientState cState = state();
         cState.hasColumnFamilySchemaAccess(Permission.WRITE);
-        validateSchemaAgreement();
 
         try
         {
@@ -967,7 +963,6 @@ public class CassandraServer implements Cassandra.Iface
         logger.debug("add_keyspace");
         ThriftValidation.validateKeyspaceNotSystem(ks_def.name);
         state().hasKeyspaceSchemaAccess(Permission.WRITE);
-        validateSchemaAgreement();
         ThriftValidation.validateKeyspaceNotYetExisting(ks_def.name);
 
         // generate a meaningful error if the user setup keyspace and/or column definition incorrectly
@@ -1006,7 +1001,6 @@ public class CassandraServer implements Cassandra.Iface
         logger.debug("drop_keyspace");
         ThriftValidation.validateKeyspaceNotSystem(keyspace);
         state().hasKeyspaceSchemaAccess(Permission.WRITE);
-        validateSchemaAgreement();
 
         try
         {
@@ -1033,7 +1027,6 @@ public class CassandraServer implements Cassandra.Iface
         ThriftValidation.validateTable(ks_def.name);
         if (ks_def.getCf_defs() != null && ks_def.getCf_defs().size() > 0)
             throw new InvalidRequestException("Keyspace update must not contain any column family definitions.");
-        validateSchemaAgreement();
 
         try
         {
@@ -1058,7 +1051,6 @@ public class CassandraServer implements Cassandra.Iface
         CFMetaData oldCfm = Schema.instance.getCFMetaData(cf_def.keyspace, cf_def.name);
         if (oldCfm == null)
             throw new InvalidRequestException("Could not find column family definition to modify.");
-        validateSchemaAgreement();
 
         try
         {
@@ -1074,15 +1066,6 @@ public class CassandraServer implements Cassandra.Iface
             ex.initCause(e);
             throw ex;
         }
-    }
-
-    private void validateSchemaAgreement() throws SchemaDisagreementException
-    {
-        // unreachable hosts don't count towards disagreement
-        Map<String, List<String>> versions = Maps.filterKeys(StorageProxy.describeSchemaVersions(),
-                                                             Predicates.not(Predicates.equalTo(StorageProxy.UNREACHABLE)));
-        if (versions.size() > 1)
-            throw new SchemaDisagreementException();
     }
 
     public void truncate(String cfname) throws InvalidRequestException, UnavailableException, TimedOutException, TException

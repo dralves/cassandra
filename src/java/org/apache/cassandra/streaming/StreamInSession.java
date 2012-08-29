@@ -27,8 +27,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.net.MessagingService;
-import org.cliffc.high_scale_lib.NonBlockingHashMap;
-import org.cliffc.high_scale_lib.NonBlockingHashSet;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -39,6 +37,8 @@ import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.net.MessageOut;
 import org.apache.cassandra.net.OutboundTcpConnection;
 import org.apache.cassandra.utils.Pair;
+import org.cliffc.high_scale_lib.NonBlockingHashMap;
+import org.cliffc.high_scale_lib.NonBlockingHashSet;
 
 /** each context gets its own StreamInSession. So there may be >1 Session per host */
 public class StreamInSession extends AbstractStreamSession
@@ -142,7 +142,7 @@ public class StreamInSession extends AbstractStreamSession
         logger.debug("ack {} sent for {}", reply, remoteFile);
     }
 
-    public void retry(PendingFile remoteFile) throws IOException
+    public void retry(PendingFile remoteFile)
     {
         retries++;
         if (retries > DatabaseDescriptor.getMaxStreamingRetries())
@@ -203,7 +203,7 @@ public class StreamInSession extends AbstractStreamSession
                     if (entry.getKey() != null)
                     {
                         entry.getKey().addSSTables(entry.getValue());
-                        entry.getKey().indexManager.maybeBuildSecondaryIndexes(entry.getValue(), entry.getKey().indexManager.getIndexedColumns());
+                        entry.getKey().indexManager.maybeBuildSecondaryIndexes(entry.getValue(), entry.getKey().indexManager.allIndexesNames());
                     }
                 }
             }

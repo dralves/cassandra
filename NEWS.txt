@@ -38,6 +38,9 @@ Upgrading
     - The default bloom filter fp chance has been increased to 1%.
       This will save about 30% of the memory used by the old default.
       Existing columnfamilies will retain their old setting.
+    - The default partitioner was changed from RandomPartitioner to
+      Murmur3Partitioner which provides faster hashing as well as
+      improved performance with secondary indexes.
 
 Features
 --------
@@ -48,6 +51,22 @@ Features
     - num_tokens can now be specified in cassandra.yaml. This defines the
       number of tokens assigned to the host on the ring (default: 1).
       Also specifying initial_token will override any num_tokens setting.
+    - disk_failure_policy allows blacklisting failed disks in JBOD 
+      configuration instead of erroring out indefinitely
+
+
+1.1.3
+=====
+
+Upgrading
+---------
+    - Running "nodetool upgradesstables" after upgrading is recommended
+      if you use Counter columnfamilies.
+
+Features
+--------
+    - the cqlsh COPY command can now export to CSV flat files
+    - added a new tools/bin/token-generator to facilitate generating evenly distributed tokens
 
 
 1.1.2

@@ -17,13 +17,9 @@
  */
 package org.apache.cassandra.db.columniterator;
 
-import java.io.IOError;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
-
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.CFMetaData;
 import org.apache.cassandra.db.ColumnFamily;
@@ -34,6 +30,7 @@ import org.apache.cassandra.db.IColumn;
 import org.apache.cassandra.db.RowIndexEntry;
 import org.apache.cassandra.db.OnDiskAtom;
 import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.IndexHelper;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.util.FileDataInput;
@@ -44,8 +41,6 @@ import org.apache.cassandra.utils.Filter;
 
 public class SSTableNamesIterator extends SimpleAbstractColumnIterator implements OnDiskAtomIterator
 {
-    private static final Logger logger = LoggerFactory.getLogger(SSTableNamesIterator.class);
-
     private ColumnFamily cf;
     private final SSTableReader sstable;
     private FileDataInput fileToClose;
@@ -71,7 +66,7 @@ public class SSTableNamesIterator extends SimpleAbstractColumnIterator implement
         catch (IOException e)
         {
             sstable.markSuspect();
-            throw new IOError(e);
+            throw new CorruptSSTableException(e, sstable.getFilename());
         }
         finally
         {
@@ -91,10 +86,10 @@ public class SSTableNamesIterator extends SimpleAbstractColumnIterator implement
         {
             read(sstable, file, indexEntry);
         }
-        catch (IOException ioe)
+        catch (IOException e)
         {
             sstable.markSuspect();
-            throw new IOError(ioe);
+            throw new CorruptSSTableException(e, sstable.getFilename());
         }
     }
 

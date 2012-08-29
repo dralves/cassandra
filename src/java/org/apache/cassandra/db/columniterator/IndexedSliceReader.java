@@ -17,12 +17,10 @@
  */
 package org.apache.cassandra.db.columniterator;
 
-import java.io.IOError;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.ArrayDeque;
 import java.util.Deque;
-import java.util.Iterator;
 import java.util.List;
 
 import com.google.common.collect.AbstractIterator;
@@ -34,13 +32,13 @@ import org.apache.cassandra.db.OnDiskAtom;
 import org.apache.cassandra.db.RowIndexEntry;
 import org.apache.cassandra.db.filter.ColumnSlice;
 import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.io.sstable.CorruptSSTableException;
 import org.apache.cassandra.io.sstable.IndexHelper;
 import org.apache.cassandra.io.sstable.IndexHelper.IndexInfo;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.io.util.FileMark;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.Pair;
 
 /**
  * This is a reader that finds the block for a starting column and returns blocks before/after it for each next call.
@@ -109,7 +107,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
         catch (IOException e)
         {
             sstable.markSuspect();
-            throw new IOError(e);
+            throw new CorruptSSTableException(e, file.getPath());
         }
     }
 
@@ -148,15 +146,8 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
             OnDiskAtom column = blockColumns.poll();
             if (column == null)
             {
-                try
-                {
-                    if (!fetcher.fetchMoreData())
-                        return endOfData();
-                }
-                catch (IOException e)
-                {
-                    throw new RuntimeException(e);
-                }
+                if (!fetcher.fetchMoreData())
+                    return endOfData();
             }
             else
             {
@@ -206,7 +197,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
 
         protected abstract boolean setNextSlice();
 
-        protected abstract boolean fetchMoreData() throws IOException;
+        protected abstract boolean fetchMoreData();
 
         protected boolean isColumnBeforeSliceStart(OnDiskAtom column)
         {
@@ -286,7 +277,7 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
             return currentSliceIdx < slices.length;
         }
 
-        protected boolean fetchMoreData() throws IOException
+        protected boolean fetchMoreData()
         {
             if (!hasMoreSlice())
                 return false;
@@ -327,7 +318,14 @@ class IndexedSliceReader extends AbstractIterator<OnDiskAtom> implements OnDiskA
                 if (gotSome)
                     return true;
             }
-            return getNextBlock();
+            try
+            {
+                return getNextBlock();
+            }
+            catch (IOException e)
+            {
+                throw new CorruptSSTableException(e, file.getPath());
+            }
         }
 
         private boolean getNextBlock() throws IOException

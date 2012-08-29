@@ -17,6 +17,7 @@
  */
 package org.apache.cassandra.db.marshal;
 
+import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.Arrays;
 import java.util.ArrayList;
@@ -115,23 +116,13 @@ public class CompositeType extends AbstractCompositeType
     {
         assert objects.length == types.size();
 
-        List<ByteBuffer> serialized = new ArrayList<ByteBuffer>(objects.length);
-        int totalLength = 0;
+        ByteBuffer[] serialized = new ByteBuffer[objects.length];
         for (int i = 0; i < objects.length; i++)
         {
             ByteBuffer buffer = ((AbstractType) types.get(i)).decompose(objects[i]);
-            serialized.add(buffer);
-            totalLength += 2 + buffer.remaining() + 1;
+            serialized[i] = buffer;
         }
-        ByteBuffer out = ByteBuffer.allocate(totalLength);
-        for (ByteBuffer bb : serialized)
-        {
-            putShortLength(out, bb.remaining());
-            out.put(bb);
-            out.put((byte) 0);
-        }
-        out.flip();
-        return out;
+        return build(serialized);
     }
 
     @Override
@@ -191,6 +182,28 @@ public class CompositeType extends AbstractCompositeType
     public String toString()
     {
         return getClass().getName() + TypeParser.stringifyTypeParameters(types);
+    }
+
+    public Builder builder()
+    {
+        return new Builder(this);
+    }
+
+    public ByteBuffer build(ByteBuffer... buffers)
+    {
+        int totalLength = 0;
+        for (ByteBuffer bb : buffers)
+            totalLength += 2 + bb.remaining() + 1;
+
+        ByteBuffer out = ByteBuffer.allocate(totalLength);
+        for (ByteBuffer bb : buffers)
+        {
+            putShortLength(out, bb.remaining());
+            out.put(bb);
+            out.put((byte) 0);
+        }
+        out.flip();
+        return out;
     }
 
     public static class Builder implements ColumnNameBuilder
@@ -272,12 +285,24 @@ public class CompositeType extends AbstractCompositeType
             return components.size();
         }
 
+        public int remainingCount()
+        {
+            return composite.types.size() - components.size();
+        }
+
         public ByteBuffer build()
         {
             DataOutputBuffer out = new DataOutputBuffer(serializedSize);
             for (int i = 0; i < components.size(); i++)
             {
-                ByteBufferUtil.writeWithShortLength(components.get(i), out);
+                try
+                {
+                    ByteBufferUtil.writeWithShortLength(components.get(i), out);
+                }
+                catch (IOException e)
+                {
+                    throw new RuntimeException(e);
+                }
                 out.write(endOfComponents[i]);
             }
             return ByteBuffer.wrap(out.getData(), 0, out.getLength());
@@ -285,9 +310,6 @@ public class CompositeType extends AbstractCompositeType
 
         public ByteBuffer buildAsEndOfRange()
         {
-            if (components.size() >= composite.types.size())
-                throw new IllegalStateException("Composite column is already fully constructed");
-
             if (components.isEmpty())
                 return ByteBufferUtil.EMPTY_BYTE_BUFFER;
 

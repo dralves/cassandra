@@ -17,7 +17,6 @@
  */
 package org.apache.cassandra.db;
 
-import java.io.DataInputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.util.*;
@@ -41,9 +40,6 @@ import org.apache.cassandra.db.filter.QueryPath;
 import org.apache.cassandra.db.marshal.AsciiType;
 import org.apache.cassandra.db.marshal.UTF8Type;
 import org.apache.cassandra.db.migration.avro.KsDef;
-import org.apache.cassandra.io.util.FastByteArrayInputStream;
-import org.apache.cassandra.net.MessagingService;
-import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
@@ -130,7 +126,7 @@ public class DefsTable
     public static final String OLD_SCHEMA_CF = "Schema";
 
     /* dumps current keyspace definitions to storage */
-    public static synchronized void dumpToStorage(Collection<KSMetaData> keyspaces) throws IOException
+    public static synchronized void dumpToStorage(Collection<KSMetaData> keyspaces)
     {
         long timestamp = System.currentTimeMillis();
 
@@ -142,10 +138,8 @@ public class DefsTable
      * Load keyspace definitions for the system keyspace (system.SCHEMA_KEYSPACES_CF)
      *
      * @return Collection of found keyspace definitions
-     *
-     * @throws IOException if failed to read SCHEMA_KEYSPACES_CF
      */
-    public static Collection<KSMetaData> loadFromTable() throws IOException
+    public static Collection<KSMetaData> loadFromTable()
     {
         List<Row> serializedSchema = SystemTable.serializedSchema(SystemTable.SCHEMA_KEYSPACES_CF);
 
@@ -267,7 +261,6 @@ public class DefsTable
     }
 
     private static Set<String> mergeKeyspaces(Map<DecoratedKey, ColumnFamily> old, Map<DecoratedKey, ColumnFamily> updated)
-            throws ConfigurationException, IOException
     {
         // calculate the difference between old and new states (note that entriesOnlyLeft() will be always empty)
         MapDifference<DecoratedKey, ColumnFamily> diff = Maps.difference(old, updated);
@@ -408,7 +401,7 @@ public class DefsTable
             Table.open(ksm.name);
     }
 
-    private static void addColumnFamily(CFMetaData cfm) throws IOException
+    private static void addColumnFamily(CFMetaData cfm)
     {
         assert Schema.instance.getCFMetaData(cfm.ksName, cfm.cfName) == null;
         KSMetaData ksm = Schema.instance.getTableDefinition(cfm.ksName);
@@ -426,7 +419,7 @@ public class DefsTable
             Table.open(ksm.name).initCf(cfm.cfId, cfm.cfName, true);
     }
 
-    private static void updateKeyspace(KSMetaData newState) throws IOException
+    private static void updateKeyspace(KSMetaData newState)
     {
         KSMetaData oldKsm = Schema.instance.getKSMetaData(newState.name);
         assert oldKsm != null;
@@ -446,7 +439,7 @@ public class DefsTable
         }
     }
 
-    private static void updateColumnFamily(CFMetaData newState) throws IOException
+    private static void updateColumnFamily(CFMetaData newState)
     {
         CFMetaData cfm = Schema.instance.getCFMetaData(newState.ksName, newState.cfName);
         assert cfm != null;

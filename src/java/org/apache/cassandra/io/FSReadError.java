@@ -15,19 +15,27 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package org.apache.cassandra.io.compress;
+package org.apache.cassandra.io;
 
-import java.io.IOException;
+import java.io.File;
 
-public class CorruptedBlockException extends IOException
+import org.apache.cassandra.io.sstable.Descriptor;
+
+public class FSReadError extends FSError
 {
-    public CorruptedBlockException(String filePath, CompressionMetadata.Chunk chunk)
+    public FSReadError(Throwable cause, File path)
     {
-        this(filePath, chunk.offset, chunk.length);
+        super(cause, path);
     }
 
-    public CorruptedBlockException(String filePath, long offset, int length)
+    public FSReadError(Throwable cause, String path)
     {
-        super(String.format("(%s): corruption detected, chunk at %d of length %d.", filePath, offset, length));
+        this(cause, new File(path));
+    }
+
+    @Override
+    public String toString()
+    {
+        return "FSReadError in " + path;
     }
 }

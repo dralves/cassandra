@@ -19,13 +19,13 @@ package org.apache.cassandra.db.compaction;
 
 import java.util.Collection;
 import java.util.Set;
-import java.io.IOException;
 
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.db.ColumnFamilyStore;
 import org.apache.cassandra.db.compaction.CompactionManager.CompactionExecutorStatsCollector;
+import org.apache.cassandra.io.util.DiskAwareRunnable;
 
-public abstract class AbstractCompactionTask
+public abstract class AbstractCompactionTask extends DiskAwareRunnable
 {
     protected final ColumnFamilyStore cfs;
     protected Collection<SSTableReader> sstables;
@@ -40,7 +40,7 @@ public abstract class AbstractCompactionTask
         this.compactionType = OperationType.COMPACTION;
     }
 
-    public abstract int execute(CompactionExecutorStatsCollector collector) throws IOException;
+    public abstract int execute(CompactionExecutorStatsCollector collector);
 
     public ColumnFamilyStore getColumnFamilyStore()
     {

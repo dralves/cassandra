@@ -30,7 +30,6 @@ import java.util.Map;
 import org.apache.commons.lang.StringUtils;
 
 import org.apache.cassandra.config.ConfigurationException;
-import org.apache.cassandra.cql3.CFPropDefs;
 import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.cassandra.utils.FBUtilities;
 
@@ -504,11 +503,11 @@ public class TypeParser
         boolean first = true;
         for (Map.Entry<ByteBuffer, CollectionType> entry : collections.entrySet())
         {
-            if (first)
+            if (!first)
             {
                 sb.append(',');
-                first = false;
             }
+            first = false;
             sb.append(ByteBufferUtil.bytesToHex(entry.getKey())).append(":");
             entry.getValue().appendToStringBuilder(sb);
         }

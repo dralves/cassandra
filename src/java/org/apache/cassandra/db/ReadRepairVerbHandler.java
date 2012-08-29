@@ -17,9 +17,6 @@
  */
 package org.apache.cassandra.db;
 
-import java.io.IOError;
-import java.io.IOException;
-
 import org.apache.cassandra.net.IVerbHandler;
 import org.apache.cassandra.net.MessageIn;
 import org.apache.cassandra.net.MessagingService;
@@ -28,16 +25,9 @@ public class ReadRepairVerbHandler implements IVerbHandler<RowMutation>
 {
     public void doVerb(MessageIn<RowMutation> message, String id)
     {
-        try
-        {
-            RowMutation rm = message.payload;
-            rm.apply();
-            WriteResponse response = new WriteResponse(rm.getTable(), rm.key(), true);
-            MessagingService.instance().sendReply(response.createMessage(), id, message.from);
-        }
-        catch (IOException e)
-        {
-            throw new IOError(e);
-        }
+        RowMutation rm = message.payload;
+        rm.apply();
+        WriteResponse response = new WriteResponse(rm.getTable(), rm.key(), true);
+        MessagingService.instance().sendReply(response.createMessage(), id, message.from);
     }
 }

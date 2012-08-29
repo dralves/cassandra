@@ -24,13 +24,13 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 import com.google.common.collect.*;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import org.apache.cassandra.config.DatabaseDescriptor;
 import org.apache.cassandra.db.compaction.OperationType;
 import org.apache.cassandra.io.sstable.SSTableReader;
+import org.apache.cassandra.io.util.FileUtils;
 import org.apache.cassandra.notifications.INotification;
 import org.apache.cassandra.notifications.INotificationConsumer;
 import org.apache.cassandra.notifications.SSTableAddedNotification;
@@ -38,7 +38,6 @@ import org.apache.cassandra.notifications.SSTableListChangedNotification;
 import org.apache.cassandra.service.StorageService;
 import org.apache.cassandra.utils.Interval;
 import org.apache.cassandra.utils.IntervalTree;
-import org.apache.cassandra.utils.WrappedRunnable;
 
 public class DataTracker
 {
@@ -159,12 +158,12 @@ public class DataTracker
         if (!DatabaseDescriptor.isIncrementalBackupsEnabled())
             return;
 
-        Runnable runnable = new WrappedRunnable()
+        Runnable runnable = new Runnable()
         {
-            protected void runMayThrow() throws Exception
+            public void run()
             {
                 File backupsDir = Directories.getBackupsDirectory(sstable.descriptor);
-                sstable.createLinks(backupsDir.getCanonicalPath());
+                sstable.createLinks(FileUtils.getCanonicalPath(backupsDir));
             }
         };
         StorageService.tasks.execute(runnable);
@@ -289,6 +288,32 @@ public class DataTracker
         }
         notifySSTablesChanged(notCompacting, Collections.<SSTableReader>emptySet(), OperationType.UNKNOWN);
         postReplace(notCompacting, Collections.<SSTableReader>emptySet());
+    }
+
+    /**
+     * Removes every SSTable in the directory from the DataTracker's view.
+     * @param directory the unreadable directory, possibly with SSTables in it, but not necessarily.
+     */
+    void removeUnreadableSSTables(File directory)
+    {
+        View currentView, newView;
+        List<SSTableReader> remaining = new ArrayList<SSTableReader>();
+        do
+        {
+            currentView = view.get();
+            for (SSTableReader r : currentView.nonCompactingSStables())
+            {
+                if (!r.descriptor.directory.equals(directory))
+                    remaining.add(r);
+            }
+
+            if (remaining.size() == currentView.nonCompactingSStables().size())
+                return;
+
+            newView = currentView.replace(currentView.sstables, remaining);
+        }
+        while (!view.compareAndSet(currentView, newView));
+        notifySSTablesChanged(remaining, Collections.<SSTableReader>emptySet(), OperationType.UNKNOWN);
     }
 
     /** (Re)initializes the tracker, purging all references. */

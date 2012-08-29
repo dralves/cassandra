@@ -17,23 +17,35 @@
  */
 package org.apache.cassandra.db.index;
 
-import java.io.IOException;
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
 import java.util.*;
 import java.util.concurrent.*;
 
-import org.apache.cassandra.config.ColumnDefinition;
-import org.apache.cassandra.config.ConfigurationException;
-import org.apache.cassandra.db.ColumnFamilyStore;
-import org.apache.cassandra.db.SystemTable;
-import org.apache.cassandra.db.compaction.CompactionManager;
-import org.apache.cassandra.db.index.keys.KeysIndex;
-import org.apache.cassandra.io.sstable.ReducingKeyIterator;
-import org.apache.cassandra.io.sstable.SSTableReader;
-import org.apache.cassandra.utils.ByteBufferUtil;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import org.apache.cassandra.config.CFMetaData;
+import org.apache.cassandra.config.ColumnDefinition;
+import org.apache.cassandra.config.ConfigurationException;
+import org.apache.cassandra.db.ColumnFamilyStore;
+import org.apache.cassandra.db.DecoratedKey;
+import org.apache.cassandra.db.IColumn;
+import org.apache.cassandra.db.SystemTable;
+import org.apache.cassandra.db.compaction.CompactionManager;
+import org.apache.cassandra.db.index.keys.KeysIndex;
+import org.apache.cassandra.db.index.composites.CompositesIndex;
+import org.apache.cassandra.db.marshal.AbstractType;
+import org.apache.cassandra.db.marshal.BytesType;
+import org.apache.cassandra.db.marshal.CompositeType;
+import org.apache.cassandra.db.marshal.LocalByPartionerType;
+import org.apache.cassandra.dht.*;
+import org.apache.cassandra.io.sstable.ReducingKeyIterator;
+import org.apache.cassandra.io.sstable.SSTableReader;
+import org.apache.cassandra.thrift.Column;
+import org.apache.cassandra.service.StorageService;
+import org.apache.cassandra.utils.ByteBufferUtil;
 
 /**
  * Abstract base class for different types of secondary indexes.
@@ -42,8 +54,7 @@ import org.slf4j.LoggerFactory;
  */
 public abstract class SecondaryIndex
 {
-
-    private static final Logger logger = LoggerFactory.getLogger(SecondaryIndex.class);
+    protected static final Logger logger = LoggerFactory.getLogger(SecondaryIndex.class);
 
     public static final String CUSTOM_INDEX_OPTION_NAME = "class_name";
 
@@ -95,14 +106,16 @@ public abstract class SecondaryIndex
         return SystemTable.isIndexBuilt(baseCfs.table.name, getNameForSystemTable(columnName));
     }
 
-    public void setIndexBuilt(ByteBuffer columnName)
+    public void setIndexBuilt()
     {
-        SystemTable.setIndexBuilt(baseCfs.table.name, getNameForSystemTable(columnName));
+        for (ColumnDefinition columnDef : columnDefs)
+            SystemTable.setIndexBuilt(baseCfs.table.name, getNameForSystemTable(columnDef.name));
     }
 
-    public void setIndexRemoved(ByteBuffer columnName)
+    public void setIndexRemoved()
     {
-        SystemTable.setIndexRemoved(baseCfs.table.name, getNameForSystemTable(columnName));
+        for (ColumnDefinition columnDef : columnDefs)
+            SystemTable.setIndexRemoved(baseCfs.table.name, getNameForSystemTable(columnDef.name));
     }
 
     /**
@@ -115,9 +128,8 @@ public abstract class SecondaryIndex
 
     /**
      * Forces this indexes in memory data to disk
-     * @throws IOException
      */
-    public abstract void forceBlockingFlush() throws IOException;
+    public abstract void forceBlockingFlush();
 
     /**
      * Get current amount of memory this index is consuming (in bytes)
@@ -135,7 +147,7 @@ public abstract class SecondaryIndex
      * Delete all files and references to this index
      * @param columnName the indexed column to remove
      */
-    public abstract void removeIndex(ByteBuffer columnName) throws IOException;
+    public abstract void removeIndex(ByteBuffer columnName);
 
     /**
      * Remove the index and unregisters this index's mbean if one exists
@@ -153,19 +165,14 @@ public abstract class SecondaryIndex
      * Builds the index using the data in the underlying CFS
      * Blocks till it's complete
      */
-    protected void buildIndexBlocking() throws IOException
+    protected void buildIndexBlocking()
     {
         logger.info(String.format("Submitting index build of %s for data in %s",
                 getIndexName(), StringUtils.join(baseCfs.getSSTables(), ", ")));
 
-        SortedSet<ByteBuffer> columnNames = new TreeSet<ByteBuffer>();
-
-        for (ColumnDefinition cdef : columnDefs)
-            columnNames.add(cdef.name);
-
         Collection<SSTableReader> sstables = baseCfs.markCurrentSSTablesReferenced();
         SecondaryIndexBuilder builder = new SecondaryIndexBuilder(baseCfs,
-                                                                  columnNames,
+                                                                  Collections.singleton(getIndexName()),
                                                                   new ReducingKeyIterator(sstables));
         Future<?> future = CompactionManager.instance.submitIndexBuild(builder);
         try
@@ -173,16 +180,7 @@ public abstract class SecondaryIndex
             future.get();
             forceBlockingFlush();
 
-            // Mark all indexed columns as built
-            if (this instanceof PerRowSecondaryIndex)
-            {
-                for (ByteBuffer columnName : columnNames)
-                    SystemTable.setIndexBuilt(baseCfs.table.name, getIndexName()+ByteBufferUtil.string(columnName));
-            }
-            else
-            {
-                SystemTable.setIndexBuilt(baseCfs.table.name, getIndexName());
-            }
+            setIndexBuilt();
         }
         catch (InterruptedException e)
         {
@@ -190,7 +188,7 @@ public abstract class SecondaryIndex
         }
         catch (ExecutionException e)
         {
-            throw new IOException(e);
+            throw new RuntimeException(e);
         }
         finally
         {
@@ -231,6 +229,7 @@ public abstract class SecondaryIndex
                 try
                 {
                     baseCfs.forceBlockingFlush();
+                    buildIndexBlocking();
                 }
                 catch (ExecutionException e)
                 {
@@ -239,15 +238,6 @@ public abstract class SecondaryIndex
                 catch (InterruptedException e)
                 {
                     throw new AssertionError(e);
-                }
-
-                try
-                {
-                    buildIndexBlocking();
-                }
-                catch (IOException e)
-                {
-                    throw new RuntimeException(e);
                 }
             }
         };
@@ -267,7 +257,7 @@ public abstract class SecondaryIndex
         this.baseCfs = baseCfs;
     }
 
-    Set<ColumnDefinition> getColumnDefs()
+    public Set<ColumnDefinition> getColumnDefs()
     {
         return columnDefs;
     }
@@ -288,6 +278,34 @@ public abstract class SecondaryIndex
     }
 
     /**
+     * Returns the decoratedKey for a column value
+     * @param value column value
+     * @return decorated key
+     */
+    public DecoratedKey getIndexKeyFor(ByteBuffer value)
+    {
+        // FIXME: this imply one column definition per index
+        ByteBuffer name = columnDefs.iterator().next().name;
+        return new DecoratedKey(new LocalToken(baseCfs.metadata.getColumnDefinition(name).getValidator(), value), value);
+    }
+
+    /**
+     * Returns true if the provided column name is indexed by this secondary index.
+     *
+     * The default implement checks whether the name is one the columnDef name,
+     * but this should be overriden but subclass if needed.
+     */
+    public boolean indexes(ByteBuffer name)
+    {
+        for (ColumnDefinition columnDef : columnDefs)
+        {
+            if (baseCfs.getComparator().compare(columnDef.name, name) == 0)
+                return true;
+        }
+        return false;
+    }
+
+    /**
      * This is the primary way to create a secondary index instance for a CF column.
      * It will validate the index_options before initializing.
      *
@@ -305,6 +323,9 @@ public abstract class SecondaryIndex
         {
         case KEYS:
             index = new KeysIndex();
+            break;
+        case COMPOSITES:
+            index = new CompositesIndex();
             break;
         case CUSTOM:
             assert cdef.getIndexOptions() != null;
@@ -328,5 +349,47 @@ public abstract class SecondaryIndex
         index.setBaseCfs(baseCfs);
 
         return index;
+    }
+
+    public abstract boolean validate(Column column);
+
+    /**
+     * Returns the index comparator for index backed by CFS, or null.
+     *
+     * Note: it would be cleaner to have this be a member method. However we need this when opening indexes
+     * sstables, but by then the CFS won't be fully initiated, so the SecondaryIndex object won't be accessible.
+     */
+    public static AbstractType<?> getIndexComparator(CFMetaData baseMetadata, ColumnDefinition cdef)
+    {
+        IPartitioner rowPartitioner = StorageService.getPartitioner();
+        AbstractType<?> keyComparator = (rowPartitioner instanceof OrderPreservingPartitioner || rowPartitioner instanceof ByteOrderedPartitioner)
+                                      ? BytesType.instance
+                                      : new LocalByPartionerType(rowPartitioner);
+
+        switch (cdef.getIndexType())
+        {
+            case KEYS:
+                return keyComparator;
+            case COMPOSITES:
+                assert baseMetadata.comparator instanceof CompositeType;
+                int prefixSize;
+                try
+                {
+                    prefixSize = Integer.parseInt(cdef.getIndexOptions().get(CompositesIndex.PREFIX_SIZE_OPTION));
+                }
+                catch (NumberFormatException e)
+                {
+                    // This shouldn't happen if validation has been done correctly
+                    throw new RuntimeException(e);
+                }
+                List<AbstractType<?>> types = new ArrayList<AbstractType<?>>(prefixSize + 1);
+                types.add(keyComparator);
+                for (int i = 0; i < prefixSize; i++)
+                    types.add(((CompositeType)baseMetadata.comparator).types.get(i));
+                return CompositeType.getInstance(types);
+            case CUSTOM:
+                return null;
+        }
+        throw new AssertionError();
     }
 }

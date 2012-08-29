@@ -19,17 +19,12 @@ package org.apache.cassandra.cql3;
 
 import java.nio.ByteBuffer;
 import java.util.Collections;
-import java.util.Iterator;
 import java.util.List;
 
 import org.apache.cassandra.config.ConfigurationException;
 import org.apache.cassandra.dht.IPartitioner;
 import org.apache.cassandra.dht.Token;
 import org.apache.cassandra.db.marshal.AbstractType;
-import org.apache.cassandra.db.marshal.AsciiType;
-import org.apache.cassandra.db.marshal.FloatType;
-import org.apache.cassandra.db.marshal.IntegerType;
-import org.apache.cassandra.db.marshal.LexicalUUIDType;
 import org.apache.cassandra.db.marshal.MarshalException;
 import org.apache.cassandra.thrift.InvalidRequestException;
 
@@ -136,30 +131,6 @@ public class Term
             return value;
         }
         catch (MarshalException e)
-        {
-            throw new InvalidRequestException(e.getMessage());
-        }
-    }
-
-    public Token getAsToken(AbstractType<?> validator, List<ByteBuffer> variables, IPartitioner<?> p) throws InvalidRequestException
-    {
-        if (!(isToken || type == Type.STRING))
-            throw new InvalidRequestException("Invalid value for token (use a string literal of the token value or the token() function)");
-
-        try
-        {
-            if (isToken)
-            {
-                ByteBuffer value = getByteBuffer(validator, variables);
-                return p.getToken(value);
-            }
-            else
-            {
-                p.getTokenFactory().validate(text);
-                return p.getTokenFactory().fromString(text);
-            }
-        }
-        catch (ConfigurationException e)
         {
             throw new InvalidRequestException(e.getMessage());
         }

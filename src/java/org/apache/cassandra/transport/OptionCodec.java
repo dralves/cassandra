@@ -18,9 +18,7 @@
 package org.apache.cassandra.transport;
 
 import java.lang.reflect.Array;
-import java.util.ArrayList;
 import java.util.EnumMap;
-import java.util.List;
 import java.util.Map;
 
 import org.jboss.netty.buffer.ChannelBuffer;
@@ -77,7 +75,7 @@ public class OptionCodec<T extends Enum<T> & OptionCodec.Codecable<T>>
             T opt = fromId(body.readUnsignedShort());
             Object value = opt.readValue(body);
             if (options.containsKey(opt))
-                throw new ProtocolException(String.format("Duplicate option %d in message", opt));
+                throw new ProtocolException(String.format("Duplicate option %s in message", opt.name()));
             options.put(opt, value);
         }
         return options;
@@ -111,11 +109,17 @@ public class OptionCodec<T extends Enum<T> & OptionCodec.Codecable<T>>
         T opt = option.left;
         Object obj = option.right;
 
-        int l = 2 + opt.serializedValueSize(obj);
-        ChannelBuffer cb = ChannelBuffers.buffer(l);
+        ChannelBuffer cb = ChannelBuffers.buffer(oneSerializedSize(option));
 
         cb.writeShort(opt.getId());
         opt.writeValue(obj, cb);
         return cb;
+    }
+
+    public int oneSerializedSize(Pair<T, Object> option)
+    {
+        T opt = option.left;
+        Object obj = option.right;
+        return 2 + opt.serializedValueSize(obj);
     }
 }

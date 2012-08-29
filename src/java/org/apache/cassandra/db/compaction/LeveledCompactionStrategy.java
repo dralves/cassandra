@@ -55,7 +55,7 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
         if (options != null)
         {
             String value = options.containsKey(SSTABLE_SIZE_OPTION) ? options.get(SSTABLE_SIZE_OPTION) : null;
-            if (null != value)
+            if (value != null)
             {
                 try
                 {
@@ -178,7 +178,7 @@ public class LeveledCompactionStrategy extends AbstractCompactionStrategy implem
         return Sets.difference(L0, sstablesToIgnore).size() + manifest.getLevelCount() > 20;
     }
 
-    public List<ICompactionScanner> getScanners(Collection<SSTableReader> sstables, Range<Token> range) throws IOException
+    public List<ICompactionScanner> getScanners(Collection<SSTableReader> sstables, Range<Token> range)
     {
         Multimap<Integer, SSTableReader> byLevel = ArrayListMultimap.create();
         for (SSTableReader sstable : sstables)

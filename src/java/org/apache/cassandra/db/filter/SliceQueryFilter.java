@@ -39,7 +39,6 @@ import org.apache.cassandra.io.IVersionedSerializer;
 import org.apache.cassandra.io.sstable.SSTableReader;
 import org.apache.cassandra.io.util.FileDataInput;
 import org.apache.cassandra.net.MessagingService;
-import org.apache.cassandra.utils.ByteBufferUtil;
 
 public class SliceQueryFilter implements IFilter
 {
@@ -149,15 +148,19 @@ public class SliceQueryFilter implements IFilter
 
         while (reducedColumns.hasNext())
         {
-            if (columnCounter.count() >= count)
+            if (columnCounter.live() >= count)
+            {
+                logger.debug("Read %s live columns and %s tombstoned",
+                             columnCounter.live(), columnCounter.ignored());
                 break;
+            }
 
             IColumn column = reducedColumns.next();
-            if (logger.isDebugEnabled())
-                logger.debug(String.format("collecting %s of %s: %s",
-                                           columnCounter.count(), count, column.getString(comparator)));
+            if (logger.isTraceEnabled())
+                logger.trace(String.format("collecting %s of %s: %s",
+                                           columnCounter.live(), count, column.getString(comparator)));
 
-            columnCounter.countColum(column, container);
+            columnCounter.count(column, container);
 
             // but we need to add all non-gc-able columns to the result for read repair:
             if (QueryFilter.isRelevant(column, container, gcBefore))
@@ -183,7 +186,7 @@ public class SliceQueryFilter implements IFilter
 
     public int lastCounted()
     {
-        return columnCounter == null ? 0 : columnCounter.count();
+        return columnCounter == null ? 0 : columnCounter.live();
     }
 
     @Override
@@ -200,6 +203,14 @@ public class SliceQueryFilter implements IFilter
     public void updateColumnsLimit(int newLimit)
     {
         count = newLimit;
+    }
+
+    public boolean includes(Comparator<ByteBuffer> cmp, ByteBuffer name)
+    {
+        for (ColumnSlice slice : slices)
+            if (slice.includes(cmp, name))
+                return true;
+        return false;
     }
 
     public static class Serializer implements IVersionedSerializer<SliceQueryFilter>

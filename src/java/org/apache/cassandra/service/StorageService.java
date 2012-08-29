@@ -18,7 +18,6 @@
 package org.apache.cassandra.service;
 
 import java.io.File;
-import java.io.IOError;
 import java.io.IOException;
 import java.lang.management.ManagementFactory;
 import java.net.InetAddress;
@@ -354,9 +353,9 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         {
             Thread.sleep(delay);
         }
-        catch (Exception ex)
+        catch (InterruptedException e)
         {
-            throw new IOError(ex);
+            throw new AssertionError(e);
         }
 
         Schema.instance.updateVersionAndAnnounce();
@@ -511,45 +510,57 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
 
         HintedHandOffManager.instance.start();
 
-        if (DatabaseDescriptor.isAutoBootstrap()
-                && DatabaseDescriptor.getSeeds().contains(FBUtilities.getBroadcastAddress())
-                && !SystemTable.bootstrapComplete())
-            logger.info("This node will not auto bootstrap because it is configured to be a seed node.");
-
+        // We bootstrap if we haven't successfully bootstrapped before, as long as we are not a seed.
+        // If we are a seed, or if the user manually sets auto_bootstrap to false,
+        // we'll skip streaming data from other nodes and jump directly into the ring.
+        //
+        // The seed check allows us to skip the RING_DELAY sleep for the single-node cluster case,
+        // which is useful for both new users and testing.
+        //
+        // We attempted to replace this with a schema-presence check, but you need a meaningful sleep
+        // to get schema info from gossip which defeats the purpose.  See CASSANDRA-4427 for the gory details.
         Set<InetAddress> current = new HashSet<InetAddress>();
         Collection<Token> tokens;
-        // we can bootstrap at startup, or if we detect a previous attempt that failed, which is to say:
-        // DD.isAutoBootstrap must be true AND:
-        //  bootstrap is not recorded as complete, OR
-        //  DD.getSeeds does not contain our BCA, OR
-        //  we do not have non-system tables already
-        // OR:
-        //  we detect that we were previously trying to bootstrap (ST.bootstrapInProgress is true)
+        logger.debug("Bootstrap variables: {} {} {} {}",
+                      new Object[]{ DatabaseDescriptor.isAutoBootstrap(),
+                                    SystemTable.bootstrapInProgress(),
+                                    SystemTable.bootstrapComplete(),
+                                    DatabaseDescriptor.getSeeds().contains(FBUtilities.getBroadcastAddress())});
         if (DatabaseDescriptor.isAutoBootstrap()
-                && !(SystemTable.bootstrapComplete() || DatabaseDescriptor.getSeeds().contains(FBUtilities.getBroadcastAddress()) || !Schema.instance.getNonSystemTables().isEmpty())
-                || SystemTable.bootstrapInProgress())
+            && !SystemTable.bootstrapComplete()
+            && !DatabaseDescriptor.getSeeds().contains(FBUtilities.getBroadcastAddress()))
         {
             if (SystemTable.bootstrapInProgress())
                 logger.warn("Detected previous bootstrap failure; retrying");
             else
                 SystemTable.setBootstrapState(SystemTable.BootstrapState.IN_PROGRESS);
-            setMode(Mode.JOINING, "waiting for ring and schema information", true);
-            // first sleep the delay to make sure we see the schema
-            try
+            setMode(Mode.JOINING, "waiting for ring information", true);
+            // first sleep the delay to make sure we see all our peers
+            for (int i = 0; i < delay; i += 1000)
             {
-                Thread.sleep(delay);
+                // if we see schema, we can proceed to the next check directly
+                if (!Schema.instance.getVersion().equals(Schema.emptyVersion))
+                {
+                    logger.debug("got schema: {}", Schema.instance.getVersion());
+                    break;
+                }
+                try
+                {
+                    Thread.sleep(1000);
+                }
+                catch (InterruptedException e)
+                {
+                    throw new AssertionError(e);
+                }
             }
-            catch (InterruptedException e)
-            {
-                throw new AssertionError(e);
-            }
-            // now if our schema hasn't matched, keep sleeping until it does
+            // if our schema hasn't matched yet, keep sleeping until it does
+            // (post CASSANDRA-1391 we don't expect this to be necessary very often, but it doesn't hurt to be careful)
             while (!MigrationManager.isReadyForBootstrap())
             {
                 setMode(Mode.JOINING, "waiting for schema information to complete", true);
                 try
                 {
-                    Thread.sleep(delay);
+                    Thread.sleep(1000);
                 }
                 catch (InterruptedException e)
                 {
@@ -592,7 +603,7 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
                 for (Token token : tokens)
                 {
                     InetAddress existing = tokenMetadata.getEndpoint(token);
-                    if (null != existing)
+                    if (existing != null)
                     {
                         if (Gossiper.instance.getEndpointStateForEndpoint(existing).getUpdateTimestamp() > (System.currentTimeMillis() - delay))
                             throw new UnsupportedOperationException("Cannnot replace a token for a Live node... ");
@@ -703,7 +714,7 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         }
     }
 
-    public synchronized void joinRing() throws IOException, org.apache.cassandra.config.ConfigurationException
+    public synchronized void joinRing() throws IOException, ConfigurationException
     {
         if (!joined)
         {
@@ -1846,34 +1857,22 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
         return stringify(Gossiper.instance.getUnreachableMembers());
     }
 
-    private static String getCanonicalPath(String filename)
-    {
-        try
-        {
-            return new File(filename).getCanonicalPath();
-        }
-        catch (IOException e)
-        {
-            throw new IOError(e);
-        }
-    }
-
     public String[] getAllDataFileLocations()
     {
         String[] locations = DatabaseDescriptor.getAllDataFileLocations();
         for (int i = 0; i < locations.length; i++)
-            locations[i] = getCanonicalPath(locations[i]);
+            locations[i] = FileUtils.getCanonicalPath(locations[i]);
         return locations;
     }
 
     public String getCommitLogLocation()
     {
-        return getCanonicalPath(DatabaseDescriptor.getCommitLogLocation());
+        return FileUtils.getCanonicalPath(DatabaseDescriptor.getCommitLogLocation());
     }
 
     public String getSavedCachesLocation()
     {
-        return getCanonicalPath(DatabaseDescriptor.getSavedCachesLocation());
+        return FileUtils.getCanonicalPath(DatabaseDescriptor.getSavedCachesLocation());
     }
 
     private List<String> stringify(Iterable<InetAddress> endpoints)
@@ -3289,7 +3288,7 @@ public class StorageService implements IEndpointStateChangeSubscriber, StorageSe
     /**
      * #{@inheritDoc}
      */
-    public List<String> getRangeKeySample()
+    public List<String> sampleKeyRange() // do not rename to getter - see CASSANDRA-4452 for details
     {
         List<DecoratedKey> keys = new ArrayList<DecoratedKey>();
         for (Range<Token> range : getLocalPrimaryRanges())

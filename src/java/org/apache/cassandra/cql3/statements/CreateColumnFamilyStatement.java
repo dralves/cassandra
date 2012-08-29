@@ -19,7 +19,6 @@ package org.apache.cassandra.cql3.statements;
 
 import java.nio.ByteBuffer;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,9 +42,7 @@ import org.apache.cassandra.service.ClientState;
 import org.apache.cassandra.service.MigrationManager;
 import org.apache.cassandra.thrift.CqlResult;
 import org.apache.cassandra.thrift.InvalidRequestException;
-import org.apache.cassandra.io.compress.CompressionParameters;
 import org.apache.cassandra.utils.ByteBufferUtil;
-import org.apache.cassandra.utils.Pair;
 
 /** A <code>CREATE COLUMNFAMILY</code> parsed from a CQL query statement. */
 public class CreateColumnFamilyStatement extends SchemaAlteringStatement
@@ -54,7 +51,7 @@ public class CreateColumnFamilyStatement extends SchemaAlteringStatement
     private AbstractType<?> defaultValidator;
     private AbstractType<?> keyValidator;
 
-    private ByteBuffer keyAlias;
+    private final List<ByteBuffer> keyAliases = new ArrayList<ByteBuffer>();
     private final List<ByteBuffer> columnAliases = new ArrayList<ByteBuffer>();
     private ByteBuffer valueAlias;
 
@@ -124,7 +121,7 @@ public class CreateColumnFamilyStatement extends SchemaAlteringStatement
         cfmd.defaultValidator(defaultValidator)
             .columnMetadata(getColumns())
             .keyValidator(keyValidator)
-            .keyAlias(keyAlias)
+            .keyAliases(keyAliases)
             .columnAliases(columnAliases)
             .valueAlias(valueAlias);
 
@@ -136,7 +133,7 @@ public class CreateColumnFamilyStatement extends SchemaAlteringStatement
         private final Map<ColumnIdentifier, ParsedType> definitions = new HashMap<ColumnIdentifier, ParsedType>();
         private final CFPropDefs properties = new CFPropDefs();
 
-        private final List<ColumnIdentifier> keyAliases = new ArrayList<ColumnIdentifier>();
+        private final List<List<ColumnIdentifier>> keyAliases = new ArrayList<List<ColumnIdentifier>>();
         private final List<ColumnIdentifier> columnAliases = new ArrayList<ColumnIdentifier>();
         private final Map<ColumnIdentifier, Boolean> definedOrdering = new HashMap<ColumnIdentifier, Boolean>();
 
@@ -184,16 +181,21 @@ public class CreateColumnFamilyStatement extends SchemaAlteringStatement
                     stmt.columns.put(id, pt.getType()); // we'll remove what is not a column below
                 }
 
-                // Ensure that exactly one key has been specified.
-                if (keyAliases.size() == 0)
-                    throw new InvalidRequestException("You must specify a PRIMARY KEY");
-                else if (keyAliases.size() > 1)
-                    throw new InvalidRequestException("You may only specify one PRIMARY KEY");
+                if (keyAliases.size() != 1)
+                    throw new InvalidRequestException("You must specify one and only one PRIMARY KEY");
 
-                stmt.keyAlias = keyAliases.get(0).key;
-                stmt.keyValidator = getTypeAndRemove(stmt.columns, keyAliases.get(0));
-                if (stmt.keyValidator instanceof CounterColumnType)
-                    throw new InvalidRequestException(String.format("counter type is not supported for PRIMARY KEY part %s", stmt.keyAlias));
+                List<ColumnIdentifier> kAliases = keyAliases.get(0);
+
+                List<AbstractType<?>> keyTypes = new ArrayList<AbstractType<?>>(kAliases.size());
+                for (ColumnIdentifier alias : kAliases)
+                {
+                    stmt.keyAliases.add(alias.key);
+                    AbstractType<?> t = getTypeAndRemove(stmt.columns, alias);
+                    if (t instanceof CounterColumnType)
+                        throw new InvalidRequestException(String.format("counter type is not supported for PRIMARY KEY part %s", alias));
+                    keyTypes.add(t);
+                }
+                stmt.keyValidator = keyTypes.size() == 1 ? keyTypes.get(0) : CompositeType.getInstance(keyTypes);
 
                 // Handle column aliases
                 if (columnAliases.isEmpty())
@@ -322,9 +324,9 @@ public class CreateColumnFamilyStatement extends SchemaAlteringStatement
             definitions.put(def, type);
         }
 
-        public void setKeyAlias(ColumnIdentifier alias)
+        public void addKeyAliases(List<ColumnIdentifier> aliases)
         {
-            keyAliases.add(alias);
+            keyAliases.add(aliases);
         }
 
         public void addColumnAlias(ColumnIdentifier alias)
