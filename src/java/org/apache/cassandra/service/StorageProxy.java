@@ -30,10 +30,11 @@ import javax.management.MBeanServer;
 import javax.management.ObjectName;
 
 import com.google.common.base.Function;
-import com.google.common.collect.HashMultimap;
-import com.google.common.collect.Iterables;
-import com.google.common.collect.MapMaker;
-import com.google.common.collect.Multimap;
+import com.google.common.base.Predicate;
+import com.google.common.collect.*;
+import org.apache.cassandra.db.Table;
+import org.apache.cassandra.db.index.SecondaryIndex;
+import org.apache.cassandra.db.index.SecondaryIndexSearcher;
 import org.apache.commons.lang.StringUtils;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -864,7 +865,7 @@ public class StorageProxy implements StorageProxyMBean
         return new ReadCallback(resolver, consistencyLevel, command, endpoints);
     }
 
-    public static List<Row> getRangeSlice(RangeSliceCommand command, ConsistencyLevel consistency_level)
+    public static List<Row> getRangeSlice(final RangeSliceCommand command, ConsistencyLevel consistency_level)
     throws IOException, UnavailableException, TimeoutException
     {
         if (logger.isDebugEnabled())
@@ -874,25 +875,52 @@ public class StorageProxy implements StorageProxyMBean
         // now scan until we have enough results
         try
         {
+            int columnsCount = 0;
+            rows = new ArrayList<Row>();
+            List<AbstractBounds<RowPosition>> ranges = getRestrictedRanges(command.range);
+
             Table table = Table.open(command.keyspace);
             ColumnFamilyStore cfs =  table.getColumnFamilyStore(command.column_family);
+
+            int concurrencyFactor = 1;
             
             // the case where the max is rows (i.e. non cql3 query)
             if (!command.maxIsColumns)
             {
-                long estimatedRowsPerNode;
+                double estimatedRowsPerNode = 0;
+                
+                if (command.row_filter != null && !command.row_filter.isEmpty())
+                {
+
+                    SecondaryIndexSearcher searcher = Iterables.getOnlyElement(cfs.indexManager
+                            .getIndexSearchersForQuery(command.row_filter));
+
+                    SecondaryIndex highestSelectivityIndex = searcher
+                            .highestSelectivityIndex(command.row_filter);
+
+
+
+                }
+                else
+                {
+                    estimatedRowsPerNode = cfs.estimateKeys() / table.getReplicationStrategy().getReplicationFactor();
+                }
+                
+                
 
                 // if there's no secondary index then we estimate num rows based on numKeys/RF
                 if (command.row_filter == null)
                 {
-                    estimatedRowsPerNode = cfs.estimateKeys() / table.getReplicationStrategy().getReplicationFactor();
+                    
                 }
                 else
                 {
-                    // if there's a secondary index find the most selective one and estimate based on the num elements
+                    // if there are secondary indexes find the most selective one and estimate based on the num elements
                     // in that index
 
                 }
+
+                concurrencyFactor = (int) Math.round(command.maxResults / estimatedRowsPerNode);
             }
             // the case where max is cols (i.e. cql3)
             else
@@ -900,11 +928,11 @@ public class StorageProxy implements StorageProxyMBean
 
             }
 
-
+            // make sure concurrency factor is within [1,ranges.size()]
+            concurrencyFactor = concurrencyFactor > ranges.size() ? ranges.size() : concurrencyFactor <= 0 ? 1
+                    : concurrencyFactor;
             
-            int columnsCount = 0;
-            rows = new ArrayList<Row>();
-            List<AbstractBounds<RowPosition>> ranges = getRestrictedRanges(command.range);
+
             for (AbstractBounds<RowPosition> range : ranges)
             {
                 RangeSliceCommand nodeCmd = new RangeSliceCommand(command.keyspace,

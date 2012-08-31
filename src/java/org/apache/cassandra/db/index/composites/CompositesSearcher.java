@@ -48,29 +48,6 @@ public class CompositesSearcher extends SecondaryIndexSearcher
         this.prefixSize = prefixSize;
     }
 
-    private IndexExpression highestSelectivityPredicate(List<IndexExpression> clause)
-    {
-        IndexExpression best = null;
-        int bestMeanCount = Integer.MAX_VALUE;
-        for (IndexExpression expression : clause)
-        {
-            //skip columns belonging to a different index type
-            if(!columns.contains(expression.column_name))
-                continue;
-
-            SecondaryIndex index = indexManager.getIndexForColumn(expression.column_name);
-            if (index == null || (expression.op != IndexOperator.EQ))
-                continue;
-            int columns = index.getIndexCfs().getMeanColumns();
-            if (columns < bestMeanCount)
-            {
-                best = expression;
-                bestMeanCount = columns;
-            }
-        }
-        return best;
-    }
-
     public boolean isIndexing(List<IndexExpression> clause)
     {
         return highestSelectivityPredicate(clause) != null;
