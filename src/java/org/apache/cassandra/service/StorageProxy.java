@@ -874,6 +874,7 @@ public class StorageProxy implements StorageProxyMBean
         if (logger.isDebugEnabled())
             logger.debug("Command/ConsistencyLevel is {}/{}", command.toString(), consistency_level);
         long startTime = System.nanoTime();
+        
         List<Row> rows;
         // now scan until we have enough results
         try
@@ -903,7 +904,6 @@ public class StorageProxy implements StorageProxyMBean
                     SecondaryIndex highestSelectivityIndex = searcher
                             .highestSelectivityIndex(command.row_filter);
 
-                    // this gives the estimated number of keys in the index entry
                     estimatedKeys = highestSelectivityIndex.getIndexCfs().getMeanColumns();
 
                 }
@@ -938,74 +938,112 @@ public class StorageProxy implements StorageProxyMBean
             concurrencyFactor = concurrencyFactor > ranges.size() ? ranges.size() : concurrencyFactor <= 0 ? 1
                     : concurrencyFactor;
             
-
-            for (AbstractBounds<RowPosition> range : ranges)
+            int count = 0;
+            int rangesPos = 0;
+            
+            while (count < command.maxResults)
             {
-                RangeSliceCommand nodeCmd = new RangeSliceCommand(command.keyspace,
-                                                                  command.column_family,
-                                                                  command.super_column,
-                                                                  command.predicate,
-                                                                  range,
-                                                                  command.row_filter,
-                                                                  command.maxResults,
-                                                                  command.maxIsColumns,
-                                                                  command.isPaging);
-
-                List<InetAddress> liveEndpoints = StorageService.instance.getLiveNaturalEndpoints(nodeCmd.keyspace, range.right);
-                DatabaseDescriptor.getEndpointSnitch().sortByProximity(FBUtilities.getBroadcastAddress(), liveEndpoints);
-
-                // collect replies and resolve according to consistency level
-                RangeSliceResponseResolver resolver = new RangeSliceResponseResolver(nodeCmd.keyspace);
-                ReadCallback<RangeSliceReply, Iterable<Row>> handler = getReadCallback(resolver, nodeCmd, consistency_level, liveEndpoints);
-                handler.assureSufficientLiveNodes();
-                resolver.setSources(handler.endpoints);
-                if (handler.endpoints.size() == 1 && handler.endpoints.get(0).equals(FBUtilities.getBroadcastAddress()))
+                List<Pair<RangeSliceCommand,ReadCallback<RangeSliceReply, Iterable<Row>>>> scanHandlers = Lists
+                        .newArrayListWithExpectedSize(concurrencyFactor);
+                
+                // prepare concurrencyFactor calls (fail fast with UA on not enough live nodes)
+                for (int i = rangesPos; i < concurrencyFactor && i < ranges.size(); i++)
                 {
-                    logger.debug("reading data locally");
-                    StageManager.getStage(Stage.READ).execute(new LocalRangeSliceRunnable(nodeCmd, handler));
+                    AbstractBounds<RowPosition> range = ranges.get(i);
+                    RangeSliceCommand nodeCmd = new RangeSliceCommand(command.keyspace,
+                            command.column_family,
+                            command.super_column,
+                            command.predicate,
+                            range,
+                            command.row_filter,
+                            command.maxResults,
+                            command.maxIsColumns,
+                            command.isPaging);
+
+                    List<InetAddress> liveEndpoints = StorageService.instance.getLiveNaturalEndpoints(nodeCmd.keyspace, range.right);
+                    DatabaseDescriptor.getEndpointSnitch().sortByProximity(FBUtilities.getBroadcastAddress(), liveEndpoints);
+                    RangeSliceResponseResolver resolver = new RangeSliceResponseResolver(nodeCmd.keyspace);
+                    ReadCallback<RangeSliceReply, Iterable<Row>> handler = getReadCallback(resolver, nodeCmd, consistency_level, liveEndpoints);
+                    handler.assureSufficientLiveNodes();
+                    resolver.setSources(handler.endpoints);
+                    scanHandlers.add(new Pair<RangeSliceCommand, ReadCallback<RangeSliceReply, Iterable<Row>>>(nodeCmd,handler));
                 }
-                else
+                rangesPos += concurrencyFactor;
+
+                List<IAsyncResult> allReadRepairResults = Lists.newArrayList();
+
+                // execute all handlers in parallel
+                for (Pair<RangeSliceCommand, ReadCallback<RangeSliceReply, Iterable<Row>>> cmdHandlerPair : scanHandlers)
                 {
-                    MessageOut<RangeSliceCommand> message = nodeCmd.createMessage();
-                    for (InetAddress endpoint : handler.endpoints)
+                    if (cmdHandlerPair.right.endpoints.size() == 1
+                            && cmdHandlerPair.right.endpoints.get(0).equals(FBUtilities.getBroadcastAddress()))
                     {
-                        MessagingService.instance().sendRR(message, endpoint, handler);
-                        if (logger.isDebugEnabled())
-                            logger.debug("reading " + nodeCmd + " from " + endpoint);
+                        logger.debug("reading data locally");
+                        StageManager.getStage(Stage.READ).execute(new LocalRangeSliceRunnable(cmdHandlerPair.left, cmdHandlerPair.right));
                     }
+                    else
+                    {
+                        MessageOut<RangeSliceCommand> message = cmdHandlerPair.left.createMessage();
+                        for (InetAddress endpoint : cmdHandlerPair.right.endpoints)
+                        {
+                            MessagingService.instance().sendRR(message, endpoint, cmdHandlerPair.right);
+                            if (logger.isDebugEnabled())
+                                logger.debug("reading " + cmdHandlerPair.right + " from " + endpoint);
+                        }
+                    }
+
+                    allReadRepairResults.addAll(((RangeSliceResponseResolver)cmdHandlerPair.right.resolver).repairResults);
                 }
 
                 try
                 {
-                    for (Row row : handler.get())
+                    // get and count the results (and hopefully stop)
+                    for (Pair<RangeSliceCommand, ReadCallback<RangeSliceReply, Iterable<Row>>> cmdHandlerPair : scanHandlers)
                     {
-                        rows.add(row);
-                        columnsCount += row.getLiveColumnCount();
-                        logger.debug("range slices read {}", row.key);
-                    }
-                    FBUtilities.waitOnFutures(resolver.repairResults, DatabaseDescriptor.getWriteRpcTimeout());
-                }
-                catch (TimeoutException ex)
-                {
-                    if (logger.isDebugEnabled())
-                        logger.debug("Range slice timeout: {}", ex.toString());
-                    throw ex;
-                }
-                catch (DigestMismatchException e)
-                {
-                    throw new AssertionError(e); // no digests in range slices yet
-                }
+                        ReadCallback<RangeSliceReply, Iterable<Row>> handler = cmdHandlerPair.right;
 
-                // if we're done, great, otherwise, move to the next range
-                int count = nodeCmd.maxIsColumns ? columnsCount : rows.size();
-                if (count >= nodeCmd.maxResults)
-                    break;
+                        try
+                        {
+                            for (Row row : handler.get())
+                            {
+                                rows.add(row);
+                                if (command.maxIsColumns)
+                                    count += row.getLiveColumnCount();
+                                else
+                                    count++;
+                            }
+
+                            // check if we're done
+                            if (count >= command.maxResults)
+                                return trim(command, rows);
+                        }
+                        catch (TimeoutException ex)
+                        {
+                            if (logger.isDebugEnabled())
+                                logger.debug("Range slice timeout: {}", ex.toString());
+                            throw ex;
+                        }
+                        catch (DigestMismatchException e)
+                        {
+                            throw new AssertionError(e); // no digests in range slices yet
+                        }
+                    }
+                }
+                finally
+                {
+                    // wait on read repair results for all nodes
+                    FBUtilities.waitOnFutures(allReadRepairResults,
+                            DatabaseDescriptor.getWriteRpcTimeout());
+                }
+                // we had one try to fetch in parallel, if we couldn't revert to sequential
+                concurrencyFactor = 1;
             }
         }
         finally
         {
             rangeMetrics.addNano(System.nanoTime() - startTime);
         }
+        // in case we didn't get max results
         return trim(command, rows);
     }
 
