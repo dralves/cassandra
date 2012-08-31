@@ -33,6 +33,9 @@ import com.google.common.base.Function;
 import com.google.common.base.Predicate;
 import com.google.common.collect.*;
 import org.apache.cassandra.db.Table;
+import org.apache.cassandra.db.columniterator.IdentityQueryFilter;
+import org.apache.cassandra.db.filter.NamesQueryFilter;
+import org.apache.cassandra.db.filter.QueryFilter;
 import org.apache.cassandra.db.index.SecondaryIndex;
 import org.apache.cassandra.db.index.SecondaryIndexSearcher;
 import org.apache.commons.lang.StringUtils;
@@ -887,8 +890,10 @@ public class StorageProxy implements StorageProxyMBean
             // the case where the max is rows (i.e. non cql3 query)
             if (!command.maxIsColumns)
             {
-                double estimatedRowsPerNode = 0;
-                
+                double estimatedKeys = 0;
+
+                // if there are secondary indexes we find the most selective one and estimate keys per node
+                // based on the index's mean column count
                 if (command.row_filter != null && !command.row_filter.isEmpty())
                 {
 
@@ -898,34 +903,35 @@ public class StorageProxy implements StorageProxyMBean
                     SecondaryIndex highestSelectivityIndex = searcher
                             .highestSelectivityIndex(command.row_filter);
 
-
+                    // this gives the estimated number of keys in the index entry
+                    estimatedKeys = highestSelectivityIndex.getIndexCfs().getMeanColumns();
 
                 }
+                // otherwise just estimate keys per node based on the cfs's key estimation
                 else
                 {
-                    estimatedRowsPerNode = cfs.estimateKeys() / table.getReplicationStrategy().getReplicationFactor();
-                }
-                
-                
-
-                // if there's no secondary index then we estimate num rows based on numKeys/RF
-                if (command.row_filter == null)
-                {
-                    
-                }
-                else
-                {
-                    // if there are secondary indexes find the most selective one and estimate based on the num elements
-                    // in that index
-
+                    estimatedKeys = cfs.estimateKeys() / table.getReplicationStrategy().getReplicationFactor();
                 }
 
-                concurrencyFactor = (int) Math.round(command.maxResults / estimatedRowsPerNode);
+                concurrencyFactor = (int) Math.round(command.maxResults / estimatedKeys);
             }
-            // the case where max is cols (i.e. cql3)
+            // the case where max is cols (i.e. cql3). see CASSANDRA-1337 for a detailed explanation
             else
             {
+                double estimatedKeys = cfs.estimateKeys() / table.getReplicationStrategy().getReplicationFactor();
 
+                // special case where we want all cols and therefore can use mean columns
+                if (command.predicate instanceof IdentityQueryFilter)
+                {
+                    concurrencyFactor = (int) Math.round(command.maxResults / (estimatedKeys * cfs.getMeanColumns()));
+                }
+                // special case where we want only the cols with the given names (we assume rows *have* these cols)
+                else if (command.predicate instanceof NamesQueryFilter)
+                {
+                    concurrencyFactor = (int) Math.round(command.maxResults
+                            / (estimatedKeys * ((NamesQueryFilter) command.predicate).columns.size()));
+                }
+                // else we just leave the c factor to 1
             }
 
             // make sure concurrency factor is within [1,ranges.size()]
