@@ -1016,6 +1016,7 @@ public class StorageProxy implements StorageProxyMBean
                             // check if we're done
                             if (count >= command.maxResults)
                                 return trim(command, rows);
+
                         }
                         catch (TimeoutException ex)
                         {
@@ -1031,7 +1032,7 @@ public class StorageProxy implements StorageProxyMBean
                 }
                 finally
                 {
-                    // wait on read repair results for all nodes
+                    // wait on read repair results for all nodes (not sure this is needed)
                     FBUtilities.waitOnFutures(allReadRepairResults,
                             DatabaseDescriptor.getWriteRpcTimeout());
                 }
