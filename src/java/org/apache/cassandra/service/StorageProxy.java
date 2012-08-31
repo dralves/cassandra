@@ -874,6 +874,34 @@ public class StorageProxy implements StorageProxyMBean
         // now scan until we have enough results
         try
         {
+            Table table = Table.open(command.keyspace);
+            ColumnFamilyStore cfs =  table.getColumnFamilyStore(command.column_family);
+            
+            // the case where the max is rows (i.e. non cql3 query)
+            if (!command.maxIsColumns)
+            {
+                long estimatedRowsPerNode;
+
+                // if there's no secondary index then we estimate num rows based on numKeys/RF
+                if (command.row_filter == null)
+                {
+                    estimatedRowsPerNode = cfs.estimateKeys() / table.getReplicationStrategy().getReplicationFactor();
+                }
+                else
+                {
+                    // if there's a secondary index find the most selective one and estimate based on the num elements
+                    // in that index
+
+                }
+            }
+            // the case where max is cols (i.e. cql3)
+            else
+            {
+
+            }
+
+
+            
             int columnsCount = 0;
             rows = new ArrayList<Row>();
             List<AbstractBounds<RowPosition>> ranges = getRestrictedRanges(command.range);
