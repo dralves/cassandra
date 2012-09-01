@@ -879,7 +879,7 @@ public class StorageProxy implements StorageProxyMBean
         // now scan until we have enough results
         try
         {
-            int columnsCount = 0;
+
             rows = new ArrayList<Row>();
             List<AbstractBounds<RowPosition>> ranges = getRestrictedRanges(command.range);
 
@@ -887,14 +887,15 @@ public class StorageProxy implements StorageProxyMBean
             ColumnFamilyStore cfs =  table.getColumnFamilyStore(command.column_family);
 
             int concurrencyFactor = 1;
+
+            float keysEstimate = cfs.estimateKeys() / table.getReplicationStrategy().getReplicationFactor();
             
             // the case where the max is rows (i.e. non cql3 query)
             if (!command.maxIsColumns)
             {
-                double estimatedKeys = 0;
-
-                // if there are secondary indexes we find the most selective one and estimate keys per node
-                // based on the index's mean column count
+                
+                // if there are secondary indexes we find the most selective one
+                // and re-estimate relevant keys per range based on that
                 if (command.row_filter != null && !command.row_filter.isEmpty())
                 {
 
@@ -904,32 +905,25 @@ public class StorageProxy implements StorageProxyMBean
                     SecondaryIndex highestSelectivityIndex = searcher
                             .highestSelectivityIndex(command.row_filter);
 
-                    estimatedKeys = highestSelectivityIndex.getIndexCfs().getMeanColumns();
-
+                    keysEstimate = highestSelectivityIndex.getIndexCfs().getMeanColumns() / ranges.size();
                 }
-                // otherwise just estimate keys per node based on the cfs's key estimation
-                else
-                {
-                    estimatedKeys = cfs.estimateKeys() / table.getReplicationStrategy().getReplicationFactor();
-                }
+                // otherwise all keys are relevant, just use the estimate for keys per cfs
 
-                concurrencyFactor = (int) Math.round(command.maxResults / estimatedKeys);
+                concurrencyFactor = Math.round(command.maxResults / keysEstimate);
             }
             // the case where max is cols (i.e. cql3). see CASSANDRA-1337 for a detailed explanation
             else
             {
-                double estimatedKeys = cfs.estimateKeys() / table.getReplicationStrategy().getReplicationFactor();
-
                 // special case where we want all cols and therefore can use mean columns
                 if (command.predicate instanceof IdentityQueryFilter)
                 {
-                    concurrencyFactor = (int) Math.round(command.maxResults / (estimatedKeys * cfs.getMeanColumns()));
+                    concurrencyFactor = (int) Math.round(command.maxResults / (keysEstimate * cfs.getMeanColumns()));
                 }
                 // special case where we want only the cols with the given names (we assume rows *have* these cols)
                 else if (command.predicate instanceof NamesQueryFilter)
                 {
                     concurrencyFactor = (int) Math.round(command.maxResults
-                            / (estimatedKeys * ((NamesQueryFilter) command.predicate).columns.size()));
+                            / (keysEstimate * ((NamesQueryFilter) command.predicate).columns.size()));
                 }
                 // else we just leave the c factor to 1
             }
@@ -1017,12 +1011,11 @@ public class StorageProxy implements StorageProxyMBean
                                     count += row.getLiveColumnCount();
                                 else
                                     count++;
+
+                                // check if we're done
+                                if (count >= command.maxResults)
+                                    return trim(command, rows);
                             }
-
-                            // check if we're done
-                            if (count >= command.maxResults)
-                                return trim(command, rows);
-
                         }
                         catch (TimeoutException ex)
                         {
