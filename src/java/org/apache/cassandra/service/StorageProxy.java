@@ -941,11 +941,11 @@ public class StorageProxy implements StorageProxyMBean
             int count = 0;
             int rangesPos = 0;
             
-            while (count < command.maxResults)
+            while (rangesPos < ranges.size())
             {
-                List<Pair<RangeSliceCommand,ReadCallback<RangeSliceReply, Iterable<Row>>>> scanHandlers = Lists
+                List<Pair<RangeSliceCommand, ReadCallback<RangeSliceReply, Iterable<Row>>>> scanHandlers = Lists
                         .newArrayListWithExpectedSize(concurrencyFactor);
-                
+
                 // prepare concurrencyFactor calls (fail fast with UA on not enough live nodes)
                 for (int i = rangesPos; i < concurrencyFactor && i < ranges.size(); i++)
                 {
@@ -960,13 +960,17 @@ public class StorageProxy implements StorageProxyMBean
                             command.maxIsColumns,
                             command.isPaging);
 
-                    List<InetAddress> liveEndpoints = StorageService.instance.getLiveNaturalEndpoints(nodeCmd.keyspace, range.right);
-                    DatabaseDescriptor.getEndpointSnitch().sortByProximity(FBUtilities.getBroadcastAddress(), liveEndpoints);
+                    List<InetAddress> liveEndpoints = StorageService.instance.getLiveNaturalEndpoints(nodeCmd.keyspace,
+                            range.right);
+                    DatabaseDescriptor.getEndpointSnitch().sortByProximity(FBUtilities.getBroadcastAddress(),
+                            liveEndpoints);
                     RangeSliceResponseResolver resolver = new RangeSliceResponseResolver(nodeCmd.keyspace);
-                    ReadCallback<RangeSliceReply, Iterable<Row>> handler = getReadCallback(resolver, nodeCmd, consistency_level, liveEndpoints);
+                    ReadCallback<RangeSliceReply, Iterable<Row>> handler = getReadCallback(resolver, nodeCmd,
+                            consistency_level, liveEndpoints);
                     handler.assureSufficientLiveNodes();
                     resolver.setSources(handler.endpoints);
-                    scanHandlers.add(new Pair<RangeSliceCommand, ReadCallback<RangeSliceReply, Iterable<Row>>>(nodeCmd,handler));
+                    scanHandlers.add(new Pair<RangeSliceCommand, ReadCallback<RangeSliceReply, Iterable<Row>>>(nodeCmd,
+                            handler));
                 }
                 rangesPos += concurrencyFactor;
 
@@ -979,7 +983,8 @@ public class StorageProxy implements StorageProxyMBean
                             && cmdHandlerPair.right.endpoints.get(0).equals(FBUtilities.getBroadcastAddress()))
                     {
                         logger.debug("reading data locally");
-                        StageManager.getStage(Stage.READ).execute(new LocalRangeSliceRunnable(cmdHandlerPair.left, cmdHandlerPair.right));
+                        StageManager.getStage(Stage.READ).execute(
+                                new LocalRangeSliceRunnable(cmdHandlerPair.left, cmdHandlerPair.right));
                     }
                     else
                     {
@@ -992,7 +997,8 @@ public class StorageProxy implements StorageProxyMBean
                         }
                     }
 
-                    allReadRepairResults.addAll(((RangeSliceResponseResolver)cmdHandlerPair.right.resolver).repairResults);
+                    allReadRepairResults
+                            .addAll(((RangeSliceResponseResolver) cmdHandlerPair.right.resolver).repairResults);
                 }
 
                 try
