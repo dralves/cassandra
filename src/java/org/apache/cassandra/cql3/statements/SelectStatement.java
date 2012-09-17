@@ -919,6 +919,12 @@ public class SelectStatement implements CQLStatement
             this.whereClause = whereClause == null ? Collections.<Relation>emptyList() : whereClause;
         }
 
+        @Override
+        public void prepareKeyspace(ClientState state) throws InvalidRequestException {
+            super.prepareKeyspace(state);
+            enableTracingIfRequested(state);
+        }
+
         public ParsedStatement.Prepared prepare() throws InvalidRequestException
         {
             CFMetaData cfm = ThriftValidation.validateColumnFamily(keyspace(), columnFamily());

@@ -170,6 +170,13 @@ cqlStatement returns [ParsedStatement stmt]
     | st16=revokeStatement             { $stmt = st16; }
     | st17=listGrantsStatement         { $stmt = st17; }
     | st18=alterKeyspaceStatement      { $stmt = st18; }
+    | st19=traceStatement              { $stmt = st19; }
+    ;
+
+
+traceStatement returns [ParsedStatement stmt]
+    @after{ if (stmt != null) stmt.setTracing(true); }
+    : K_TRACE wrapped=cqlStatement { $stmt = wrapped; }
     ;
 
 /*
@@ -763,6 +770,7 @@ K_LEVEL:       ( O N E
                | T H R E E
                )
                ;
+K_TRACE:       T R A C E;
 K_USE:         U S E;
 K_COUNT:       C O U N T;
 K_SET:         S E T;

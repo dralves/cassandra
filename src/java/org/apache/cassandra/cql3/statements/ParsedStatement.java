@@ -21,21 +21,37 @@ import java.util.Collections;
 import java.util.List;
 
 import org.apache.cassandra.cql3.*;
+import org.apache.cassandra.exceptions.InvalidRequestException;
 import org.apache.cassandra.exceptions.RequestValidationException;
+import org.apache.cassandra.exceptions.UnauthorizedException;
+import org.apache.cassandra.service.ClientState;
 
 public abstract class ParsedStatement
 {
+
     private int boundTerms;
+    private boolean tracing = false;
 
     public int getBoundsTerms()
     {
         return boundTerms;
+    }
+    
+    public void setTracing(boolean tracing)
+    {
+        this.tracing = tracing;
     }
 
     // Used by the parser and preparable statement
     public void setBoundTerms(int boundTerms)
     {
         this.boundTerms = boundTerms;
+    }
+    
+    protected void enableTracingIfRequested(ClientState state)
+    {
+        if (tracing)
+            state.createSession();
     }
 
     public abstract Prepared prepare() throws RequestValidationException;

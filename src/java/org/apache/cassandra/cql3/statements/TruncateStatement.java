@@ -44,6 +44,7 @@ public class TruncateStatement extends CFStatement implements CQLStatement
 
     public void checkAccess(ClientState state) throws InvalidRequestException, UnauthorizedException
     {
+        enableTracingIfRequested(state);
         state.hasColumnFamilyAccess(keyspace(), columnFamily(), Permission.DELETE);
     }
 
