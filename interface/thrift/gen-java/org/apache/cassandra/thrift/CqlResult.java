@@ -49,6 +49,7 @@ public class CqlResult implements org.apache.thrift.TBase<CqlResult, CqlResult._
   private static final org.apache.thrift.protocol.TField ROWS_FIELD_DESC = new org.apache.thrift.protocol.TField("rows", org.apache.thrift.protocol.TType.LIST, (short)2);
   private static final org.apache.thrift.protocol.TField NUM_FIELD_DESC = new org.apache.thrift.protocol.TField("num", org.apache.thrift.protocol.TType.I32, (short)3);
   private static final org.apache.thrift.protocol.TField SCHEMA_FIELD_DESC = new org.apache.thrift.protocol.TField("schema", org.apache.thrift.protocol.TType.STRUCT, (short)4);
+  private static final org.apache.thrift.protocol.TField TRACE_UUID_FIELD_DESC = new org.apache.thrift.protocol.TField("trace_uuid", org.apache.thrift.protocol.TType.STRING, (short)5);
 
   /**
    * 
@@ -58,6 +59,7 @@ public class CqlResult implements org.apache.thrift.TBase<CqlResult, CqlResult._
   public List<CqlRow> rows; // required
   public int num; // required
   public CqlMetadata schema; // required
+  public ByteBuffer trace_uuid; // required
 
   /** The set of fields this struct contains, along with convenience methods for finding and manipulating them. */
   public enum _Fields implements org.apache.thrift.TFieldIdEnum {
@@ -68,7 +70,8 @@ public class CqlResult implements org.apache.thrift.TBase<CqlResult, CqlResult._
     TYPE((short)1, "type"),
     ROWS((short)2, "rows"),
     NUM((short)3, "num"),
-    SCHEMA((short)4, "schema");
+    SCHEMA((short)4, "schema"),
+    TRACE_UUID((short)5, "trace_uuid");
 
     private static final Map<String, _Fields> byName = new HashMap<String, _Fields>();
 
@@ -91,6 +94,8 @@ public class CqlResult implements org.apache.thrift.TBase<CqlResult, CqlResult._
           return NUM;
         case 4: // SCHEMA
           return SCHEMA;
+        case 5: // TRACE_UUID
+          return TRACE_UUID;
         default:
           return null;
       }
@@ -146,6 +151,8 @@ public class CqlResult implements org.apache.thrift.TBase<CqlResult, CqlResult._
         new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.I32)));
     tmpMap.put(_Fields.SCHEMA, new org.apache.thrift.meta_data.FieldMetaData("schema", org.apache.thrift.TFieldRequirementType.OPTIONAL, 
         new org.apache.thrift.meta_data.StructMetaData(org.apache.thrift.protocol.TType.STRUCT, CqlMetadata.class)));
+    tmpMap.put(_Fields.TRACE_UUID, new org.apache.thrift.meta_data.FieldMetaData("trace_uuid", org.apache.thrift.TFieldRequirementType.OPTIONAL, 
+        new org.apache.thrift.meta_data.FieldValueMetaData(org.apache.thrift.protocol.TType.STRING        , true)));
     metaDataMap = Collections.unmodifiableMap(tmpMap);
     org.apache.thrift.meta_data.FieldMetaData.addStructMetaDataMap(CqlResult.class, metaDataMap);
   }
@@ -180,6 +187,10 @@ public class CqlResult implements org.apache.thrift.TBase<CqlResult, CqlResult._
     if (other.isSetSchema()) {
       this.schema = new CqlMetadata(other.schema);
     }
+    if (other.isSetTrace_uuid()) {
+      this.trace_uuid = org.apache.thrift.TBaseHelper.copyBinary(other.trace_uuid);
+;
+    }
   }
 
   public CqlResult deepCopy() {
@@ -193,6 +204,7 @@ public class CqlResult implements org.apache.thrift.TBase<CqlResult, CqlResult._
     setNumIsSet(false);
     this.num = 0;
     this.schema = null;
+    this.trace_uuid = null;
   }
 
   /**
@@ -313,6 +325,40 @@ public class CqlResult implements org.apache.thrift.TBase<CqlResult, CqlResult._
     }
   }
 
+  public byte[] getTrace_uuid() {
+    setTrace_uuid(org.apache.thrift.TBaseHelper.rightSize(trace_uuid));
+    return trace_uuid == null ? null : trace_uuid.array();
+  }
+
+  public ByteBuffer bufferForTrace_uuid() {
+    return trace_uuid;
+  }
+
+  public CqlResult setTrace_uuid(byte[] trace_uuid) {
+    setTrace_uuid(trace_uuid == null ? (ByteBuffer)null : ByteBuffer.wrap(trace_uuid));
+    return this;
+  }
+
+  public CqlResult setTrace_uuid(ByteBuffer trace_uuid) {
+    this.trace_uuid = trace_uuid;
+    return this;
+  }
+
+  public void unsetTrace_uuid() {
+    this.trace_uuid = null;
+  }
+
+  /** Returns true if field trace_uuid is set (has been assigned a value) and false otherwise */
+  public boolean isSetTrace_uuid() {
+    return this.trace_uuid != null;
+  }
+
+  public void setTrace_uuidIsSet(boolean value) {
+    if (!value) {
+      this.trace_uuid = null;
+    }
+  }
+
   public void setFieldValue(_Fields field, Object value) {
     switch (field) {
     case TYPE:
@@ -347,6 +393,14 @@ public class CqlResult implements org.apache.thrift.TBase<CqlResult, CqlResult._
       }
       break;
 
+    case TRACE_UUID:
+      if (value == null) {
+        unsetTrace_uuid();
+      } else {
+        setTrace_uuid((ByteBuffer)value);
+      }
+      break;
+
     }
   }
 
@@ -363,6 +417,9 @@ public class CqlResult implements org.apache.thrift.TBase<CqlResult, CqlResult._
 
     case SCHEMA:
       return getSchema();
+
+    case TRACE_UUID:
+      return getTrace_uuid();
 
     }
     throw new IllegalStateException();
@@ -383,6 +440,8 @@ public class CqlResult implements org.apache.thrift.TBase<CqlResult, CqlResult._
       return isSetNum();
     case SCHEMA:
       return isSetSchema();
+    case TRACE_UUID:
+      return isSetTrace_uuid();
     }
     throw new IllegalStateException();
   }
@@ -436,6 +495,15 @@ public class CqlResult implements org.apache.thrift.TBase<CqlResult, CqlResult._
         return false;
     }
 
+    boolean this_present_trace_uuid = true && this.isSetTrace_uuid();
+    boolean that_present_trace_uuid = true && that.isSetTrace_uuid();
+    if (this_present_trace_uuid || that_present_trace_uuid) {
+      if (!(this_present_trace_uuid && that_present_trace_uuid))
+        return false;
+      if (!this.trace_uuid.equals(that.trace_uuid))
+        return false;
+    }
+
     return true;
   }
 
@@ -462,6 +530,11 @@ public class CqlResult implements org.apache.thrift.TBase<CqlResult, CqlResult._
     builder.append(present_schema);
     if (present_schema)
       builder.append(schema);
+
+    boolean present_trace_uuid = true && (isSetTrace_uuid());
+    builder.append(present_trace_uuid);
+    if (present_trace_uuid)
+      builder.append(trace_uuid);
 
     return builder.toHashCode();
   }
@@ -510,6 +583,16 @@ public class CqlResult implements org.apache.thrift.TBase<CqlResult, CqlResult._
     }
     if (isSetSchema()) {
       lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.schema, typedOther.schema);
+      if (lastComparison != 0) {
+        return lastComparison;
+      }
+    }
+    lastComparison = Boolean.valueOf(isSetTrace_uuid()).compareTo(typedOther.isSetTrace_uuid());
+    if (lastComparison != 0) {
+      return lastComparison;
+    }
+    if (isSetTrace_uuid()) {
+      lastComparison = org.apache.thrift.TBaseHelper.compareTo(this.trace_uuid, typedOther.trace_uuid);
       if (lastComparison != 0) {
         return lastComparison;
       }
@@ -572,6 +655,13 @@ public class CqlResult implements org.apache.thrift.TBase<CqlResult, CqlResult._
             org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
           }
           break;
+        case 5: // TRACE_UUID
+          if (field.type == org.apache.thrift.protocol.TType.STRING) {
+            this.trace_uuid = iprot.readBinary();
+          } else { 
+            org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
+          }
+          break;
         default:
           org.apache.thrift.protocol.TProtocolUtil.skip(iprot, field.type);
       }
@@ -618,6 +708,13 @@ public class CqlResult implements org.apache.thrift.TBase<CqlResult, CqlResult._
         oprot.writeFieldEnd();
       }
     }
+    if (this.trace_uuid != null) {
+      if (isSetTrace_uuid()) {
+        oprot.writeFieldBegin(TRACE_UUID_FIELD_DESC);
+        oprot.writeBinary(this.trace_uuid);
+        oprot.writeFieldEnd();
+      }
+    }
     oprot.writeFieldStop();
     oprot.writeStructEnd();
   }
@@ -657,6 +754,16 @@ public class CqlResult implements org.apache.thrift.TBase<CqlResult, CqlResult._
         sb.append("null");
       } else {
         sb.append(this.schema);
+      }
+      first = false;
+    }
+    if (isSetTrace_uuid()) {
+      if (!first) sb.append(", ");
+      sb.append("trace_uuid:");
+      if (this.trace_uuid == null) {
+        sb.append("null");
+      } else {
+        org.apache.thrift.TBaseHelper.toString(this.trace_uuid, sb);
       }
       first = false;
     }

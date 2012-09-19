@@ -31,6 +31,7 @@ import com.google.common.base.Joiner;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import org.apache.cassandra.db.marshal.UUIDType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -1674,7 +1675,14 @@ public class CassandraServer implements Cassandra.Iface
             if (cState.getCQLVersion().major == 2)
                 return QueryProcessor.process(queryString, state());
             else
-                return org.apache.cassandra.cql3.QueryProcessor.process(queryString, cState).toThriftResult();
+            {
+                CqlResult result = org.apache.cassandra.cql3.QueryProcessor.process(queryString, cState).toThriftResult();
+                if (Tracing.isTracing())
+                    result.setTrace_uuid(UUIDType.instance.decompose(Tracing.instance().getSessionId()));
+
+                return result;
+            }
+
         }
         catch (RequestExecutionException e)
         {

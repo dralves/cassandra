@@ -29,8 +29,6 @@ echo "No appropriate python interpreter found." >&2
 exit 1
 ":"""
 
-from __future__ import with_statement
-
 description = "CQL Shell for Apache Cassandra"
 version = "2.2.0"
 
@@ -107,7 +105,7 @@ if os.path.isdir(cqlshlibdir):
 from cqlshlib import cqlhandling, cql3handling, pylexotron
 from cqlshlib.displaying import (RED, BLUE, ANSI_RESET, COLUMN_NAME_COLORS,
                                  FormattedValue, colorme)
-from cqlshlib.formatting import format_by_type
+from cqlshlib.formatting import format_by_type, format_value_uuid
 from cqlshlib.util import trim_if_present
 
 CONFIG_FILE = os.path.expanduser(os.path.join('~', '.cqlshrc'))
@@ -986,6 +984,10 @@ class Shell(cmd.Cmd):
             if len(self.decoding_errors) > 2:
                 self.writeresult('%d more decoding errors suppressed.'
                                  % (len(self.decoding_errors) - 2), color=RED)
+
+        if cursor.trace_uuid is not None:
+            self.writeresult(' Query was traced with UUID: %s' 
+                             % (cursor.trace_uuid), color=RED)
 
     def print_static_result(self, cursor):
         colnames = [d[0] for d in cursor.description]

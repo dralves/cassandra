@@ -509,7 +509,9 @@ struct CqlResult {
     1: required CqlResultType type,
     2: optional list<CqlRow> rows,
     3: optional i32 num,
-    4: optional CqlMetadata schema
+    4: optional CqlMetadata schema,
+    5: optional binary trace_uuid
+
 }
 
 struct CqlPreparedResult {
